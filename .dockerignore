@@ -114,7 +114,7 @@ Feature Enhancement: SOX Compliance Release Commit Tracker
 * Author correction:
     * Ensure author shown is:
         * Actual commit author
-        * NOT PR merger
+        * NOT PR mergeru
 
 ⸻
 
@@ -132,3 +132,315 @@ Questions / Clarifications Before Implementation
 2. Do we need pagination or lazy loading for large commit datasets?
 3. Should commit validation rules be configurable (regex-based)?
 4. Do we need caching for Jira project keys?
+
+
+from here
+
+Display in summary:
+
+* Branch comparison range
+* Stories involved
+* Scrum teams involved
+
+⸻
+
+8. Component Exclusion (Pre-Report)
+
+Problem:
+
+Some components:
+
+* DB Scripts
+* NA / No Code
+* Test-only
+
+Solution:
+
+* Provide checkbox/toggle:
+    * Exclude component from report
+
+Behavior:
+
+* Excluded components:
+    * Not processed in report
+    * Stored in configuration (existing config section)
+
+⸻
+
+9. Generate Report Execution (Async Processing)
+
+Current Issue:
+
+* UI blocks during processing
+
+Required:
+
+* Run report generation in background thread
+
+Implementation Options:
+
+* Spring Boot:
+    * @Async
+    * Or Queue-based (Kafka / ExecutorService)
+
+Behavior:
+
+* User can navigate other tabs
+* Process continues in background
+* On returning:
+    * Show latest status/result
+
+⸻
+
+10. Final Report Generation Flow
+
+Steps:
+
+1. User selects:
+    * Project Key
+    * Current Fix Version
+2. System:
+    * Loads components from iTrack
+    * Identifies previous branch per component
+    * Fetches commit data
+3. Show Summary Screen
+4. User:
+    * Reviews data
+    * Overrides if needed
+    * Excludes components if needed
+5. User clicks:
+    Generate Report
+6. System:
+    * Runs async comparison
+    * Produces final report (existing logic retained)
+
+⸻
+
+11. Performance Optimization (MANDATORY)
+
+* Cache:
+    * Project keys
+    * Release versions
+* Avoid repeated API calls
+* Use DB as primary source
+
+⸻
+
+Questions / Clarifications
+
+1. Should summary screen support pagination (for large components)?
+2. Do we need status tracking (IN_PROGRESS / COMPLETED / FAILED)?
+3. Should async jobs be persisted (job_id tracking)?
+4. Do we alert) when report is 
+
+
+Feature Enhancement: Generate Report – Data Persistence, Intelligent Versioning & Pre-Validation Summary
+
+---------------------------------------------------------------------
+
+1. Project Keys – DB Persistence + Refresh
+
+Requirements:
+- Fetch project keys from iTrack (Jira) only once
+- Persist in DB (e.g., project_keys table)
+
+Behavior:
+- On page load:
+  - Load from DB (NOT from API)
+- Provide button:
+  - "Refresh Projects"
+    - Re-fetch from iTrack
+    - Update DB
+
+UI Enhancements:
+- Project Key Dropdown:
+  - Add search capability (typeahead)
+  - Default selected value: SPTOC1
+
+---------------------------------------------------------------------
+
+2. Release Versions – Persist + Smart UI Filtering
+
+Requirements:
+- Fetch all release versions once per project
+- Persist in DB (e.g., release_versions table)
+
+Behavior:
+- Do NOT reload every time
+- Reload only when explicitly triggered
+
+UI Enhancement:
+- While displaying dropdown:
+  - Show prioritized list:
+    - Current Year → Current Month → Current Date onward
+    - Highlight current month releases
+
+Important:
+- DB must store ALL historical releases
+
+---------------------------------------------------------------------
+
+3. Fix Version Selection Logic (CRITICAL CHANGE)
+
+Rule:
+- User selects ONLY Current Fix Version
+- DO NOT allow selecting Previous Fix Version manually at global level
+
+---------------------------------------------------------------------
+
+4. Intelligent Previous Version Detection (Per Component)
+
+Problem:
+Different components may not exist in same previous release
+
+Solution:
+
+Step 1:
+- Identify current branch:
+  release/{current_fix_version}
+
+Step 2:
+- Dynamically find previous valid branch from GitHub:
+  - Iterate backwards:
+    26.4.3 → 26.4.2 → 26.4.1 → 26.3.x → 26.2.x ...
+  - Check branch existence via GitHub API
+  - Select latest available previous branch
+
+Important:
+- This logic is component-specific
+- DO NOT depend on iTrack for previous versions
+
+---------------------------------------------------------------------
+
+5. Pre-Validation Summary Screen (NEW FEATURE)
+
+Before generating report, show a Summary View
+
+For each Component:
+- Component Name
+- Scrum Team(s) (multiple possible)
+- Current Branch (e.g., release/26.4.3)
+- Identified Previous Branch (auto-detected)
+- List of Commits:
+  - Valid commits only
+  - Story IDs
+- Unique Stories Count
+
+---------------------------------------------------------------------
+
+6. Component-Level Overrides (User Control)
+
+Provide:
+- Dropdown per component:
+  - Current Version (default auto-selected)
+  - Previous Version (auto-detected but editable)
+
+Allow:
+- User override per component before report generation
+
+---------------------------------------------------------------------
+
+7. GitHub Comparison Scope
+
+For each component:
+- Compare:
+  previous_branch → current_branch
+
+Display in summary:
+- Branch comparison range
+- Stories involved
+- Scrum teams involved
+
+---------------------------------------------------------------------
+
+8. Component Exclusion (Pre-Report)
+
+Problem:
+Some components:
+- DB Scripts
+- NA / No Code
+- Test-only
+
+Solution:
+- Provide checkbox/toggle:
+  - Exclude component from report
+
+Behavior:
+- Excluded components:
+  - Not processed in report
+  - Stored in configuration
+
+---------------------------------------------------------------------
+
+9. Generate Report Execution (Async Processing)
+
+Current Issue:
+- UI blocks during processing
+
+Required:
+- Run report generation in background thread
+
+Implementation Options:
+- Spring Boot:
+  - @Async
+  - Or Queue-based (Kafka / ExecutorService)
+
+Behavior:
+- User can navigate other tabs
+- Process continues in background
+- On returning:
+  - Show latest status/result
+
+---------------------------------------------------------------------
+
+10. Final Report Generation Flow
+
+Steps:
+
+1. User selects:
+   - Project Key
+   - Current Fix Version
+
+2. System:
+   - Loads components from iTrack
+   - Identifies previous branch per component
+   - Fetches commit data
+
+3. Show Summary Screen
+
+4. User:
+   - Reviews data
+   - Overrides if needed
+   - Excludes components if needed
+
+5. User clicks:
+   Generate Report
+
+6. System:
+   - Runs async comparison
+   - Produces final report (existing logic retained)
+
+---------------------------------------------------------------------
+
+11. Performance Optimization (MANDATORY)
+
+- Cache:
+  - Project keys
+  - Release versions
+- Avoid repeated API calls
+- Use DB as primary source
+
+---------------------------------------------------------------------
+
+Questions / Clarifications:
+
+1. Should summary screen support pagination (for large components)?
+2. Do we need status tracking (IN_PROGRESS / COMPLETED / FAILED)?
+3. Should async jobs be persisted (job_id tracking)?
+4. Do we need notification (toast / alert) when report is ready?
+
+---------------------------------------------------------------------
+
+End of Prompt
+
+
