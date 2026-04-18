@@ -1,1 +1,252 @@
+Feature Enhancement: UI Cleanup, Generate Report Improvements, Filters, and Settings Fixes
 
+---------------------------------------------------------------------
+
+1. Left Sidebar vs Top Navigation Cleanup
+
+Current Issue:
+- Duplicate navigation exists:
+  - Top: SOX Compliance, Dashboard, Generate Report, Microservices, Scan History, Settings
+  - Left Sidebar: Same options with icons
+
+Problem:
+- Confusing and redundant
+- No clear differentiation in purpose
+
+Required Change:
+- Remove the TOP navigation completely (if no special purpose)
+- Keep ONLY the LEFT SIDEBAR navigation with icons:
+  - SOX Compliance
+  - Dashboard
+  - Generate Report
+  - Microservices
+  - Scan History
+  - Settings
+
+Clarification:
+- If top navigation has a specific purpose, document it
+- Otherwise remove it entirely
+
+---------------------------------------------------------------------
+
+2. Project Key Enhancements
+
+Requirements:
+- Allow MULTI-SELECT for Project Keys (not just single like SPTOC1)
+- Persist selection behavior
+
+UI Improvement:
+- Replace heavy message:
+  "No projects cached, click refresh project to load from iTrack"
+
+With:
+- Info (ⓘ) icon near Refresh button
+- Tooltip content:
+  "If no projects are cached, click refresh to load from iTrack"
+
+Apply same pattern for:
+- Fix Versions section
+
+---------------------------------------------------------------------
+
+3. Fix Version → Branch Identification (Pre-Step)
+
+Requirement:
+- When user selects Fix Version (e.g., 26.4.3)
+
+System should:
+- Identify release date range (e.g., 19 Apr 2026 – 25 Apr 2026)
+- Detect corresponding branch:
+  Example:
+  release/2026-04-19_to_2026-04-25 OR equivalent naming
+
+Display:
+- Show identified branch BEFORE loading components
+
+---------------------------------------------------------------------
+
+4. Branch Cut Validation (NEW)
+
+After components are loaded:
+
+Check:
+- Whether ALL components have the identified branch
+
+Behavior:
+- If YES:
+  - Proceed normally
+
+- If NO:
+  Provide options:
+  - Skip missing components and continue
+  - OR notify user with warning
+
+Do NOT hard block user
+
+---------------------------------------------------------------------
+
+5. Component Exclusion – Configurable
+
+Enhancement:
+- Ask user to configure:
+  - List of components to exclude permanently
+
+Behavior:
+- These components:
+  - Should NOT appear in component list
+  - Should NOT require manual exclusion every time
+
+---------------------------------------------------------------------
+
+6. Current vs Previous Branch Logic Fix
+
+Critical Issue:
+- Current comparison logic is reversed
+
+Fix:
+
+Correct Comparison:
+- previous_branch → current_branch
+
+Current Branch Rule:
+- MUST be derived ONLY from selected Fix Version range
+- Should NOT auto-pick latest branch
+
+Previous Branch:
+- Existing logic is OK
+
+Action:
+- Reverse comparison logic internally
+
+---------------------------------------------------------------------
+
+7. Pre-Validation Summary Enhancements
+
+Ensure summary shows:
+- Component Name
+- Current Branch (derived correctly)
+- Previous Branch
+- Story Numbers
+- Scrum Teams
+
+---------------------------------------------------------------------
+
+8. Microservices Dropdown Enhancement
+
+Add:
+- "ALL" option in component dropdown
+  - Shows all microservices together
+
+---------------------------------------------------------------------
+
+9. Additional Filters (IMPORTANT)
+
+Existing filters are good, ADD:
+
+1. Scrum Team Filter
+   - Filter results by Scrum Team
+
+2. Reporter Filter (DBA)
+   - Filter using Reporter ID
+
+Keep existing filters:
+- Author
+- Commit message
+- Story
+
+---------------------------------------------------------------------
+
+10. Comment Resolution & DB Update Fix
+
+Current Issue:
+- Marking comment as complete does NOT update DB
+
+Fix:
+
+When user marks as resolved:
+- Persist status in DB
+- Update UI:
+  - Mark as "Resolved"
+
+Update Counts:
+- Move item:
+  Non-Compliant → Compliant
+
+- Update summary counts:
+  - Overridden → Resolved
+  - Non-Compliant reduced
+  - Compliant increased
+
+---------------------------------------------------------------------
+
+11. Settings Tab Fix (CRITICAL)
+
+Issue:
+- GitHub verification broken
+- Error:
+  name 'getGitHubReportTemplate' is not defined
+
+Fix:
+- Correct method reference
+- Ensure GitHub Test Connection works
+
+---------------------------------------------------------------------
+
+12. Token Management (IMPORTANT)
+
+Enhancement:
+
+Provide fields for:
+- iTrack Token
+- GitHub Token
+
+Behavior:
+
+Local:
+- Load tokens from environment variables automatically
+
+Deployed (Container):
+- Require user to input tokens before usage
+
+Fallback:
+- If env variables exist → auto-load
+- Else → manual input required
+
+---------------------------------------------------------------------
+
+13. Async Processing (MANDATORY)
+
+Scope:
+- Generate Report
+- Branch Validation
+- Pre-validation checks
+
+Requirement:
+- Run ALL in background (non-blocking)
+
+Behavior:
+- User can navigate freely
+- Process continues in background
+- On return:
+  - Show updated results/status
+
+---------------------------------------------------------------------
+
+14. Final Notes
+
+- Maintain backward compatibility
+- Avoid breaking existing logic unless specified
+- Ensure UI clarity and usability improvements
+
+---------------------------------------------------------------------
+
+Questions / Clarifications:
+
+1. Should excluded components be editable via UI?
+2. Do we need job status tracking for async tasks?
+3. Should branch detection logic be configurable?
+4. Do we need audit logging for report generation?
+
+---------------------------------------------------------------------
+
+End of Prompt
