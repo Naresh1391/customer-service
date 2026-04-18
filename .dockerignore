@@ -11,4 +11,124 @@ mvnw/
 .idea/
 mvnw.cmd
 HELP.md
-README.md
+Feature Enhancement: SOX Compliance Release Commit Tracker
+
+1. Global UI Heading Standardization
+
+* Update the main heading across ALL tabs and pages to:
+    “SOX Compliance Release Commit Tracker”
+* This should be consistent across:
+    * Dashboard
+    * Generate Report
+    * Microservices
+    * Scan History
+* Do NOT replace existing sub-content. Instead:
+    * Keep existing page-specific descriptions (e.g., Generate Report explanation)
+    * Add this as a global header/title theme
+
+⸻
+
+2. Generate Report – Data Consistency
+
+* Ensure fixed version data is consistent across all modules:
+    * Generate Report
+    * Microservices
+    * Scan History
+* Use a single shared data source/service for versions
+* Avoid discrepancies across pages
+
+⸻
+
+3. Dynamic Project Key Loading (Jira / iTrack Integration)
+
+* Current state: Project key is hardcoded (SPDOC)
+* Required change:
+    * Fetch project keys dynamically from iTrack (Jira API)
+    * Use provided credentials to:
+        * Retrieve all accessible project keys
+        * Populate dropdown dynamically
+* Remove hardcoding completely
+
+⸻
+
+4. Project Filtering (Configurable Exclusion)
+
+* Exclude the following project types:
+    * DB Script
+    * NA / No Code
+    * Test Validation / Analysis Support
+* These should:
+    * NOT appear in project/component selection
+    * Be configurable via:
+        * Config file OR environment variable
+* Reason:
+    * These projects do not contain actual GitHub code
+
+⸻
+
+5. Release Version Selection Enhancement
+
+* Current:
+    * System auto-selects current and previous versions
+* Required:
+    * Provide dropdown selection for:
+        * Current version
+        * Previous version
+* Allow users to:
+    * Override selections
+    * Re-run reports for any version combination
+
+⸻
+
+6. Microservices Search Improvements
+
+* Existing search fields:
+    * Commit Message
+    * Story
+    * Author
+* Enhancements:
+    * Add Author-only filter
+    * Improve search relevance:
+        * Partial match
+        * Case-insensitive
+        * Multi-field combined filtering
+
+⸻
+
+7. Commit Message Validation & Filtering
+
+* Current Issue:
+    * Showing messages like: “Merge pull request”
+    * These are NOT actual development commits
+* Required behavior:
+    * Filter and display ONLY valid commits
+    * Valid commit format:
+        * Must start with: <STORY-ID> <message>
+        * Example: ABC-1234 Fix login issue
+* Handling invalid commits:
+    * Do NOT remove completely
+    * Provide:
+        * Toggle option:
+            * Show Valid Commits Only (default: ON)
+            * Show All Commits
+* Author correction:
+    * Ensure author shown is:
+        * Actual commit author
+        * NOT PR merger
+
+⸻
+
+8. General Notes
+
+* Maintain backward compatibility
+* Avoid breaking existing workflows
+* Ensure all configurations are externalized where possible
+
+⸻
+
+Questions / Clarifications Before Implementation
+
+1. Should excluded project list be UI editable or only config-level?
+2. Do we need pagination or lazy loading for large commit datasets?
+3. Should commit validation rules be configurable (regex-based)?
+4. Do we need caching for Jira project keys?
