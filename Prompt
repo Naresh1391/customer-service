@@ -1,252 +1,315 @@
-Prompt:
+# Release SOC Compliance Tracker - Phase 2 Enhancements
 
-I need to enhance the Release SOC Compliance Tracker application (Java Spring Boot + React.js). Please analyze the existing codebase first, reuse the current architecture and coding patterns, and implement the following changes. Avoid breaking any existing functionality.
+## Objective
 
-General Requirements
+The previous implementation looks very good. I would like to extend the existing functionality without breaking any current behavior.
 
-* Reuse existing service, repository, controller, and UI patterns wherever possible.
-* Do not duplicate business logic if similar functionality already exists.
-* Follow the existing project coding standards.
-* Keep backward compatibility.
-* If any database query already exists, reuse or extend it instead of creating duplicate logic.
+**Important:**
+- First analyze the existing project structure.
+- Reuse existing components, services, repositories, DTOs and APIs.
+- Do not duplicate business logic.
+- Preserve all existing functionality.
+- Follow the current coding standards and architecture.
 
-⸻
+---
 
-1. Rename Existing Tab
+# 1. Story Status Improvements
 
-Rename the existing “Microservices” tab to:
+The Story Status section in the **Release Readiness** page is working well.
 
-Review Commits
+Enhance it with the following features.
 
-All existing functionality should continue to work after the rename.
+## 1.1 Show Only Pending Stories Toggle
 
-⸻
+Add a toggle switch above the Story Status table.
 
-2. Review Commits Tab
+Behavior:
 
-The Review Commits tab already contains several filters.
+- OFF (Default)
+  - Show all stories.
 
-Team Filter
+- ON
+  - Show only stories whose status is NOT Accepted.
 
-Keep the existing Team filter implementation exactly as it is.
+Use a modern switch component.
 
-Do not change its logic.
+UI Requirements:
 
-⸻
+- ON color: soft green
+- OFF color: light grey
+- Avoid dark colors.
+- Follow the application's existing UI theme.
 
-Remaining Filters
+---
 
-Populate the following filters dynamically from the Commits database table.
+# 2. Branch Validation Improvements
 
-* Fix Version
-* Scrum Team
-* Component
-* Committer
+The Branch Validation table is already available.
 
-Requirements:
+Improve the status visibility.
 
-* Remove any hardcoded dropdown values.
-* Load only distinct values from the Commits table.
-* Display only values that actually exist in the database.
-* Preserve existing filtering behavior.
+Examples:
 
-⸻
+✅ Valid
 
-3. Create a New Tab
+❌ Branch Cut Not Done
 
-Create a new tab.
+❌ Invalid Branch
+
+Use consistent colors.
+
+Green = Valid
+
+Red = Invalid
+
+Orange = Warning (if applicable)
+
+---
+
+# 3. Story Selection
+
+When the toggle is ON (Not Accepted only),
+
+Provide:
+
+- Select All
+- Deselect All
+
+Each row should also contain an individual checkbox.
+
+Only the selected stories will be used for notifications.
+
+---
+
+# 4. Notification Actions
+
+For every story row, add two action buttons.
+
+- Microsoft Teams
+- Email
+
+Currently this feature is only for testing.
+
+## IMPORTANT
+
+DO NOT send notifications to actual Assignees or Reporters.
+
+For now, always send notifications ONLY to:
+
+sm094z@att.com
+
+Ignore all other users.
+
+This is a development/testing environment.
+
+No production notifications should be sent.
+
+---
+
+# 5. Teams Notification
+
+Create the backend integration in a reusable manner.
+
+Do NOT hardcode anything.
+
+Abstract the notification service so that later we can easily switch to actual users.
+
+For now:
+
+Destination:
+
+sm094z@att.com
+
+If authentication details are required, implement placeholders and clearly document:
+
+- Required Tokens
+- Required Client ID
+- Required Tenant ID
+- Required Secret
+- Required Webhook URL (if applicable)
+
+Also provide recommendations on the best Microsoft-supported implementation.
+
+Evaluate and document:
+
+Option 1
+
+Microsoft Teams Incoming Webhook
+
+Option 2
+
+Microsoft Graph API
+
+Option 3
+
+Power Automate Flow
+
+Option 4
+
+Teams Bot
+
+Recommend which approach is best for long-term enterprise usage considering:
+
+- Security
+- Authentication
+- Maintainability
+- Scalability
+
+---
+
+# 6. Email Notification
+
+Similarly,
+
+Provide Email action.
+
+Again,
+
+ONLY send emails to
+
+sm094z@att.com
+
+Do not send emails to any other users.
+
+Keep the implementation configurable for future production rollout.
+
+---
+
+# 7. Veracode API Debugging
+
+It looks like the Veracode integration is currently failing.
+
+Please help identify the issue.
+
+Provide:
+
+- Backend endpoint responsible for Veracode execution
+- Service class
+- HTTP Method
+- Complete request URL
+- Request headers
+- Authentication mechanism
+- Sample request
+- Sample response
+- Expected response
+
+Also indicate:
+
+- Which environment variables are being used
+- Which .env variables are mandatory
+
+Do NOT expose secrets directly in source code.
+
+Instead clearly mention where each value is loaded from.
+
+This information will help me independently verify the API using Postman.
+
+---
+
+# 8. API Documentation
+
+Document every external API currently being used.
+
+Include:
+
+## GitHub APIs
+
+- Endpoint
+- Method
+- Headers
+- Sample Request
+- Sample Response
+
+---
+
+## iTrack APIs
+
+- Endpoint
+- Method
+- Headers
+- Sample Request
+- Sample Response
+
+---
+
+## Veracode APIs
+
+- Endpoint
+- Method
+- Headers
+- Sample Request
+- Sample Response
+
+---
+
+# 9. Bruno Collection
+
+Update the existing Bruno collection that was already created during this development session.
+
+Do NOT create a new collection.
+
+Extend the existing one.
+
+Include every newly added endpoint.
+
+Ensure all requests are organized into folders.
+
+Use existing environment variables.
+
+---
+
+# 10. Documentation
+
+Create a new markdown document.
 
 Suggested name:
 
-Release Readiness
+docs/release-readiness-phase2.md
 
-(Alternative names if appropriate: Release Validation, Release Dashboard, Release Health)
+Include:
 
-This tab should provide release validation information for a selected Team and Fix Version.
+- Architecture overview
+- UI changes
+- Backend changes
+- Database changes
+- Notification design
+- Teams integration
+- Email integration
+- Veracode integration
+- API documentation
+- Bruno collection usage
+- Future enhancements
 
-⸻
+Use proper Markdown formatting with tables wherever appropriate.
 
-Top Level Filters
+---
 
-At the top of the page provide:
+# 11. Security
 
-* Team
-* Fix Version
+Never hardcode secrets.
 
-The Team filter should use the existing logic.
+All credentials must be read from environment variables.
 
-Fix Version should be populated similarly to the existing Generate Report functionality.
+Keep the implementation production-ready.
 
-Only after selecting Team and Fix Version should the remaining sections load.
+---
 
-⸻
+# 12. Deliverables
 
-Section 1 - Story Status
+Implement:
 
-The application already stores iTrack stories in the database.
+- React UI
+- Spring Boot backend
+- REST APIs
+- Notification service abstraction
+- Teams integration placeholders
+- Email integration placeholders
+- API documentation
+- Updated Bruno collection
+- Markdown documentation
 
-Use the existing iTrack Stories table.
+Before implementation, analyze the current project and reuse existing services wherever possible.
 
-Display a table containing:
+Avoid duplicate code.
 
-* iTrack Story Number
-* Summary
-* Story Status
-* Assignee
-* Reporter
-* Scrum Team
-* Components
-
-Purpose:
-
-This section is intended to validate release readiness.
-
-Stories included in the release should normally be in Accepted status.
-
-This table should allow users to quickly identify stories that are not yet accepted.
-
-No editing is required.
-
-Read-only view.
-
-⸻
-
-Section 2 - Component / Branch Validation
-
-After the Story Status section, display another table.
-
-Use the Components table together with the existing Release Branch information.
-
-Display:
-
-* Component Name
-* Helm Repository
-* Current Release Branch
-* Previous Release Branch
-* Branch Validation Status
-
-Reuse the existing branch validation logic already present in the application.
-
-If the current release branch is not valid for the selected Fix Version, display a status similar to:
-
-* Branch Cut Not Done
-* Branch Missing
-* Invalid Release Branch
-
-Reuse existing validation logic instead of implementing new logic.
-
-⸻
-
-4. SAST Report Integration
-
-Integrate Veracode SAST reporting.
-
-This can either be:
-
-* a separate tab named SAST Report, or
-* the final section of Release Readiness.
-
-Prefer whichever integrates better with the existing architecture.
-
-⸻
-
-Behaviour
-
-After the Release Report generation process completes (before the final completion step), execute a Veracode SAST scan retrieval.
-
-For every GitHub repository (NOT Helm repository):
-
-* Retrieve the current SAST score from Veracode.
-* Store the results in the database.
-
-If a SAST table already exists:
-
-* reuse it.
-
-Otherwise create a new table.
-
-Suggested columns:
-
-* Team
-* Fix Version
-* Repository Name
-* SAST Score
-* Scan Timestamp
-
-⸻
-
-Display
-
-Display a table containing:
-
-* Repository Name
-* SAST Score
-* Scan Date (if available)
-
-The UI should load this information from the database rather than calling Veracode every time.
-
-⸻
-
-5. Overall Screen Flow
-
-The Release Readiness page should appear in this order:
-
-1. Team + Fix Version filters
-2. Story Status table
-3. Component / Branch Validation table
-4. SAST Report
-
-⸻
-
-6. Database
-
-Reuse existing tables whenever possible.
-
-Existing tables include:
-
-* Commits
-* iTrack Stories
-* Components
-* Release Branch related tables
-
-Only create new tables if absolutely necessary (for example, SAST results).
-
-⸻
-
-7. UI Requirements
-
-* Match the existing application styling.
-* Use the same React component patterns already used in the project.
-* Support loading indicators.
-* Display friendly messages when no data is available.
-* Preserve responsive layout.
-
-⸻
-
-8. Backend Requirements
-
-* Reuse existing services and repositories.
-* Create new REST endpoints only where required.
-* Use efficient SQL queries.
-* Avoid duplicate database calls.
-* Return only the data required by the UI.
-
-⸻
-
-9. Deliverables
-
-Implement the complete feature end-to-end, including:
-
-* React UI changes
-* Spring Boot backend changes
-* Database changes (only if required)
-* REST APIs
-* Repository updates
-* Service layer updates
-* DTOs
-* Validation
-* Error handling
-* Loading states
-* Integration with existing release generation flow
-
-Before writing code, first analyze the existing project structure and identify reusable components and services. Then implement the solution following the current architecture and best practices. Do not introduce duplicate logic where existing implementations can be reused.
+Keep the solution clean, modular, and maintainable.
