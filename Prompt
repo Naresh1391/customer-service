@@ -1,315 +1,587 @@
-# Release SOC Compliance Tracker - Phase 2 Enhancements
+# Release SOC Compliance Tracker – Phase 3 Enhancements
+## Authentication, Authorization, Workflow & Microsoft Teams Integration
 
-## Objective
-
-The previous implementation looks very good. I would like to extend the existing functionality without breaking any current behavior.
-
-**Important:**
-- First analyze the existing project structure.
-- Reuse existing components, services, repositories, DTOs and APIs.
-- Do not duplicate business logic.
-- Preserve all existing functionality.
-- Follow the current coding standards and architecture.
+> **Objective**
+>
+> Extend the existing implementation from the previous phase without breaking any existing functionality. Reuse the current architecture, services, repositories, DTOs, and UI components wherever possible. Avoid duplicate implementations and follow the existing project coding standards.
 
 ---
 
-# 1. Story Status Improvements
+# 1. Remove Email Notification Feature
 
-The Story Status section in the **Release Readiness** page is working well.
+The previous phase included both Microsoft Teams and Email notifications.
 
-Enhance it with the following features.
+## Change Request
 
-## 1.1 Show Only Pending Stories Toggle
+Remove the Email notification feature completely.
 
-Add a toggle switch above the Story Status table.
+This includes:
+
+- Remove Email button(s) from UI
+- Remove Email service implementation
+- Remove Email APIs
+- Remove Email configuration
+- Remove Email placeholders
+- Remove Email documentation
+
+Only Microsoft Teams notifications should remain in the application.
+
+---
+
+# 2. Microsoft Teams Notification
+
+Retain only Microsoft Teams notification functionality.
+
+The notification should remain configurable for future production deployment.
+
+Do **NOT** hardcode credentials.
+
+Use configuration through environment variables.
+
+Create a reusable notification service abstraction.
+
+Example:
+
+```
+NotificationService
+    ├── MicrosoftTeamsNotificationService
+```
+
+No Email implementation should remain.
+
+---
+
+# 3. Pending Items Documentation
+
+Create a documentation file:
+
+```
+docs/pending-items.md
+```
+
+This file will act as the deployment readiness checklist.
+
+It should be updated whenever there are pending implementation items.
+
+Include sections such as:
+
+## Microsoft Teams
+
+Pending:
+
+- Azure App Registration
+- Microsoft Graph permissions
+- Incoming Webhook / Teams Bot decision
+- Tenant ID
+- Client ID
+- Client Secret
+- Webhook URL
+- Required environment variables
+- Production validation checklist
+
+---
+
+## Azure AD
+
+Pending:
+
+- Azure AD Application
+- Redirect URLs
+- Group IDs
+- Production App Registration
+- Production Client Secret
+
+---
+
+## Production Deployment
+
+Pending:
+
+- Update production configuration
+- Replace placeholder values
+- Configure secrets
+- Verify Teams notifications
+- Verify Azure authentication
+- Verify RBAC
+- Smoke testing
+
+---
+
+## Future Enhancements
+
+Maintain any future TODO items here.
+
+This file should become the single place for deployment-related pending work.
+
+---
+
+# 4. Azure Authentication
+
+Implement Azure Active Directory login.
+
+After successful authentication retrieve:
+
+- Display Name
+- Email
+- Azure AD Groups
+
+Use Azure AD Groups for application authorization.
+
+Do not hardcode any role.
+
+---
+
+# 5. Application Roles
+
+Support three application roles.
+
+## Viewer
+
+Read-only access.
+
+## Editor
+
+Can request overrides.
+
+## Admin
+
+Full administrative access.
+
+---
+
+# 6. Azure AD Group Mapping
+
+Map Azure AD Groups to application roles.
+
+Configuration must come from properties/environment variables.
+
+Example:
+
+```
+ROLE_VIEWER_GROUP
+
+ROLE_EDITOR_GROUP
+
+ROLE_ADMIN_GROUP
+```
+
+No hardcoded group IDs.
+
+---
+
+# 7. Welcome Banner
+
+Top-right corner should display
+
+```
+Welcome,
+<Logged-in User Name>
+```
+
+Use Azure authenticated user information.
+
+---
+
+# 8. Development Role Override
+
+To simplify local development and testing, implement a development-only role override.
+
+Configuration:
+
+```
+DEV_ROLE_OVERRIDE=VIEWER
+DEV_ROLE_OVERRIDE=EDITOR
+DEV_ROLE_OVERRIDE=ADMIN
+```
 
 Behavior:
 
-- OFF (Default)
-  - Show all stories.
+When running in local/development mode and `DEV_ROLE_OVERRIDE` is configured:
 
-- ON
-  - Show only stories whose status is NOT Accepted.
+- Ignore Azure AD group mapping.
+- Treat the logged-in user as the configured role.
 
-Use a modern switch component.
+When the property is absent or disabled:
 
-UI Requirements:
+- Use normal Azure AD role mapping.
 
-- ON color: soft green
-- OFF color: light grey
-- Avoid dark colors.
-- Follow the application's existing UI theme.
+This should work only in development mode and must never affect production.
 
 ---
 
-# 2. Branch Validation Improvements
+# 9. Dashboard Permissions
 
-The Branch Validation table is already available.
+Dashboard remains visible to:
 
-Improve the status visibility.
+- Viewer
+- Editor
+- Admin
 
-Examples:
-
-✅ Valid
-
-❌ Branch Cut Not Done
-
-❌ Invalid Branch
-
-Use consistent colors.
-
-Green = Valid
-
-Red = Invalid
-
-Orange = Warning (if applicable)
+No restrictions.
 
 ---
 
-# 3. Story Selection
+# 10. Generate Report Permissions
 
-When the toggle is ON (Not Accepted only),
+Everyone may view:
 
-Provide:
+- OC Platform
+- Fix Version
 
+Only Admin may execute:
+
+- Fetch Stories
+- Generate Report
+- Veracode Scan
+- Database update operations
+
+Viewer and Editor must not be able to execute these operations.
+
+Buttons should be hidden or disabled with appropriate tooltips.
+
+---
+
+# 11. Review Commits Permissions
+
+Everyone can:
+
+- Search
+- Filter
+- View commits
+
+Override functionality:
+
+Editor only.
+
+---
+
+# 12. Override Workflow
+
+Current implementation:
+
+```
+Override
+
+↓
+
+WOK
+```
+
+Required implementation:
+
+```
+Violation
+
+↓
+
+Override Requested
+
+↓
+
+Pending Approval
+
+↓
+
+Admin Approval
+
+↓
+
+Approved
+
+↓
+
+WOK
+```
+
+The existing override information should remain available.
+
+Only the workflow changes.
+
+---
+
+# 13. Override Dialog
+
+Editor clicks Override.
+
+Dialog should request:
+
+- Reason (Mandatory)
+
+After submission:
+
+Status becomes:
+
+```
+Pending Approval
+```
+
+No automatic WOK.
+
+---
+
+# 14. Admin Approval
+
+Admins should see an
+
+```
+Approve
+```
+
+action for Pending Approval records.
+
+Viewer:
+
+No Approve button.
+
+Editor:
+
+No Approve button.
+
+Admin:
+
+Approve button visible.
+
+Approval changes:
+
+```
+Pending Approval
+
+↓
+
+Approved
+
+↓
+
+Existing logic moves record to WOK
+```
+
+---
+
+# 15. Release Readiness
+
+Remove
+
+```
+Load Result Data
+```
+
+button.
+
+Selecting
+
+- Team
+- Fix Version
+
+should automatically load:
+
+- Story Status
+- Branch Validation
+- SAST Results
+
+No manual loading button required.
+
+---
+
+# 16. Story Status Permissions
+
+Everyone can:
+
+- View stories
+- Toggle All / Pending
+
+Viewer
+
+- Read only
+
+Editor
+
+- Read only
+
+Admin
+
+Can additionally:
+
+- Select rows
 - Select All
 - Deselect All
-
-Each row should also contain an individual checkbox.
-
-Only the selected stories will be used for notifications.
+- Send Microsoft Teams Notification
 
 ---
 
-# 4. Notification Actions
+# 17. Teams Notification UI
 
-For every story row, add two action buttons.
+Remove row-level notification buttons.
 
-- Microsoft Teams
-- Email
+Replace with one action above the table:
 
-Currently this feature is only for testing.
+```
+Send Teams Notification
+```
 
-## IMPORTANT
+Workflow:
 
-DO NOT send notifications to actual Assignees or Reporters.
+```
+Select Stories
 
-For now, always send notifications ONLY to:
+↓
 
-sm094z@att.com
+Send Teams Notification
 
-Ignore all other users.
+↓
 
-This is a development/testing environment.
-
-No production notifications should be sent.
-
----
-
-# 5. Teams Notification
-
-Create the backend integration in a reusable manner.
-
-Do NOT hardcode anything.
-
-Abstract the notification service so that later we can easily switch to actual users.
-
-For now:
-
-Destination:
-
-sm094z@att.com
-
-If authentication details are required, implement placeholders and clearly document:
-
-- Required Tokens
-- Required Client ID
-- Required Tenant ID
-- Required Secret
-- Required Webhook URL (if applicable)
-
-Also provide recommendations on the best Microsoft-supported implementation.
-
-Evaluate and document:
-
-Option 1
-
-Microsoft Teams Incoming Webhook
-
-Option 2
-
-Microsoft Graph API
-
-Option 3
-
-Power Automate Flow
-
-Option 4
-
-Teams Bot
-
-Recommend which approach is best for long-term enterprise usage considering:
-
-- Security
-- Authentication
-- Maintainability
-- Scalability
+Notifications sent only for selected stories
+```
 
 ---
 
-# 6. Email Notification
+# 18. Teams Configuration
 
-Similarly,
+Do not implement production credentials.
 
-Provide Email action.
+Instead implement placeholders.
 
-Again,
+Document all required configuration in
 
-ONLY send emails to
-
-sm094z@att.com
-
-Do not send emails to any other users.
-
-Keep the implementation configurable for future production rollout.
-
----
-
-# 7. Veracode API Debugging
-
-It looks like the Veracode integration is currently failing.
-
-Please help identify the issue.
-
-Provide:
-
-- Backend endpoint responsible for Veracode execution
-- Service class
-- HTTP Method
-- Complete request URL
-- Request headers
-- Authentication mechanism
-- Sample request
-- Sample response
-- Expected response
-
-Also indicate:
-
-- Which environment variables are being used
-- Which .env variables are mandatory
-
-Do NOT expose secrets directly in source code.
-
-Instead clearly mention where each value is loaded from.
-
-This information will help me independently verify the API using Postman.
-
----
-
-# 8. API Documentation
-
-Document every external API currently being used.
+```
+docs/pending-items.md
+```
 
 Include:
 
-## GitHub APIs
-
-- Endpoint
-- Method
-- Headers
-- Sample Request
-- Sample Response
-
----
-
-## iTrack APIs
-
-- Endpoint
-- Method
-- Headers
-- Sample Request
-- Sample Response
+- Tenant ID
+- Client ID
+- Client Secret
+- Webhook URL (if webhook approach is used)
+- Microsoft Graph scopes
+- Bot registration details (if bot approach is selected)
+- Required environment variables
 
 ---
 
-## Veracode APIs
+# 19. Branch Validation
 
-- Endpoint
-- Method
-- Headers
-- Sample Request
-- Sample Response
+No changes required.
+
+Existing implementation is acceptable.
 
 ---
 
-# 9. Bruno Collection
+# 20. Scan History
 
-Update the existing Bruno collection that was already created during this development session.
+Visible to:
 
-Do NOT create a new collection.
+- Viewer
+- Editor
+- Admin
 
-Extend the existing one.
-
-Include every newly added endpoint.
-
-Ensure all requests are organized into folders.
-
-Use existing environment variables.
+No restrictions.
 
 ---
 
-# 10. Documentation
+# 21. Scan History Correction
 
-Create a new markdown document.
+Current column:
 
-Suggested name:
+```
+Project
+```
 
-docs/release-readiness-phase2.md
+shows:
 
-Include:
+```
+SPTOC
+```
 
-- Architecture overview
-- UI changes
-- Backend changes
-- Database changes
-- Notification design
-- Teams integration
-- Email integration
-- Veracode integration
-- API documentation
-- Bruno collection usage
-- Future enhancements
+This appears incorrect.
 
-Use proper Markdown formatting with tables wherever appropriate.
+Replace with:
 
----
+```
+Team
+```
 
-# 11. Security
+Display selected
 
-Never hardcode secrets.
+```
+OC Platform
+```
 
-All credentials must be read from environment variables.
-
-Keep the implementation production-ready.
+Verify backend mapping.
 
 ---
 
-# 12. Deliverables
+# 22. Settings
+
+No changes required.
+
+Existing test tokens may remain.
+
+---
+
+# 23. Reference Project
+
+Authentication and Authorization implementation already exists in:
+
+```
+AT&T API Mocker
+```
+
+When implementing Phase 3,
+
+reuse:
+
+- Azure Authentication
+- RBAC
+- Authorization filters
+- UI permission handling
+
+instead of rewriting from scratch.
+
+I will provide the reference project during implementation.
+
+---
+
+# 24. Documentation Deliverables
+
+Update:
+
+```
+docs/pending-items.md
+```
+
+Create or update documentation covering:
+
+- Azure Authentication
+- RBAC
+- Microsoft Teams Integration
+- Environment Variables
+- Deployment Checklist
+- Production Configuration
+- Pending Tasks
+
+---
+
+# 25. Final Deliverables
 
 Implement:
 
-- React UI
-- Spring Boot backend
-- REST APIs
-- Notification service abstraction
-- Teams integration placeholders
-- Email integration placeholders
-- API documentation
-- Updated Bruno collection
-- Markdown documentation
+- Azure AD Login
+- Azure AD Role Mapping
+- Viewer Role
+- Editor Role
+- Admin Role
+- Development Role Override
+- Pending Approval Workflow
+- Admin Approval Workflow
+- Microsoft Teams Notifications
+- Automatic Release Readiness Loading
+- Updated Scan History
+- Updated Documentation
+- `docs/pending-items.md`
 
-Before implementation, analyze the current project and reuse existing services wherever possible.
+Before implementation:
 
-Avoid duplicate code.
-
-Keep the solution clean, modular, and maintainable.
+- Analyze the existing project.
+- Reuse existing services and components.
+- Avoid duplicate implementations.
+- Keep the solution modular, secure, maintainable, and production-ready.
