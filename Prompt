@@ -1,0 +1,252 @@
+Prompt:
+
+I need to enhance the Release SOC Compliance Tracker application (Java Spring Boot + React.js). Please analyze the existing codebase first, reuse the current architecture and coding patterns, and implement the following changes. Avoid breaking any existing functionality.
+
+General Requirements
+
+* Reuse existing service, repository, controller, and UI patterns wherever possible.
+* Do not duplicate business logic if similar functionality already exists.
+* Follow the existing project coding standards.
+* Keep backward compatibility.
+* If any database query already exists, reuse or extend it instead of creating duplicate logic.
+
+⸻
+
+1. Rename Existing Tab
+
+Rename the existing “Microservices” tab to:
+
+Review Commits
+
+All existing functionality should continue to work after the rename.
+
+⸻
+
+2. Review Commits Tab
+
+The Review Commits tab already contains several filters.
+
+Team Filter
+
+Keep the existing Team filter implementation exactly as it is.
+
+Do not change its logic.
+
+⸻
+
+Remaining Filters
+
+Populate the following filters dynamically from the Commits database table.
+
+* Fix Version
+* Scrum Team
+* Component
+* Committer
+
+Requirements:
+
+* Remove any hardcoded dropdown values.
+* Load only distinct values from the Commits table.
+* Display only values that actually exist in the database.
+* Preserve existing filtering behavior.
+
+⸻
+
+3. Create a New Tab
+
+Create a new tab.
+
+Suggested name:
+
+Release Readiness
+
+(Alternative names if appropriate: Release Validation, Release Dashboard, Release Health)
+
+This tab should provide release validation information for a selected Team and Fix Version.
+
+⸻
+
+Top Level Filters
+
+At the top of the page provide:
+
+* Team
+* Fix Version
+
+The Team filter should use the existing logic.
+
+Fix Version should be populated similarly to the existing Generate Report functionality.
+
+Only after selecting Team and Fix Version should the remaining sections load.
+
+⸻
+
+Section 1 - Story Status
+
+The application already stores iTrack stories in the database.
+
+Use the existing iTrack Stories table.
+
+Display a table containing:
+
+* iTrack Story Number
+* Summary
+* Story Status
+* Assignee
+* Reporter
+* Scrum Team
+* Components
+
+Purpose:
+
+This section is intended to validate release readiness.
+
+Stories included in the release should normally be in Accepted status.
+
+This table should allow users to quickly identify stories that are not yet accepted.
+
+No editing is required.
+
+Read-only view.
+
+⸻
+
+Section 2 - Component / Branch Validation
+
+After the Story Status section, display another table.
+
+Use the Components table together with the existing Release Branch information.
+
+Display:
+
+* Component Name
+* Helm Repository
+* Current Release Branch
+* Previous Release Branch
+* Branch Validation Status
+
+Reuse the existing branch validation logic already present in the application.
+
+If the current release branch is not valid for the selected Fix Version, display a status similar to:
+
+* Branch Cut Not Done
+* Branch Missing
+* Invalid Release Branch
+
+Reuse existing validation logic instead of implementing new logic.
+
+⸻
+
+4. SAST Report Integration
+
+Integrate Veracode SAST reporting.
+
+This can either be:
+
+* a separate tab named SAST Report, or
+* the final section of Release Readiness.
+
+Prefer whichever integrates better with the existing architecture.
+
+⸻
+
+Behaviour
+
+After the Release Report generation process completes (before the final completion step), execute a Veracode SAST scan retrieval.
+
+For every GitHub repository (NOT Helm repository):
+
+* Retrieve the current SAST score from Veracode.
+* Store the results in the database.
+
+If a SAST table already exists:
+
+* reuse it.
+
+Otherwise create a new table.
+
+Suggested columns:
+
+* Team
+* Fix Version
+* Repository Name
+* SAST Score
+* Scan Timestamp
+
+⸻
+
+Display
+
+Display a table containing:
+
+* Repository Name
+* SAST Score
+* Scan Date (if available)
+
+The UI should load this information from the database rather than calling Veracode every time.
+
+⸻
+
+5. Overall Screen Flow
+
+The Release Readiness page should appear in this order:
+
+1. Team + Fix Version filters
+2. Story Status table
+3. Component / Branch Validation table
+4. SAST Report
+
+⸻
+
+6. Database
+
+Reuse existing tables whenever possible.
+
+Existing tables include:
+
+* Commits
+* iTrack Stories
+* Components
+* Release Branch related tables
+
+Only create new tables if absolutely necessary (for example, SAST results).
+
+⸻
+
+7. UI Requirements
+
+* Match the existing application styling.
+* Use the same React component patterns already used in the project.
+* Support loading indicators.
+* Display friendly messages when no data is available.
+* Preserve responsive layout.
+
+⸻
+
+8. Backend Requirements
+
+* Reuse existing services and repositories.
+* Create new REST endpoints only where required.
+* Use efficient SQL queries.
+* Avoid duplicate database calls.
+* Return only the data required by the UI.
+
+⸻
+
+9. Deliverables
+
+Implement the complete feature end-to-end, including:
+
+* React UI changes
+* Spring Boot backend changes
+* Database changes (only if required)
+* REST APIs
+* Repository updates
+* Service layer updates
+* DTOs
+* Validation
+* Error handling
+* Loading states
+* Integration with existing release generation flow
+
+Before writing code, first analyze the existing project structure and identify reusable components and services. Then implement the solution following the current architecture and best practices. Do not introduce duplicate logic where existing implementations can be reused.
