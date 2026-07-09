@@ -1,286 +1,161 @@
-# Release SOC Compliance Tracker – Phase 4
-## Kubernetes Deployment Readiness & Environment Validation
+# Release SOC Compliance Tracker – Phase 5
+# Kubernetes Configuration Drift Validation (Blue/Green ConfigMap Comparison)
 
 ## Objective
 
-This phase aims to automate Deployment Readiness validation by integrating with Kubernetes. The objective is to identify which release branch is currently deployed in the IST and Stage environments, validate whether the correct Fix Version has been deployed, store the deployment metadata in the database, and present the results in the Release Readiness dashboard.
+This phase extends the Kubernetes Deployment Readiness implementation by validating the configuration changes that are about to go live during a production release.
 
-Please first analyze the existing project structure and reuse the current architecture, coding patterns, services, repositories, DTOs, controllers, React components, and APIs wherever possible. Avoid duplicate implementations and keep the solution modular, configurable, secure, and production-ready.
+The goal is to automatically compare the ConfigMaps of the currently deployed Blue/Green applications, identify only the configuration differences, store those differences in the database, and display them in the Release Readiness dashboard.
 
----
-
-# Business Requirement
-
-Currently, before every release, the Integration Testing (IST) team manually verifies whether the correct release branch has been deployed into their Kubernetes environment.
-
-The verification includes:
-
-- Identifying the active deployment.
-- Determining which GitHub branch is deployed.
-- Verifying the deployment timestamp.
-- Identifying the Git commit deployed.
-- Ensuring the deployed branch matches the selected Fix Version.
-
-This entire process should now be automated.
-
-Initially, the solution should support the IST/Test environment and Stage environment. The architecture should also be future-ready for Production.
+Please analyze the existing implementation from previous phases and reuse the current architecture, services, repositories, controllers, DTOs, React components, and database patterns. Do not duplicate business logic. The implementation should be modular, configurable, secure, and production-ready.
 
 ---
 
-# Generate Report Enhancements
+# Business Background
 
-Extend the existing Generate Report flow.
+Our applications use Blue-Green deployment.
 
-Current flow:
-
-Stories
-
-↓
-
-Components
-
-↓
-
-Branch Validation
-
-↓
-
-Veracode
-
-↓
-
-Finish
-
-New flow:
-
-Stories
-
-↓
-
-Components
-
-↓
-
-Branch Validation
-
-↓
-
-Veracode
-
-↓
-
-Kubernetes Deployment Validation
-
-↓
-
-Persist Deployment Metadata
-
-↓
-
-Finish
-
-The Kubernetes validation should automatically execute during Generate Report and persist the deployment information into the database.
-
----
-
-# Generate Report UI Changes
-
-Add a collapsible section named:
-
-**Deployment Validation Configuration**
-
-The section should contain:
-
-- OC Platform (reuse existing Team selector)
-- Fix Version (reuse existing Fix Version selector)
-- Namespace (textbox/dropdown)
-- Kubernetes Authentication Cookie (temporary textbox)
-
-The cookie is only required for development/testing. Do not store it permanently in the database.
-
-It should only be used for the current Generate Report execution.
-
----
-
-# Kubernetes Configuration
-
-Do not hardcode cluster URLs.
-
-Create backend configuration similar to:
-
-application.yml
-
-kubernetes:
-  test:
-    host:
-  stage:
-    host:
-  production:
-    host:
-
-Use placeholders.
-
-I will provide actual cluster URLs later.
-
----
-
-# Environment Support
-
-Design the implementation for multiple environments.
-
-Initially support:
-
-- IST/Test
-- Stage
-
-Future-ready for:
-
-- Production
-
-Avoid hardcoding.
-
-Everything should be configuration driven.
-
----
-
-# Kubernetes Integration
-
-Please research Kubernetes APIs and implement the best available approach.
-
-Suggested workflow:
-
-Namespace
-
-↓
-
-List Deployments
-
-↓
-
-Identify matching deployments
-
-↓
-
-Determine active deployment
-
-↓
-
-Read Deployment Labels
-
-↓
-
-Extract deployment metadata
-
-↓
-
-Persist into database
-
-If Kubernetes provides a better approach than this workflow, please implement the recommended approach.
-
----
-
-# Deployment Identification
-
-Our applications follow Blue-Green deployment.
-
-Example deployments:
+Example:
 
 order-management-ms-blue
 
 order-management-ms-green
 
-Only one deployment should be active.
-
-Determine the active deployment using Pod availability.
-
-Rules:
-
-If only one deployment has running pods
-
-→ Active Deployment
-
-If both deployments have running pods
-
-→ Treat as inconsistent deployment
-
-→ Ignore deployment
-
-→ Log warning
-
-→ Continue processing remaining deployments
-
----
-
-# Deployment Metadata
-
-Read deployment labels and extract all available metadata.
-
-Expected labels include:
-
-- GitHub Branch
-- Git Commit
-- Deployment Timestamp
-- Build Number
-- Release Metadata
-- Any additional useful labels
-
-The Branch label represents the currently deployed GitHub branch.
-
-Extract every useful label available.
-
----
-
-# Branch Validation
-
-Compare:
-
-Selected Fix Version
-
-with
-
-Deployment Branch
+During the previous phase, we already identify which deployment is ACTIVE.
 
 Example:
 
-Selected Fix Version
+Active Deployment
 
-24.09
+order-management-ms-blue
 
-Deployment Branch
+Now we need to inspect the ConfigMaps associated with that deployment.
 
-release/24.09
+Example ConfigMaps
 
-Result
+order-management-ms-blue-config
 
-Valid
+order-management-ms-blue-common
 
-If the deployment branch does not match the selected Fix Version,
+order-management-ms-blue-application
 
-mark the deployment as Invalid.
+(or any ConfigMap matching the deployment name using wildcard patterns)
+
+The exact naming convention may vary slightly across applications, therefore implement configurable wildcard matching rather than hardcoded names.
 
 ---
 
-# Deployment Status
+# Business Requirement
 
-Display deployment status using consistent colors.
+During production deployment we generally deploy the new release one day before the release window.
 
-Green
+The deployment exists in Production, but traffic is switched only during the scheduled release time.
 
-Correct Release Branch
+Before switching traffic we manually verify the configuration differences.
 
-Yellow
+This validation should now become automated.
 
-Older Release Branch
+Instead of displaying every configuration, display only the actual differences.
 
-Orange
+We are interested only in:
 
-Unknown
+- Newly Added configurations
+- Removed configurations
+- (Optional) Modified configuration values
 
-Red
+Configurations that remain unchanged should neither be stored nor displayed.
 
-Deployment Error
+---
 
-Reuse the application's existing color palette.
+# ConfigMap Discovery
+
+For every active deployment identified during Deployment Readiness:
+
+1. Discover associated ConfigMaps.
+
+Suggested matching:
+
+Deployment Name
+
+↓
+
+Wildcard Search
+
+Example
+
+order-management-ms-blue*
+
+Return all ConfigMaps matching the deployment.
+
+Do not assume only one ConfigMap exists.
+
+Support multiple ConfigMaps.
+
+---
+
+# Initial Environment
+
+For initial implementation, use the Test Kubernetes cluster.
+
+However, the implementation must be fully configurable so that Production cluster URLs can be plugged in later without code changes.
+
+Cluster URLs should continue to come from application configuration.
+
+No hardcoded URLs.
+
+---
+
+# Comparison Logic
+
+Within the SAME Kubernetes environment compare:
+
+Active Blue ConfigMap
+
+vs
+
+Inactive Green ConfigMap
+
+(or vice versa depending on which deployment is active)
+
+The implementation should automatically determine:
+
+Active Deployment
+
+↓
+
+Active ConfigMaps
+
+↓
+
+Inactive ConfigMaps
+
+↓
+
+Configuration Comparison
+
+---
+
+# Configuration Difference Detection
+
+For every configuration key:
+
+If key exists only in Active
+
+→ Added
+
+If key exists only in Inactive
+
+→ Removed
+
+If key exists in both but values differ
+
+→ Modified
+
+If both key and value are identical
+
+→ Ignore completely
+
+Only Added, Removed and Modified entries should be stored.
 
 ---
 
@@ -290,7 +165,7 @@ Create a new table.
 
 Suggested name:
 
-deployment_readiness
+configmap_differences
 
 Suggested columns:
 
@@ -301,44 +176,209 @@ Suggested columns:
 - component_name
 - deployment_name
 - active_color
-- github_branch
-- git_commit
-- deployment_timestamp
-- build_number
-- validation_status
-- fix_version
+- configmap_name
+- configuration_key
+- previous_value
+- current_value
+- difference_type
 - report_generated_time
 - last_updated
 
-Modify the schema if required.
+Difference Type values:
+
+- Added
+- Removed
+- Modified
+
+Store only changed records.
+
+Do not persist unchanged configurations.
 
 ---
 
-# Release Readiness Page
+# Generate Report Enhancement
 
-Reuse the existing Release Readiness page.
+Extend the Generate Report workflow.
 
-Add another section named:
+Current Flow
+
+Stories
+
+↓
+
+Components
+
+↓
+
+Branch Validation
+
+↓
+
+Veracode
+
+↓
 
 Deployment Readiness
 
-Display:
+↓
+
+Finish
+
+New Flow
+
+Stories
+
+↓
+
+Components
+
+↓
+
+Branch Validation
+
+↓
+
+Veracode
+
+↓
+
+Deployment Readiness
+
+↓
+
+ConfigMap Difference Detection
+
+↓
+
+Persist Results
+
+↓
+
+Finish
+
+---
+
+# Release Readiness UI
+
+Add another section.
+
+Suggested title
+
+Configuration Changes
+
+Display
 
 - Component
-- Environment
 - Active Deployment
-- GitHub Branch
-- Git Commit
-- Deployment Date
-- Validation Status
+- ConfigMap
+- Configuration Key
+- Difference Type
+- Previous Value
+- Current Value
 
-Provide a filter:
+Difference Type should be color coded.
 
-Show All
+Green
 
-Show Invalid Deployments Only
+Added
 
-Reuse the existing toggle component already used elsewhere.
+Red
+
+Removed
+
+Orange
+
+Modified
+
+---
+
+# Filtering
+
+Provide filters.
+
+Show
+
+- All
+- Added Only
+- Removed Only
+- Modified Only
+
+Provide search by:
+
+- Component
+- Configuration Key
+
+Reuse existing filter components.
+
+---
+
+# Sidebar Administration
+
+Under Admin-only navigation add:
+
+Kubernetes Administration
+
+This page should only be accessible by ROLE_ADMIN.
+
+Include:
+
+## Kubernetes Authentication Cookie
+
+Temporary textbox.
+
+Used only during refresh.
+
+Never persist in database.
+
+---
+
+## Force Refresh Button
+
+When clicked
+
+Execute:
+
+Deployment Discovery
+
+↓
+
+Deployment Validation
+
+↓
+
+ConfigMap Discovery
+
+↓
+
+ConfigMap Comparison
+
+↓
+
+Update Database
+
+↓
+
+Notify UI
+
+This should completely refresh Kubernetes-derived information.
+
+---
+
+# Automatic UI Refresh
+
+After Force Refresh completes:
+
+The updated data should immediately appear on the UI.
+
+Users should not need to manually refresh the browser.
+
+Implement either:
+
+- WebSocket
+- Server-Sent Events (SSE)
+- Polling (if existing architecture already supports it)
+
+Prefer the approach already used within the application.
 
 ---
 
@@ -346,132 +386,75 @@ Reuse the existing toggle component already used elsewhere.
 
 Create dedicated services.
 
-Example:
+Example
 
 DeploymentReadinessService
 
-KubernetesClientService
+ConfigMapDiscoveryService
 
-DeploymentReadinessRepository
+ConfigMapComparisonService
 
-Keep the implementation modular.
+KubernetesAdministrationService
+
+Reuse Kubernetes client implementation developed in the previous phase.
 
 ---
 
 # Kubernetes API Documentation
 
-Research Kubernetes APIs.
+Research Kubernetes ConfigMap APIs.
 
-Document:
+Document
 
-- API Endpoint
+- Endpoint
 - HTTP Method
 - Authentication
-- Headers
+- Required Headers
 - Parameters
 - Sample Request
 - Sample Response
 
-Also explain why each API is being used.
+Also document why each endpoint is being used.
 
 ---
 
-# API Flow Documentation
+# Architecture Documentation
 
-Create architecture documentation explaining:
+Update
 
-Namespace
+docs/kubernetes-integration.md
 
-↓
+Add
 
-Deployments
-
-↓
-
-Pods
-
-↓
-
-Deployment Labels
-
-↓
-
-Metadata Extraction
-
-↓
-
-Database
-
-↓
-
-Release Readiness UI
-
-Sequence diagrams are preferred if applicable.
-
----
-
-# Configuration
-
-Do not hardcode.
-
-Everything should be configurable.
-
-Support:
-
-- Cluster URLs
-- Namespace
-- Authentication Cookie
-- SSL Configuration
-- Request Timeouts
-
-Future authentication methods should be easily configurable.
+- ConfigMap Discovery
+- ConfigMap Matching
+- Difference Detection Algorithm
+- Database Design
+- Refresh Flow
+- Administration Page
+- Future Enhancements
 
 ---
 
 # Pending Items
 
-Update:
+Update
 
 docs/pending-items.md
 
-Add Kubernetes pending items.
+Add
 
-Examples:
+Kubernetes ConfigMap Validation
+
+Pending:
 
 - Production Cluster URL
-- Stage Cluster URL
-- Namespace Mapping
-- Authentication Method
-- Cookie Replacement
+- Production Namespace Mapping
+- Production Cookie Authentication
 - Service Account Authentication
-- Kubernetes RBAC
-- TLS Certificates
-- Production Validation
-- Final Deployment Checklist
-
-Continue using this document as the central deployment checklist.
-
----
-
-# Documentation
-
-Create:
-
-docs/kubernetes-integration.md
-
-Include:
-
-- Overall Architecture
-- Kubernetes Authentication
-- Deployment Discovery Flow
-- Blue-Green Deployment Logic
-- Active Deployment Selection
-- Branch Validation Logic
-- Database Design
-- REST API Design
-- UI Design
-- Configuration
-- Future Enhancements
+- RBAC Validation
+- TLS Validation
+- Final Production Smoke Testing
 
 ---
 
@@ -479,31 +462,31 @@ Include:
 
 Update the existing Bruno Collection.
 
-Do not create a new collection.
-
-Add all Kubernetes APIs.
+Add all newly introduced Kubernetes ConfigMap APIs.
 
 Organize requests into folders.
 
-Use environment variables for authentication.
+Use environment variables.
 
 Do not hardcode credentials.
 
 ---
 
-# Future Design
+# Future Ready Design
 
-Design the implementation so it can later support:
+Design the implementation so that it can later support:
 
-- Production Cluster
+- Production ConfigMap Validation
 - Multiple Kubernetes Clusters
 - Multiple Namespaces
-- Additional Deployment Labels
-- Service Account Authentication
-- OAuth / JWT Authentication
+- Secrets Comparison (future enhancement)
+- Environment Variable Comparison
 - Scheduled Background Synchronization
+- Service Account Authentication
+- OAuth/JWT Authentication
+- Audit History of Configuration Changes
 
-No major redesign should be required in future phases.
+No redesign should be required in future phases.
 
 ---
 
@@ -511,42 +494,43 @@ No major redesign should be required in future phases.
 
 Frontend
 
-- Deployment Validation Configuration section
-- Deployment Readiness table
-- Status indicators
-- Invalid deployment filter
-- Automatic refresh after Generate Report
+- Configuration Changes section
+- Search
+- Filters
+- Difference highlighting
+- Auto refresh
+- Kubernetes Administration page (Admin only)
 
 Backend
 
-- Kubernetes Integration
-- Deployment Discovery
-- Deployment Label Extraction
-- Branch Validation
+- ConfigMap Discovery
+- ConfigMap Comparison
+- Difference Detection
 - Database Persistence
 - REST APIs
+- Refresh APIs
 
 Database
 
-- deployment_readiness table
+- configmap_differences table
 
 Documentation
 
-- docs/kubernetes-integration.md
+- Update docs/kubernetes-integration.md
 - Update docs/pending-items.md
 
 Bruno
 
-- Update existing Bruno Collection
+- Update the existing Bruno Collection with all new APIs
 
 API Documentation
 
-Provide documentation for every Kubernetes API used, including:
+Document every Kubernetes API used, including:
 
 - URL
 - HTTP Method
-- Headers
 - Authentication
+- Headers
 - Sample Request
 - Sample Response
 
@@ -554,10 +538,11 @@ Provide documentation for every Kubernetes API used, including:
 
 ## Important Implementation Guidelines
 
-- Analyze the existing codebase before implementing.
-- Reuse existing services and architecture.
+- Analyze the existing project before implementing.
+- Reuse existing architecture and services.
 - Avoid duplicate code.
-- Keep the implementation modular, maintainable, secure, and production-ready.
-- Do not hardcode cluster URLs, namespaces, authentication cookies, or credentials.
-- Use configuration files and environment variables for all environment-specific settings.
-- Ensure all newly created services, APIs, UI components, database changes, and documentation follow the existing project standards and integrate seamlessly with the current Release SOC Compliance Tracker.
+- Keep the implementation modular, maintainable, configurable, and production-ready.
+- Do not hardcode cluster URLs, namespaces, cookies, or credentials.
+- Use configuration files and environment variables for all environment-specific values.
+- Ensure that Force Refresh updates the database and automatically refreshes the UI without requiring a browser reload.
+- Only persist and display configuration differences. Unchanged configuration entries should never be stored or shown.
