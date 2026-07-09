@@ -1,587 +1,563 @@
-# Release SOC Compliance Tracker – Phase 3 Enhancements
-## Authentication, Authorization, Workflow & Microsoft Teams Integration
+# Release SOC Compliance Tracker – Phase 4
+## Kubernetes Deployment Readiness & Environment Validation
 
-> **Objective**
->
-> Extend the existing implementation from the previous phase without breaking any existing functionality. Reuse the current architecture, services, repositories, DTOs, and UI components wherever possible. Avoid duplicate implementations and follow the existing project coding standards.
+## Objective
 
----
+This phase aims to automate Deployment Readiness validation by integrating with Kubernetes. The objective is to identify which release branch is currently deployed in the IST and Stage environments, validate whether the correct Fix Version has been deployed, store the deployment metadata in the database, and present the results in the Release Readiness dashboard.
 
-# 1. Remove Email Notification Feature
-
-The previous phase included both Microsoft Teams and Email notifications.
-
-## Change Request
-
-Remove the Email notification feature completely.
-
-This includes:
-
-- Remove Email button(s) from UI
-- Remove Email service implementation
-- Remove Email APIs
-- Remove Email configuration
-- Remove Email placeholders
-- Remove Email documentation
-
-Only Microsoft Teams notifications should remain in the application.
+Please first analyze the existing project structure and reuse the current architecture, coding patterns, services, repositories, DTOs, controllers, React components, and APIs wherever possible. Avoid duplicate implementations and keep the solution modular, configurable, secure, and production-ready.
 
 ---
 
-# 2. Microsoft Teams Notification
+# Business Requirement
 
-Retain only Microsoft Teams notification functionality.
+Currently, before every release, the Integration Testing (IST) team manually verifies whether the correct release branch has been deployed into their Kubernetes environment.
 
-The notification should remain configurable for future production deployment.
+The verification includes:
 
-Do **NOT** hardcode credentials.
+- Identifying the active deployment.
+- Determining which GitHub branch is deployed.
+- Verifying the deployment timestamp.
+- Identifying the Git commit deployed.
+- Ensuring the deployed branch matches the selected Fix Version.
 
-Use configuration through environment variables.
+This entire process should now be automated.
 
-Create a reusable notification service abstraction.
+Initially, the solution should support the IST/Test environment and Stage environment. The architecture should also be future-ready for Production.
+
+---
+
+# Generate Report Enhancements
+
+Extend the existing Generate Report flow.
+
+Current flow:
+
+Stories
+
+↓
+
+Components
+
+↓
+
+Branch Validation
+
+↓
+
+Veracode
+
+↓
+
+Finish
+
+New flow:
+
+Stories
+
+↓
+
+Components
+
+↓
+
+Branch Validation
+
+↓
+
+Veracode
+
+↓
+
+Kubernetes Deployment Validation
+
+↓
+
+Persist Deployment Metadata
+
+↓
+
+Finish
+
+The Kubernetes validation should automatically execute during Generate Report and persist the deployment information into the database.
+
+---
+
+# Generate Report UI Changes
+
+Add a collapsible section named:
+
+**Deployment Validation Configuration**
+
+The section should contain:
+
+- OC Platform (reuse existing Team selector)
+- Fix Version (reuse existing Fix Version selector)
+- Namespace (textbox/dropdown)
+- Kubernetes Authentication Cookie (temporary textbox)
+
+The cookie is only required for development/testing. Do not store it permanently in the database.
+
+It should only be used for the current Generate Report execution.
+
+---
+
+# Kubernetes Configuration
+
+Do not hardcode cluster URLs.
+
+Create backend configuration similar to:
+
+application.yml
+
+kubernetes:
+  test:
+    host:
+  stage:
+    host:
+  production:
+    host:
+
+Use placeholders.
+
+I will provide actual cluster URLs later.
+
+---
+
+# Environment Support
+
+Design the implementation for multiple environments.
+
+Initially support:
+
+- IST/Test
+- Stage
+
+Future-ready for:
+
+- Production
+
+Avoid hardcoding.
+
+Everything should be configuration driven.
+
+---
+
+# Kubernetes Integration
+
+Please research Kubernetes APIs and implement the best available approach.
+
+Suggested workflow:
+
+Namespace
+
+↓
+
+List Deployments
+
+↓
+
+Identify matching deployments
+
+↓
+
+Determine active deployment
+
+↓
+
+Read Deployment Labels
+
+↓
+
+Extract deployment metadata
+
+↓
+
+Persist into database
+
+If Kubernetes provides a better approach than this workflow, please implement the recommended approach.
+
+---
+
+# Deployment Identification
+
+Our applications follow Blue-Green deployment.
+
+Example deployments:
+
+order-management-ms-blue
+
+order-management-ms-green
+
+Only one deployment should be active.
+
+Determine the active deployment using Pod availability.
+
+Rules:
+
+If only one deployment has running pods
+
+→ Active Deployment
+
+If both deployments have running pods
+
+→ Treat as inconsistent deployment
+
+→ Ignore deployment
+
+→ Log warning
+
+→ Continue processing remaining deployments
+
+---
+
+# Deployment Metadata
+
+Read deployment labels and extract all available metadata.
+
+Expected labels include:
+
+- GitHub Branch
+- Git Commit
+- Deployment Timestamp
+- Build Number
+- Release Metadata
+- Any additional useful labels
+
+The Branch label represents the currently deployed GitHub branch.
+
+Extract every useful label available.
+
+---
+
+# Branch Validation
+
+Compare:
+
+Selected Fix Version
+
+with
+
+Deployment Branch
 
 Example:
 
-```
-NotificationService
-    ├── MicrosoftTeamsNotificationService
-```
+Selected Fix Version
 
-No Email implementation should remain.
+24.09
 
----
+Deployment Branch
 
-# 3. Pending Items Documentation
+release/24.09
 
-Create a documentation file:
+Result
 
-```
-docs/pending-items.md
-```
+Valid
 
-This file will act as the deployment readiness checklist.
+If the deployment branch does not match the selected Fix Version,
 
-It should be updated whenever there are pending implementation items.
-
-Include sections such as:
-
-## Microsoft Teams
-
-Pending:
-
-- Azure App Registration
-- Microsoft Graph permissions
-- Incoming Webhook / Teams Bot decision
-- Tenant ID
-- Client ID
-- Client Secret
-- Webhook URL
-- Required environment variables
-- Production validation checklist
+mark the deployment as Invalid.
 
 ---
 
-## Azure AD
+# Deployment Status
 
-Pending:
+Display deployment status using consistent colors.
 
-- Azure AD Application
-- Redirect URLs
-- Group IDs
-- Production App Registration
-- Production Client Secret
+Green
 
----
+Correct Release Branch
 
-## Production Deployment
+Yellow
 
-Pending:
+Older Release Branch
 
-- Update production configuration
-- Replace placeholder values
-- Configure secrets
-- Verify Teams notifications
-- Verify Azure authentication
-- Verify RBAC
-- Smoke testing
+Orange
+
+Unknown
+
+Red
+
+Deployment Error
+
+Reuse the application's existing color palette.
 
 ---
 
-## Future Enhancements
+# Database
 
-Maintain any future TODO items here.
+Create a new table.
 
-This file should become the single place for deployment-related pending work.
+Suggested name:
 
----
+deployment_readiness
 
-# 4. Azure Authentication
+Suggested columns:
 
-Implement Azure Active Directory login.
+- id
+- team
+- environment
+- namespace
+- component_name
+- deployment_name
+- active_color
+- github_branch
+- git_commit
+- deployment_timestamp
+- build_number
+- validation_status
+- fix_version
+- report_generated_time
+- last_updated
 
-After successful authentication retrieve:
-
-- Display Name
-- Email
-- Azure AD Groups
-
-Use Azure AD Groups for application authorization.
-
-Do not hardcode any role.
-
----
-
-# 5. Application Roles
-
-Support three application roles.
-
-## Viewer
-
-Read-only access.
-
-## Editor
-
-Can request overrides.
-
-## Admin
-
-Full administrative access.
+Modify the schema if required.
 
 ---
 
-# 6. Azure AD Group Mapping
+# Release Readiness Page
 
-Map Azure AD Groups to application roles.
+Reuse the existing Release Readiness page.
 
-Configuration must come from properties/environment variables.
+Add another section named:
+
+Deployment Readiness
+
+Display:
+
+- Component
+- Environment
+- Active Deployment
+- GitHub Branch
+- Git Commit
+- Deployment Date
+- Validation Status
+
+Provide a filter:
+
+Show All
+
+Show Invalid Deployments Only
+
+Reuse the existing toggle component already used elsewhere.
+
+---
+
+# Backend Design
+
+Create dedicated services.
 
 Example:
 
-```
-ROLE_VIEWER_GROUP
+DeploymentReadinessService
 
-ROLE_EDITOR_GROUP
+KubernetesClientService
 
-ROLE_ADMIN_GROUP
-```
+DeploymentReadinessRepository
 
-No hardcoded group IDs.
+Keep the implementation modular.
 
 ---
 
-# 7. Welcome Banner
+# Kubernetes API Documentation
 
-Top-right corner should display
+Research Kubernetes APIs.
 
-```
-Welcome,
-<Logged-in User Name>
-```
+Document:
 
-Use Azure authenticated user information.
+- API Endpoint
+- HTTP Method
+- Authentication
+- Headers
+- Parameters
+- Sample Request
+- Sample Response
 
----
-
-# 8. Development Role Override
-
-To simplify local development and testing, implement a development-only role override.
-
-Configuration:
-
-```
-DEV_ROLE_OVERRIDE=VIEWER
-DEV_ROLE_OVERRIDE=EDITOR
-DEV_ROLE_OVERRIDE=ADMIN
-```
-
-Behavior:
-
-When running in local/development mode and `DEV_ROLE_OVERRIDE` is configured:
-
-- Ignore Azure AD group mapping.
-- Treat the logged-in user as the configured role.
-
-When the property is absent or disabled:
-
-- Use normal Azure AD role mapping.
-
-This should work only in development mode and must never affect production.
+Also explain why each API is being used.
 
 ---
 
-# 9. Dashboard Permissions
+# API Flow Documentation
 
-Dashboard remains visible to:
+Create architecture documentation explaining:
 
-- Viewer
-- Editor
-- Admin
-
-No restrictions.
-
----
-
-# 10. Generate Report Permissions
-
-Everyone may view:
-
-- OC Platform
-- Fix Version
-
-Only Admin may execute:
-
-- Fetch Stories
-- Generate Report
-- Veracode Scan
-- Database update operations
-
-Viewer and Editor must not be able to execute these operations.
-
-Buttons should be hidden or disabled with appropriate tooltips.
-
----
-
-# 11. Review Commits Permissions
-
-Everyone can:
-
-- Search
-- Filter
-- View commits
-
-Override functionality:
-
-Editor only.
-
----
-
-# 12. Override Workflow
-
-Current implementation:
-
-```
-Override
+Namespace
 
 ↓
 
-WOK
-```
-
-Required implementation:
-
-```
-Violation
+Deployments
 
 ↓
 
-Override Requested
+Pods
 
 ↓
 
-Pending Approval
+Deployment Labels
 
 ↓
 
-Admin Approval
+Metadata Extraction
 
 ↓
 
-Approved
+Database
 
 ↓
 
-WOK
-```
+Release Readiness UI
 
-The existing override information should remain available.
-
-Only the workflow changes.
+Sequence diagrams are preferred if applicable.
 
 ---
 
-# 13. Override Dialog
+# Configuration
 
-Editor clicks Override.
+Do not hardcode.
 
-Dialog should request:
+Everything should be configurable.
 
-- Reason (Mandatory)
+Support:
 
-After submission:
+- Cluster URLs
+- Namespace
+- Authentication Cookie
+- SSL Configuration
+- Request Timeouts
 
-Status becomes:
-
-```
-Pending Approval
-```
-
-No automatic WOK.
+Future authentication methods should be easily configurable.
 
 ---
 
-# 14. Admin Approval
-
-Admins should see an
-
-```
-Approve
-```
-
-action for Pending Approval records.
-
-Viewer:
-
-No Approve button.
-
-Editor:
-
-No Approve button.
-
-Admin:
-
-Approve button visible.
-
-Approval changes:
-
-```
-Pending Approval
-
-↓
-
-Approved
-
-↓
-
-Existing logic moves record to WOK
-```
-
----
-
-# 15. Release Readiness
-
-Remove
-
-```
-Load Result Data
-```
-
-button.
-
-Selecting
-
-- Team
-- Fix Version
-
-should automatically load:
-
-- Story Status
-- Branch Validation
-- SAST Results
-
-No manual loading button required.
-
----
-
-# 16. Story Status Permissions
-
-Everyone can:
-
-- View stories
-- Toggle All / Pending
-
-Viewer
-
-- Read only
-
-Editor
-
-- Read only
-
-Admin
-
-Can additionally:
-
-- Select rows
-- Select All
-- Deselect All
-- Send Microsoft Teams Notification
-
----
-
-# 17. Teams Notification UI
-
-Remove row-level notification buttons.
-
-Replace with one action above the table:
-
-```
-Send Teams Notification
-```
-
-Workflow:
-
-```
-Select Stories
-
-↓
-
-Send Teams Notification
-
-↓
-
-Notifications sent only for selected stories
-```
-
----
-
-# 18. Teams Configuration
-
-Do not implement production credentials.
-
-Instead implement placeholders.
-
-Document all required configuration in
-
-```
-docs/pending-items.md
-```
-
-Include:
-
-- Tenant ID
-- Client ID
-- Client Secret
-- Webhook URL (if webhook approach is used)
-- Microsoft Graph scopes
-- Bot registration details (if bot approach is selected)
-- Required environment variables
-
----
-
-# 19. Branch Validation
-
-No changes required.
-
-Existing implementation is acceptable.
-
----
-
-# 20. Scan History
-
-Visible to:
-
-- Viewer
-- Editor
-- Admin
-
-No restrictions.
-
----
-
-# 21. Scan History Correction
-
-Current column:
-
-```
-Project
-```
-
-shows:
-
-```
-SPTOC
-```
-
-This appears incorrect.
-
-Replace with:
-
-```
-Team
-```
-
-Display selected
-
-```
-OC Platform
-```
-
-Verify backend mapping.
-
----
-
-# 22. Settings
-
-No changes required.
-
-Existing test tokens may remain.
-
----
-
-# 23. Reference Project
-
-Authentication and Authorization implementation already exists in:
-
-```
-AT&T API Mocker
-```
-
-When implementing Phase 3,
-
-reuse:
-
-- Azure Authentication
-- RBAC
-- Authorization filters
-- UI permission handling
-
-instead of rewriting from scratch.
-
-I will provide the reference project during implementation.
-
----
-
-# 24. Documentation Deliverables
+# Pending Items
 
 Update:
 
-```
 docs/pending-items.md
-```
 
-Create or update documentation covering:
+Add Kubernetes pending items.
 
-- Azure Authentication
-- RBAC
-- Microsoft Teams Integration
-- Environment Variables
-- Deployment Checklist
-- Production Configuration
-- Pending Tasks
+Examples:
+
+- Production Cluster URL
+- Stage Cluster URL
+- Namespace Mapping
+- Authentication Method
+- Cookie Replacement
+- Service Account Authentication
+- Kubernetes RBAC
+- TLS Certificates
+- Production Validation
+- Final Deployment Checklist
+
+Continue using this document as the central deployment checklist.
 
 ---
 
-# 25. Final Deliverables
+# Documentation
 
-Implement:
+Create:
 
-- Azure AD Login
-- Azure AD Role Mapping
-- Viewer Role
-- Editor Role
-- Admin Role
-- Development Role Override
-- Pending Approval Workflow
-- Admin Approval Workflow
-- Microsoft Teams Notifications
-- Automatic Release Readiness Loading
-- Updated Scan History
-- Updated Documentation
-- `docs/pending-items.md`
+docs/kubernetes-integration.md
 
-Before implementation:
+Include:
 
-- Analyze the existing project.
-- Reuse existing services and components.
-- Avoid duplicate implementations.
-- Keep the solution modular, secure, maintainable, and production-ready.
+- Overall Architecture
+- Kubernetes Authentication
+- Deployment Discovery Flow
+- Blue-Green Deployment Logic
+- Active Deployment Selection
+- Branch Validation Logic
+- Database Design
+- REST API Design
+- UI Design
+- Configuration
+- Future Enhancements
+
+---
+
+# Bruno Collection
+
+Update the existing Bruno Collection.
+
+Do not create a new collection.
+
+Add all Kubernetes APIs.
+
+Organize requests into folders.
+
+Use environment variables for authentication.
+
+Do not hardcode credentials.
+
+---
+
+# Future Design
+
+Design the implementation so it can later support:
+
+- Production Cluster
+- Multiple Kubernetes Clusters
+- Multiple Namespaces
+- Additional Deployment Labels
+- Service Account Authentication
+- OAuth / JWT Authentication
+- Scheduled Background Synchronization
+
+No major redesign should be required in future phases.
+
+---
+
+# Deliverables
+
+Frontend
+
+- Deployment Validation Configuration section
+- Deployment Readiness table
+- Status indicators
+- Invalid deployment filter
+- Automatic refresh after Generate Report
+
+Backend
+
+- Kubernetes Integration
+- Deployment Discovery
+- Deployment Label Extraction
+- Branch Validation
+- Database Persistence
+- REST APIs
+
+Database
+
+- deployment_readiness table
+
+Documentation
+
+- docs/kubernetes-integration.md
+- Update docs/pending-items.md
+
+Bruno
+
+- Update existing Bruno Collection
+
+API Documentation
+
+Provide documentation for every Kubernetes API used, including:
+
+- URL
+- HTTP Method
+- Headers
+- Authentication
+- Sample Request
+- Sample Response
+
+---
+
+## Important Implementation Guidelines
+
+- Analyze the existing codebase before implementing.
+- Reuse existing services and architecture.
+- Avoid duplicate code.
+- Keep the implementation modular, maintainable, secure, and production-ready.
+- Do not hardcode cluster URLs, namespaces, authentication cookies, or credentials.
+- Use configuration files and environment variables for all environment-specific settings.
+- Ensure all newly created services, APIs, UI components, database changes, and documentation follow the existing project standards and integrate seamlessly with the current Release SOC Compliance Tracker.
