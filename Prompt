@@ -1,548 +1,530 @@
-# Release SOC Compliance Tracker – Phase 5
-# Kubernetes Configuration Drift Validation (Blue/Green ConfigMap Comparison)
+# Release SOC Compliance Tracker – Phase 6
+# Release Readiness Dashboard, Background Job Processing & Performance Optimization
 
 ## Objective
 
-This phase extends the Kubernetes Deployment Readiness implementation by validating the configuration changes that are about to go live during a production release.
+This phase focuses on improving the overall user experience and backend performance of the Release Readiness module.
 
-The goal is to automatically compare the ConfigMaps of the currently deployed Blue/Green applications, identify only the configuration differences, store those differences in the database, and display them in the Release Readiness dashboard.
+The current implementation is functionally correct, but the Release Readiness page has become very lengthy, and the Generate Report process blocks the user until every downstream task completes. The objective is to redesign the user experience, execute long-running tasks asynchronously, significantly improve backend performance, and provide better visibility into job execution.
 
-Please analyze the existing implementation from previous phases and reuse the current architecture, services, repositories, controllers, DTOs, React components, and database patterns. Do not duplicate business logic. The implementation should be modular, configurable, secure, and production-ready.
+Before implementation:
+
+- Analyze the existing project structure.
+- Reuse existing services, repositories, DTOs, controllers and React components.
+- Do not duplicate business logic.
+- Follow the current project architecture and coding standards.
+- Keep the implementation modular, maintainable and production-ready.
 
 ---
 
-# Business Background
+# 1. Release Readiness Dashboard Redesign
 
-Our applications use Blue-Green deployment.
+Currently, after selecting Team and Fix Version, the page displays:
+
+- Story Status
+- Component Branch Validation
+- SAST Report
+- Deployment Readiness
+- Configuration Differences
+
+All sections are displayed one below another, making the page very long.
+
+This should be redesigned.
+
+---
+
+# 2. Summary Dashboard Cards
+
+At the top of the Release Readiness page, introduce a dashboard summary similar to an executive dashboard.
+
+Each section should have a compact summary card showing key metrics.
+
+Example cards:
+
+### Story Status
+
+- Total Stories
+- Accepted
+- Not Accepted
 
 Example:
 
-order-management-ms-blue
+Stories
 
-order-management-ms-green
+320 Total
 
-During the previous phase, we already identify which deployment is ACTIVE.
+310 Accepted
 
-Example:
-
-Active Deployment
-
-order-management-ms-blue
-
-Now we need to inspect the ConfigMaps associated with that deployment.
-
-Example ConfigMaps
-
-order-management-ms-blue-config
-
-order-management-ms-blue-common
-
-order-management-ms-blue-application
-
-(or any ConfigMap matching the deployment name using wildcard patterns)
-
-The exact naming convention may vary slightly across applications, therefore implement configurable wildcard matching rather than hardcoded names.
+10 Pending
 
 ---
 
-# Business Requirement
+### Component Branch Validation
 
-During production deployment we generally deploy the new release one day before the release window.
-
-The deployment exists in Production, but traffic is switched only during the scheduled release time.
-
-Before switching traffic we manually verify the configuration differences.
-
-This validation should now become automated.
-
-Instead of displaying every configuration, display only the actual differences.
-
-We are interested only in:
-
-- Newly Added configurations
-- Removed configurations
-- (Optional) Modified configuration values
-
-Configurations that remain unchanged should neither be stored nor displayed.
+- Total Components
+- Valid Branches
+- Invalid Branches
 
 ---
 
-# ConfigMap Discovery
+### SAST Report
 
-For every active deployment identified during Deployment Readiness:
-
-1. Discover associated ConfigMaps.
-
-Suggested matching:
-
-Deployment Name
-
-↓
-
-Wildcard Search
-
-Example
-
-order-management-ms-blue*
-
-Return all ConfigMaps matching the deployment.
-
-Do not assume only one ConfigMap exists.
-
-Support multiple ConfigMaps.
+- Total Repositories
+- Passed
+- Failed
+- Missing Reports
 
 ---
 
-# Initial Environment
+### Deployment Readiness (Test)
 
-For initial implementation, use the Test Kubernetes cluster.
-
-However, the implementation must be fully configurable so that Production cluster URLs can be plugged in later without code changes.
-
-Cluster URLs should continue to come from application configuration.
-
-No hardcoded URLs.
+- Total Components
+- Correct Deployments
+- Incorrect Deployments
 
 ---
 
-# Comparison Logic
+### Deployment Readiness (Stage)
 
-Within the SAME Kubernetes environment compare:
-
-Active Blue ConfigMap
-
-vs
-
-Inactive Green ConfigMap
-
-(or vice versa depending on which deployment is active)
-
-The implementation should automatically determine:
-
-Active Deployment
-
-↓
-
-Active ConfigMaps
-
-↓
-
-Inactive ConfigMaps
-
-↓
-
-Configuration Comparison
+- Total Components
+- Correct Deployments
+- Incorrect Deployments
 
 ---
 
-# Configuration Difference Detection
-
-For every configuration key:
-
-If key exists only in Active
-
-→ Added
-
-If key exists only in Inactive
-
-→ Removed
-
-If key exists in both but values differ
-
-→ Modified
-
-If both key and value are identical
-
-→ Ignore completely
-
-Only Added, Removed and Modified entries should be stored.
-
----
-
-# Database
-
-Create a new table.
-
-Suggested name:
-
-configmap_differences
-
-Suggested columns:
-
-- id
-- team
-- environment
-- namespace
-- component_name
-- deployment_name
-- active_color
-- configmap_name
-- configuration_key
-- previous_value
-- current_value
-- difference_type
-- report_generated_time
-- last_updated
-
-Difference Type values:
+### Configuration Differences
 
 - Added
 - Removed
 - Modified
 
-Store only changed records.
+Display these using modern dashboard cards.
 
-Do not persist unchanged configurations.
+Use existing application theme.
 
----
-
-# Generate Report Enhancement
-
-Extend the Generate Report workflow.
-
-Current Flow
-
-Stories
-
-↓
-
-Components
-
-↓
-
-Branch Validation
-
-↓
-
-Veracode
-
-↓
-
-Deployment Readiness
-
-↓
-
-Finish
-
-New Flow
-
-Stories
-
-↓
-
-Components
-
-↓
-
-Branch Validation
-
-↓
-
-Veracode
-
-↓
-
-Deployment Readiness
-
-↓
-
-ConfigMap Difference Detection
-
-↓
-
-Persist Results
-
-↓
-
-Finish
+Avoid excessive colors.
 
 ---
 
-# Release Readiness UI
+# 3. Section Navigation
 
-Add another section.
+Instead of displaying every section together,
 
-Suggested title
+introduce navigation buttons (or tabs) within the Release Readiness page.
 
-Configuration Changes
+Example:
 
-Display
+------------------------------------------------------------
 
-- Component
-- Active Deployment
-- ConfigMap
-- Configuration Key
-- Difference Type
-- Previous Value
-- Current Value
+[ Story Status ]
 
-Difference Type should be color coded.
+[ Branch Validation ]
 
-Green
+[ SAST Report ]
 
-Added
+[ Test Deployment ]
 
-Red
+[ Stage Deployment ]
 
-Removed
+[ Configuration Changes ]
 
-Orange
+------------------------------------------------------------
 
-Modified
+When the user clicks one button,
 
----
+display only that section.
 
-# Filtering
+Do NOT modify the left navigation menu.
 
-Provide filters.
+The left sidebar should continue to show only one:
 
-Show
+Release Readiness
 
-- All
-- Added Only
-- Removed Only
-- Modified Only
-
-Provide search by:
-
-- Component
-- Configuration Key
-
-Reuse existing filter components.
+The section switching happens only inside that page.
 
 ---
 
-# Sidebar Administration
+# 4. Team & Fix Version Selection
 
-Under Admin-only navigation add:
+Continue using the existing Team and Fix Version selection.
 
-Kubernetes Administration
+Once selected,
 
-This page should only be accessible by ROLE_ADMIN.
+all dashboard summary cards should load from the database.
 
-Include:
+When a section button is clicked,
 
-## Kubernetes Authentication Cookie
+load only that section's data.
 
-Temporary textbox.
-
-Used only during refresh.
-
-Never persist in database.
+Do not reload the complete page.
 
 ---
 
-## Force Refresh Button
+# 5. Generate Report Workflow Redesign
 
-When clicked
+Current Generate Report performs:
 
-Execute:
+- Fetch Stories
+- Components
+- Branch Validation
+- SAST
+- Deployment Readiness
+- Configuration Comparison
 
-Deployment Discovery
+This takes a long time.
 
-↓
-
-Deployment Validation
-
-↓
-
-ConfigMap Discovery
-
-↓
-
-ConfigMap Comparison
-
-↓
-
-Update Database
-
-↓
-
-Notify UI
-
-This should completely refresh Kubernetes-derived information.
+We need to redesign the workflow.
 
 ---
 
-# Automatic UI Refresh
+# 6. Generate Report Responsibilities
 
-After Force Refresh completes:
+Generate Report should immediately perform only:
 
-The updated data should immediately appear on the UI.
+- Fetch Stories
+- Component Discovery
+- Review Commit Generation
 
-Users should not need to manually refresh the browser.
+These are mandatory because user interaction is still required.
 
-Implement either:
+The user must still review:
 
-- WebSocket
-- Server-Sent Events (SSE)
-- Polling (if existing architecture already supports it)
+- Components
+- Branch selections
+- Exclusions
 
-Prefer the approach already used within the application.
-
----
-
-# Backend Design
-
-Create dedicated services.
-
-Example
-
-DeploymentReadinessService
-
-ConfigMapDiscoveryService
-
-ConfigMapComparisonService
-
-KubernetesAdministrationService
-
-Reuse Kubernetes client implementation developed in the previous phase.
+before continuing.
 
 ---
 
-# Kubernetes API Documentation
+# 7. Background Processing
 
-Research Kubernetes ConfigMap APIs.
+Once the user completes the review and clicks:
 
-Document
+Generate Report
 
-- Endpoint
-- HTTP Method
-- Authentication
-- Required Headers
-- Parameters
-- Sample Request
-- Sample Response
+Start all remaining long-running tasks asynchronously.
 
-Also document why each endpoint is being used.
+Tasks include:
 
----
-
-# Architecture Documentation
-
-Update
-
-docs/kubernetes-integration.md
-
-Add
-
-- ConfigMap Discovery
-- ConfigMap Matching
-- Difference Detection Algorithm
-- Database Design
-- Refresh Flow
-- Administration Page
-- Future Enhancements
-
----
-
-# Pending Items
-
-Update
-
-docs/pending-items.md
-
-Add
-
-Kubernetes ConfigMap Validation
-
-Pending:
-
-- Production Cluster URL
-- Production Namespace Mapping
-- Production Cookie Authentication
-- Service Account Authentication
-- RBAC Validation
-- TLS Validation
-- Final Production Smoke Testing
-
----
-
-# Bruno Collection
-
-Update the existing Bruno Collection.
-
-Add all newly introduced Kubernetes ConfigMap APIs.
-
-Organize requests into folders.
-
-Use environment variables.
-
-Do not hardcode credentials.
-
----
-
-# Future Ready Design
-
-Design the implementation so that it can later support:
-
-- Production ConfigMap Validation
-- Multiple Kubernetes Clusters
-- Multiple Namespaces
-- Secrets Comparison (future enhancement)
-- Environment Variable Comparison
-- Scheduled Background Synchronization
-- Service Account Authentication
-- OAuth/JWT Authentication
-- Audit History of Configuration Changes
-
-No redesign should be required in future phases.
-
----
-
-# Deliverables
-
-Frontend
-
-- Configuration Changes section
-- Search
-- Filters
-- Difference highlighting
-- Auto refresh
-- Kubernetes Administration page (Admin only)
-
-Backend
-
-- ConfigMap Discovery
+- Branch Validation
+- SAST Retrieval
+- Deployment Readiness
+- Kubernetes Discovery
 - ConfigMap Comparison
-- Difference Detection
-- Database Persistence
-- REST APIs
-- Refresh APIs
+- Any future background validations
+
+These tasks must NOT block the UI.
+
+---
+
+# 8. Background Job Framework
+
+Create a background job framework.
+
+Suggested architecture:
+
+ReleaseJobService
+
+↓
+
+Job Queue
+
+↓
+
+Worker
+
+↓
 
 Database
 
-- configmap_differences table
+↓
 
-Documentation
+UI Notification
 
-- Update docs/kubernetes-integration.md
-- Update docs/pending-items.md
+Each Generate Report request should create a unique Job ID.
 
-Bruno
+Example:
 
-- Update the existing Bruno Collection with all new APIs
+JOB-20260810-001
 
-API Documentation
-
-Document every Kubernetes API used, including:
-
-- URL
-- HTTP Method
-- Authentication
-- Headers
-- Sample Request
-- Sample Response
+Persist the Job ID in the database.
 
 ---
 
-## Important Implementation Guidelines
+# 9. User Experience
 
-- Analyze the existing project before implementing.
-- Reuse existing architecture and services.
-- Avoid duplicate code.
-- Keep the implementation modular, maintainable, configurable, and production-ready.
-- Do not hardcode cluster URLs, namespaces, cookies, or credentials.
-- Use configuration files and environment variables for all environment-specific values.
-- Ensure that Force Refresh updates the database and automatically refreshes the UI without requiring a browser reload.
-- Only persist and display configuration differences. Unchanged configuration entries should never be stored or shown.
+Immediately after Generate Report,
+
+display a confirmation message.
+
+Example:
+
+"Release Report generation has started successfully.
+
+Job ID: JOB-20260810-001
+
+Background validations are running.
+
+Results will automatically appear in the Release Readiness dashboard as each task completes."
+
+The user should be free to continue using the application.
+
+---
+
+# 10. Automatic Refresh
+
+As each background task completes,
+
+its corresponding dashboard section should automatically refresh.
+
+Users should not need to reload the page.
+
+Use one of the following:
+
+- WebSocket (preferred)
+- Server-Sent Events (SSE)
+- Polling (only if already used in the application)
+
+Reuse the existing architecture where possible.
+
+---
+
+# 11. Scan History Enhancements
+
+Enhance Scan History.
+
+For every Job display:
+
+- Job ID
+- Team
+- Fix Version
+- Start Time
+- End Time
+- Overall Duration
+- Status
+
+Additionally display execution time for each stage.
+
+Example:
+
+Stories
+
+15 sec
+
+Components
+
+8 sec
+
+Branch Validation
+
+42 sec
+
+SAST
+
+55 sec
+
+Deployment Readiness
+
+38 sec
+
+Configuration Comparison
+
+26 sec
+
+Overall
+
+2 min 24 sec
+
+This will help identify performance bottlenecks.
+
+---
+
+# 12. Performance Optimization
+
+Review the complete backend implementation.
+
+Identify slow operations.
+
+Optimize wherever possible.
+
+Focus especially on:
+
+- GitHub API calls
+- Branch retrieval
+- Kubernetes API calls
+- Database access
+- External integrations
+
+---
+
+# 13. Reactive Programming
+
+The current implementation appears to process many external calls sequentially.
+
+Replace sequential processing wherever appropriate with reactive parallel execution.
+
+Preferred technology:
+
+Spring WebFlux
+
+Use:
+
+- Flux
+- Mono
+
+Run independent external API calls in parallel.
+
+Examples include:
+
+- GitHub branch retrieval
+- Repository metadata
+- Kubernetes deployments
+- ConfigMap retrieval
+- SAST lookups
+
+Avoid unnecessary for-loops that perform blocking network calls.
+
+Use bounded parallelism to avoid overwhelming external systems.
+
+---
+
+# 14. Database Optimization
+
+Review database access.
+
+Improve:
+
+- SQL queries
+- Index usage
+- Batch inserts
+- Batch updates
+- Pagination where applicable
+- Connection reuse
+
+Reduce unnecessary database round-trips.
+
+---
+
+# 15. API Optimization
+
+Review REST APIs.
+
+Reduce:
+
+- Duplicate calls
+- Duplicate DTO mapping
+- Redundant serialization
+- Repeated repository access
+
+Implement caching where appropriate.
+
+---
+
+# 16. UI Performance
+
+Reduce unnecessary React re-renders.
+
+Lazy load heavy sections.
+
+Load only the selected Release Readiness section.
+
+Avoid loading all tables simultaneously.
+
+---
+
+# 17. Dashboard Loading
+
+Dashboard summary cards should load first.
+
+Detailed tables should only load when the user selects the corresponding section.
+
+This should significantly improve perceived performance.
+
+---
+
+# 18. Database Reset
+
+After all implementation is complete,
+
+provide a utility (development only) to clear generated report data.
+
+Delete previously generated report data so fresh reports can be executed.
+
+This should be available only in development mode.
+
+It must never be enabled in production.
+
+---
+
+# 19. Documentation
+
+Update documentation.
+
+Include:
+
+- Background Job Architecture
+- Reactive Processing Design
+- Performance Improvements
+- Dashboard Design
+- Auto Refresh Architecture
+- Job Lifecycle
+- Scan History Enhancements
+
+Update:
+
+docs/pending-items.md
+
+Add any production tasks that still remain.
+
+---
+
+# 20. Deliverables
+
+Frontend
+
+- Dashboard summary cards
+- Section navigation buttons
+- Lazy loading of sections
+- Background job status messages
+- Automatic UI refresh
+- Enhanced Scan History
+
+Backend
+
+- Background job framework
+- Job tracking
+- Reactive parallel processing using Flux/Mono
+- Performance optimization
+- API optimization
+- Database optimization
+- Asynchronous execution
+- Job persistence
+
+Database
+
+- Job tracking enhancements
+- Execution metrics
+- Performance statistics
+
+Documentation
+
+- Update architecture documentation
+- Update pending-items.md
+- Document the background job framework
+- Document the reactive processing implementation
+
+---
+
+# Important Implementation Guidelines
+
+- Analyze the existing codebase before implementing.
+- Reuse existing services and architecture wherever possible.
+- Avoid duplicate implementations.
+- Prefer asynchronous, non-blocking processing for external integrations.
+- Use Spring WebFlux (Flux/Mono) where it provides measurable performance benefits.
+- Ensure long-running tasks execute independently of the user request lifecycle.
+- The UI should remain responsive while background jobs execute.
+- Keep the solution modular, configurable, secure, scalable, and production-ready.
+- Maintain backward compatibility with all previously implemented features.
+```
