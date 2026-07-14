@@ -1,530 +1,848 @@
-# Release SOC Compliance Tracker – Phase 6
-# Release Readiness Dashboard, Background Job Processing & Performance Optimization
+# Phase 7 (Revision 2) – Additional Acceptance Criteria & Enhancements
 
-## Objective
-
-This phase focuses on improving the overall user experience and backend performance of the Release Readiness module.
-
-The current implementation is functionally correct, but the Release Readiness page has become very lengthy, and the Generate Report process blocks the user until every downstream task completes. The objective is to redesign the user experience, execute long-running tasks asynchronously, significantly improve backend performance, and provide better visibility into job execution.
-
-Before implementation:
-
-- Analyze the existing project structure.
-- Reuse existing services, repositories, DTOs, controllers and React components.
-- Do not duplicate business logic.
-- Follow the current project architecture and coding standards.
-- Keep the implementation modular, maintainable and production-ready.
+> **This document extends the existing Phase 7 implementation.**
+>
+> Do **not** rewrite the existing implementation. Instead, update the existing Phase 7 work with the following enhancements and acceptance criteria. Please reuse the existing architecture and avoid duplicate implementations.
 
 ---
 
-# 1. Release Readiness Dashboard Redesign
+# 1. Previous Release Version Loading from Kubernetes
 
-Currently, after selecting Team and Fix Version, the page displays:
+## Current Situation
 
-- Story Status
-- Component Branch Validation
-- SAST Report
-- Deployment Readiness
-- Configuration Differences
+Currently, the "Previous Branch" is being populated using the existing implementation.
 
-All sections are displayed one below another, making the page very long.
-
-This should be redesigned.
+Although it works, this is **not the preferred long-term approach** because it does not always reflect what is actually deployed in the target Kubernetes environment.
 
 ---
 
-# 2. Summary Dashboard Cards
+## New Requirement
 
-At the top of the Release Readiness page, introduce a dashboard summary similar to an executive dashboard.
+Introduce a configurable mechanism to determine how the **Previous Branch** should be loaded.
 
-Each section should have a compact summary card showing key metrics.
-
-Example cards:
-
-### Story Status
-
-- Total Stories
-- Accepted
-- Not Accepted
+Inside the Team Configuration (team_config), introduce a new configuration property.
 
 Example:
 
-Stories
+```yaml
+loadPreviousVersionFromKubernetes: true
+```
 
-320 Total
+or
 
-310 Accepted
-
-10 Pending
-
----
-
-### Component Branch Validation
-
-- Total Components
-- Valid Branches
-- Invalid Branches
+```yaml
+loadPreviousVersionFromKubernetes: false
+```
 
 ---
 
-### SAST Report
+## Behaviour
 
-- Total Repositories
-- Passed
-- Failed
-- Missing Reports
+### Case 1
 
----
+If
 
-### Deployment Readiness (Test)
+```
+loadPreviousVersionFromKubernetes = false
+```
 
-- Total Components
-- Correct Deployments
-- Incorrect Deployments
+Continue using the existing implementation exactly as today.
 
----
-
-### Deployment Readiness (Stage)
-
-- Total Components
-- Correct Deployments
-- Incorrect Deployments
+No behavior change.
 
 ---
 
-### Configuration Differences
+### Case 2
 
-- Added
-- Removed
-- Modified
+If
 
-Display these using modern dashboard cards.
+```
+loadPreviousVersionFromKubernetes = true
+```
 
-Use existing application theme.
+Do NOT use the existing logic.
 
-Avoid excessive colors.
-
----
-
-# 3. Section Navigation
-
-Instead of displaying every section together,
-
-introduce navigation buttons (or tabs) within the Release Readiness page.
-
-Example:
-
-------------------------------------------------------------
-
-[ Story Status ]
-
-[ Branch Validation ]
-
-[ SAST Report ]
-
-[ Test Deployment ]
-
-[ Stage Deployment ]
-
-[ Configuration Changes ]
-
-------------------------------------------------------------
-
-When the user clicks one button,
-
-display only that section.
-
-Do NOT modify the left navigation menu.
-
-The left sidebar should continue to show only one:
-
-Release Readiness
-
-The section switching happens only inside that page.
+Instead, determine the Previous Version directly from Kubernetes.
 
 ---
 
-# 4. Team & Fix Version Selection
+# Kubernetes Flow
 
-Continue using the existing Team and Fix Version selection.
+For every component selected during Generate Report:
 
-Once selected,
+Ignore Helm repositories.
 
-all dashboard summary cards should load from the database.
+Only process the Main GitHub Repository.
 
-When a section button is clicked,
+For every Main Repository:
 
-load only that section's data.
-
-Do not reload the complete page.
-
----
-
-# 5. Generate Report Workflow Redesign
-
-Current Generate Report performs:
-
-- Fetch Stories
-- Components
-- Branch Validation
-- SAST
-- Deployment Readiness
-- Configuration Comparison
-
-This takes a long time.
-
-We need to redesign the workflow.
-
----
-
-# 6. Generate Report Responsibilities
-
-Generate Report should immediately perform only:
-
-- Fetch Stories
-- Component Discovery
-- Review Commit Generation
-
-These are mandatory because user interaction is still required.
-
-The user must still review:
-
-- Components
-- Branch selections
-- Exclusions
-
-before continuing.
-
----
-
-# 7. Background Processing
-
-Once the user completes the review and clicks:
-
-Generate Report
-
-Start all remaining long-running tasks asynchronously.
-
-Tasks include:
-
-- Branch Validation
-- SAST Retrieval
-- Deployment Readiness
-- Kubernetes Discovery
-- ConfigMap Comparison
-- Any future background validations
-
-These tasks must NOT block the UI.
-
----
-
-# 8. Background Job Framework
-
-Create a background job framework.
-
-Suggested architecture:
-
-ReleaseJobService
+Determine its namespace.
 
 ↓
 
-Job Queue
+Find Deployment.
 
 ↓
 
-Worker
+Determine Active Deployment.
+
+(Blue / Green)
 
 ↓
 
-Database
+Read Deployment Labels.
 
 ↓
 
-UI Notification
+Extract deployment metadata.
 
-Each Generate Report request should create a unique Job ID.
+↓
 
-Example:
-
-JOB-20260810-001
-
-Persist the Job ID in the database.
+Persist into Database.
 
 ---
 
-# 9. User Experience
+# Deployment Label Extraction
 
-Immediately after Generate Report,
+Please review Kubernetes deployment labels thoroughly.
 
-display a confirmation message.
+Extract every useful metadata field available.
 
-Example:
+At minimum capture:
 
-"Release Report generation has started successfully.
+- GitHub Branch
+- Git Commit ID
+- Build Number
+- Deployment Timestamp
+- Release Version
+- Image Tag (if available)
+- Build URL (if available)
+- Pipeline Name (if available)
+- Any additional useful deployment metadata
 
-Job ID: JOB-20260810-001
+Do not limit the implementation to only the Branch.
 
-Background validations are running.
-
-Results will automatically appear in the Release Readiness dashboard as each task completes."
-
-The user should be free to continue using the application.
-
----
-
-# 10. Automatic Refresh
-
-As each background task completes,
-
-its corresponding dashboard section should automatically refresh.
-
-Users should not need to reload the page.
-
-Use one of the following:
-
-- WebSocket (preferred)
-- Server-Sent Events (SSE)
-- Polling (only if already used in the application)
-
-Reuse the existing architecture where possible.
+Design the solution to capture all meaningful metadata.
 
 ---
 
-# 11. Scan History Enhancements
+# Database
 
-Enhance Scan History.
+Persist these deployment metadata fields.
 
-For every Job display:
+These values will later be used for:
 
-- Job ID
-- Team
-- Fix Version
-- Start Time
-- End Time
-- Overall Duration
-- Status
+- Previous Release comparison
+- Deployment Audit
+- Release Traceability
+- Rollback Analysis
 
-Additionally display execution time for each stage.
+---
+
+# Reusable Kubernetes Label Service
+
+Currently multiple modules require Kubernetes Deployment Labels.
+
+Examples:
+
+- Previous Version
+- Test3 Deployment Readiness
+- Test4 Deployment Readiness
+- Stage Deployment Readiness
+- Production Deployment Readiness
+
+The implementation must not duplicate this logic.
+
+Create a common reusable service.
 
 Example:
 
-Stories
+```
+KubernetesDeploymentMetadataService
+```
 
-15 sec
+Responsibilities:
 
-Components
+- Discover Deployment
+- Detect Active Blue/Green
+- Read Deployment Labels
+- Parse Metadata
+- Return Common DTO
 
-8 sec
+Every module should reuse this service.
 
-Branch Validation
+---
 
-42 sec
+# Acceptance Criteria
 
-SAST
+There must be only one implementation responsible for Kubernetes Deployment Label extraction.
 
-55 sec
+No duplicate code.
 
-Deployment Readiness
+No duplicate Kubernetes API calls.
 
-38 sec
+---
 
-Configuration Comparison
+# 2. Story Fetch Performance Improvement
 
-26 sec
+Fetching Stories occasionally becomes slow.
+
+Please optimize the implementation.
+
+---
+
+## Reactive Processing
+
+Review the current implementation.
+
+If stories are currently processed sequentially,
+
+replace the implementation using Spring WebFlux.
+
+Preferred:
+
+- Flux
+- Mono
+
+Execute independent API calls in parallel.
+
+---
+
+## Logging
+
+Introduce detailed timing logs.
+
+Examples:
+
+```
+Fetch Fix Version
+
+120 ms
+
+Fetch Stories
+
+2.3 sec
+
+Story Mapping
+
+400 ms
+
+Persist Stories
+
+620 ms
 
 Overall
 
-2 min 24 sec
+3.4 sec
+```
 
-This will help identify performance bottlenecks.
-
----
-
-# 12. Performance Optimization
-
-Review the complete backend implementation.
-
-Identify slow operations.
-
-Optimize wherever possible.
-
-Focus especially on:
-
-- GitHub API calls
-- Branch retrieval
-- Kubernetes API calls
-- Database access
-- External integrations
+These logs will later help identify performance bottlenecks.
 
 ---
 
-# 13. Reactive Programming
+# 3. Component Discovery Performance
 
-The current implementation appears to process many external calls sequentially.
+The same optimization should be applied while loading Components.
 
-Replace sequential processing wherever appropriate with reactive parallel execution.
+Current GitHub calls appear to execute sequentially.
 
-Preferred technology:
-
-Spring WebFlux
+Replace with parallel execution wherever possible.
 
 Use:
 
 - Flux
 - Mono
 
-Run independent external API calls in parallel.
-
-Examples include:
-
-- GitHub branch retrieval
-- Repository metadata
-- Kubernetes deployments
-- ConfigMap retrieval
-- SAST lookups
-
-Avoid unnecessary for-loops that perform blocking network calls.
-
-Use bounded parallelism to avoid overwhelming external systems.
+Avoid blocking operations.
 
 ---
 
-# 14. Database Optimization
+# 4. Fetch Stories UX Improvement
 
-Review database access.
+Currently only one Fetch Stories button exists.
 
-Improve:
+This creates confusion because users sometimes want fresh data while other times they simply want to reuse already generated reports.
 
-- SQL queries
-- Index usage
-- Batch inserts
-- Batch updates
-- Pagination where applicable
-- Connection reuse
-
-Reduce unnecessary database round-trips.
+Introduce two clearly distinguishable options.
 
 ---
 
-# 15. API Optimization
+## Soft Fetch
 
-Review REST APIs.
+Purpose:
 
-Reduce:
+Load Stories already available in the local database.
 
-- Duplicate calls
-- Duplicate DTO mapping
-- Redundant serialization
-- Repeated repository access
+Do NOT call iTrack.
 
-Implement caching where appropriate.
+Use cached/generated data.
 
 ---
 
-# 16. UI Performance
+## Force Fetch
 
-Reduce unnecessary React re-renders.
+Purpose:
 
-Lazy load heavy sections.
+Ignore cached data.
 
-Load only the selected Release Readiness section.
+Call iTrack again.
 
-Avoid loading all tables simultaneously.
+Refresh stories from source.
 
----
-
-# 17. Dashboard Loading
-
-Dashboard summary cards should load first.
-
-Detailed tables should only load when the user selects the corresponding section.
-
-This should significantly improve perceived performance.
+Persist newly retrieved data.
 
 ---
 
-# 18. Database Reset
+## Components
 
-After all implementation is complete,
+Apply the same concept.
 
-provide a utility (development only) to clear generated report data.
+Soft Fetch
 
-Delete previously generated report data so fresh reports can be executed.
+↓
 
-This should be available only in development mode.
+Load existing Components from DB.
 
-It must never be enabled in production.
+Force Fetch
+
+↓
+
+Call GitHub.
+
+Reload components.
+
+Update DB.
 
 ---
 
-# 19. Documentation
+## UI Recommendation
 
-Update documentation.
+Avoid displaying two large buttons.
+
+Instead design a cleaner UI.
+
+Possible approaches:
+
+- Primary button with dropdown
+- Split button
+- Overflow menu
+- Refresh icon with options
+
+Use your UI expertise and existing design language to provide the best user experience.
+
+The interface should remain clean and intuitive.
+
+---
+
+# 5. Deployment Readiness Verification
+
+Please re-evaluate the current Deployment Readiness implementation.
+
+Current observations indicate that Deployment Readiness may not be correctly identifying deployed branches for:
+
+- Test3
+- Test4
+- Stage
+- Production
+
+The same concern also applies to:
+
+Previous Version retrieval from Kubernetes.
+
+---
+
+## Required Investigation
+
+Please review the implementation and document:
+
+- Which Kubernetes APIs are currently being used.
+- Why the current approach is unreliable.
+- What limitations exist.
+- What alternative Kubernetes APIs are available.
+- Which approach is recommended by Kubernetes documentation.
+
+---
+
+## Documentation
+
+Create a technical report.
+
+Example:
+
+```
+docs/kubernetes-deployment-research.md
+```
 
 Include:
 
-- Background Job Architecture
-- Reactive Processing Design
-- Performance Improvements
-- Dashboard Design
-- Auto Refresh Architecture
-- Job Lifecycle
-- Scan History Enhancements
+- APIs evaluated
+- Deployment APIs
+- ReplicaSet APIs
+- Pod APIs
+- Label extraction approach
+- Metadata extraction
+- Blue/Green detection
+- Active deployment determination
+- Recommended implementation
+- Known limitations
+
+---
+
+## Kubernetes Research
+
+Please review the official Kubernetes documentation before making implementation changes.
+
+Do not rely only on the current implementation.
+
+If a better API or architecture exists,
+
+prefer that approach.
+
+---
+
+# 6. Acceptance Criteria
+
+The implementation should satisfy the following:
+
+✅ Previous Version loading is configurable.
+
+✅ Existing behavior remains available through configuration.
+
+✅ Kubernetes deployment metadata is reusable across all modules.
+
+✅ Deployment labels are extracted through one common service.
+
+✅ Stories are fetched using reactive parallel execution where beneficial.
+
+✅ Components are fetched using reactive parallel execution where beneficial.
+
+✅ Detailed execution timing logs are available.
+
+✅ Soft Fetch and Force Fetch are available for Stories.
+
+✅ Soft Fetch and Force Fetch are available for Components.
+
+✅ UI remains clean and user-friendly.
+
+✅ Kubernetes implementation is validated against official documentation.
+
+✅ A technical research document is produced explaining the chosen Kubernetes APIs and deployment metadata retrieval strategy.
+
+---
+
+# Important Notes
+
+- Reuse all existing architecture.
+- Avoid duplicate implementations.
+- Keep the solution configurable.
+- Keep Kubernetes integrations environment-independent.
+- Use configuration flags instead of hardcoded behavior.
+- Ensure backward compatibility with the existing Phase 7 implementation.
+- The Kubernetes Deployment Metadata service created in this phase should become the single reusable implementation for all current and future Kubernetes-based
+features.
+
+
+
+# Release SOC Compliance Tracker – Phase 7
+# Settings Management, Session Credentials & Generate Report Improvements
+
+## Objective
+
+This phase focuses on improving the Settings module, session-based credential management, Kubernetes connection management, and simplifying the Generate Report workflow.
+
+The overall objective is to make the application production-ready by centralizing all external system credentials inside the Settings page (for Admin users only), validating connections, improving the Generate Report experience, and cleaning up obsolete configurations.
+
+Before implementation:
+
+- Analyze the existing project.
+- Reuse existing architecture.
+- Do not duplicate business logic.
+- Reuse existing services, repositories, controllers, DTOs and React components.
+- Keep the implementation modular, configurable, secure and production-ready.
+
+---
+
+# 1. Session Credential Management
+
+Currently, external system credentials are read from the `.env` file.
+
+Examples include:
+
+- GitHub Token
+- iTrack Token
+- Veracode API ID
+- Veracode API Key
+
+These are useful only for local development.
+
+In production, credentials should **not** come from `.env`.
+
+Instead, the Settings page should allow Admin users to temporarily override these values for the current browser session.
+
+This functionality already exists partially but is not working correctly.
+
+Please review the complete implementation (UI + Backend) and fix it.
+
+Expected behavior:
+
+- Session credentials override `.env` values only for the current browser session.
+- Refreshing the browser clears session values unless intentionally restored.
+- Environment variables remain the fallback when no session value exists.
+- Session credentials must never be persisted permanently in the database.
+
+---
+
+# 2. Settings Page Access
+
+The Settings page should remain accessible only to:
+
+- ROLE_ADMIN
+
+Viewer and Editor roles must not have access.
+
+---
+
+# 3. Existing Connection Tests
+
+The Settings page already contains connection tests for:
+
+- GitHub
+- iTrack
+- Veracode
+
+These connection tests are currently unreliable.
+
+Review the implementation and make all three tests fully functional.
+
+Each connection test should clearly display:
+
+- Connection Successful
+- Authentication Failed
+- Invalid Token
+- Timeout
+- Service Unavailable
+
+Provide user-friendly messages.
+
+---
+
+# 4. Kubernetes Session Configuration
+
+Extend the Settings page to support Kubernetes authentication.
+
+Add session-based cookie configuration for the following environments:
+
+- Test3
+- Test4
+- Stage West
+- Production East
+- Production West
+
+For each environment provide:
+
+- Cookie Input
+- Connection Test Button
+- Connection Status
+- Last Tested Timestamp (optional)
+
+Cookies should remain session-only.
+
+Never store them permanently.
+
+---
+
+# 5. Kubernetes Connection Validation
+
+Implement backend connection testing.
+
+Each Kubernetes environment should have an independent connection test.
+
+Validate:
+
+- Authentication
+- Cluster Reachability
+- Namespace Access (if applicable)
+- Basic Kubernetes API response
+
+Show clear success or failure messages.
+
+---
+
+# 6. Settings Cleanup
+
+The following Settings sections are no longer required:
+
+- iTrack Fields
+- Excluded Components
+
+Remove them completely.
+
+This includes:
+
+- UI
+- Backend
+- Database references (if any)
+- APIs
+- DTOs
+- Unused code
+
+Clean up the implementation completely.
+
+---
+
+# 7. Generate Report - Fix Version Improvements
+
+The Fix Version dropdown currently displays duplicate values.
+
+This should be corrected.
+
+Expected behavior:
+
+- Display unique Fix Versions only.
+- Remove duplicate entries.
+- Sort logically (latest first if applicable).
+- Load directly from the Fix Version database table.
+- Do not recreate or duplicate Fix Version values.
+
+Review backend queries and frontend rendering to ensure duplicates are eliminated.
+
+---
+
+# 8. Fix Version Fields
+
+The Fix Version table already contains required metadata such as:
+
+- Fix Version
+- From Date
+- To Date
+
+An additional Release Date field is currently being generated.
+
+This additional field is unnecessary.
+
+Remove it from:
+
+- UI
+- DTOs
+- Backend processing (if applicable)
+
+Use only the existing Fix Version information from the database.
+
+---
+
+# 9. Deployment Validation Configuration
+
+The temporary "Deployment Validation Configuration" section inside Generate Report is no longer required.
+
+All Kubernetes authentication should now come from the Settings page.
+
+Remove this section completely from the Generate Report UI.
+
+---
+
+# 10. Generate Report Prerequisite Validation
+
+Before enabling users to execute "Fetch Stories", display a small prerequisite status panel.
+
+This is only an informational indicator.
+
+Example:
+
+✓ GitHub Token Available
+
+✓ iTrack Token Available
+
+✓ Kubernetes Cookie Available (Optional)
+
+✓ Veracode Credentials Available (Optional)
+
+Use simple green/red indicators.
+
+Do not display raw credential values.
+
+---
+
+# 11. Mandatory vs Optional Credentials
+
+Fetching Stories should only require the following mandatory credentials:
+
+Mandatory:
+
+- GitHub Token
+- iTrack Token
+
+Optional:
+
+- Veracode Credentials
+- Kubernetes Cookies
+- Other future integrations
+
+If mandatory credentials are missing:
+
+- Disable the Fetch Stories button.
+- Display a helpful message directing the user to the Settings page.
+
+Optional credentials should not block Fetch Stories.
+
+Instead, show informational warnings.
+
+---
+
+# 12. Generate Report Workflow
+
+The remainder of the Generate Report flow is functioning correctly.
+
+No functional changes are required for:
+
+- Story loading
+- Component loading
+- Component review
+- Review commits
+
+Only improve the prerequisite validation and remove obsolete configuration fields.
+
+---
+
+# 13. UI Improvements
+
+Improve the Settings page layout.
+
+Suggested grouping:
+
+## Source Control
+
+- GitHub Token
+- Test Connection
+
+---
+
+## iTrack
+
+- Token
+- Test Connection
+
+---
+
+## Veracode
+
+- API ID
+- API Key
+- Test Connection
+
+---
+
+## Kubernetes
+
+### Test3
+
+- Cookie
+- Test
+
+### Test4
+
+- Cookie
+- Test
+
+### Stage West
+
+- Cookie
+- Test
+
+### Production East
+
+- Cookie
+- Test
+
+### Production West
+
+- Cookie
+- Test
+
+Each section should clearly display connection status.
+
+---
+
+# 14. Backend Improvements
+
+Review the credential resolution logic.
+
+Recommended order:
+
+1. Session Credential
+2. Environment Variable (.env)
+3. Error if unavailable
+
+This ensures local development remains simple while production relies on session configuration or future secret management.
+
+---
+
+# 15. Future Design
+
+Design the Settings module so that future integrations (such as Azure Key Vault, HashiCorp Vault, or Kubernetes Secrets) can be added without redesigning the architecture.
+
+Credential providers should be easily replaceable.
+
+---
+
+# 16. Documentation
+
+Update project documentation.
 
 Update:
 
 docs/pending-items.md
 
-Add any production tasks that still remain.
+Include remaining production tasks such as:
+
+- Azure Key Vault integration
+- Secret Manager integration
+- Production Kubernetes authentication
+- Token rotation strategy
+- Credential expiration handling
 
 ---
 
-# 20. Deliverables
+# 17. Deliverables
 
 Frontend
 
-- Dashboard summary cards
-- Section navigation buttons
-- Lazy loading of sections
-- Background job status messages
-- Automatic UI refresh
-- Enhanced Scan History
+- Fixed Settings page
+- Kubernetes session configuration
+- Connection test improvements
+- Fix Version dropdown cleanup
+- Generate Report prerequisite panel
+- Removal of obsolete configuration sections
 
 Backend
 
-- Background job framework
-- Job tracking
-- Reactive parallel processing using Flux/Mono
-- Performance optimization
-- API optimization
-- Database optimization
-- Asynchronous execution
-- Job persistence
-
-Database
-
-- Job tracking enhancements
-- Execution metrics
-- Performance statistics
+- Session credential handling
+- Kubernetes connection validation
+- Connection test APIs
+- Duplicate Fix Version resolution
+- Credential resolution improvements
+- Cleanup of unused code
 
 Documentation
 
-- Update architecture documentation
-- Update pending-items.md
-- Document the background job framework
-- Document the reactive processing implementation
+- Update docs/pending-items.md
+- Update Settings documentation
+- Document session credential flow
+- Document credential precedence (Session → Environment)
 
 ---
 
-# Important Implementation Guidelines
+## Important Implementation Guidelines
 
-- Analyze the existing codebase before implementing.
+- Analyze the existing implementation before making changes.
 - Reuse existing services and architecture wherever possible.
 - Avoid duplicate implementations.
-- Prefer asynchronous, non-blocking processing for external integrations.
-- Use Spring WebFlux (Flux/Mono) where it provides measurable performance benefits.
-- Ensure long-running tasks execute independently of the user request lifecycle.
-- The UI should remain responsive while background jobs execute.
-- Keep the solution modular, configurable, secure, scalable, and production-ready.
-- Maintain backward compatibility with all previously implemented features.
+- Remove all obsolete code related to iTrack Fields, Excluded Components, and Deployment Validation Configuration.
+- Ensure all connection tests are reliable and provide meaningful error messages.
+- Session credentials must never be persisted permanently.
+- Keep the implementation secure, modular, maintainable, and production-ready.
 ```
+
+
+
+
+
