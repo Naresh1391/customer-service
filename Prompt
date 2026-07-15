@@ -1,371 +1,554 @@
-# Phase 8 (Revision 2)
-## Commit Lifecycle Classification & Industry Best Practices
+# Phase 9 – Logging, Runtime Configuration, UI/UX & Background Job Enhancements
+## Functional Requirements & Acceptance Criteria (Revision 1)
 
-> This document extends the existing Phase 8 implementation.
-> Existing functionality must remain intact unless explicitly stated otherwise.
-
----
-
-# Objective
-
-Enhance Release Commit Validation by introducing intelligent commit lifecycle analysis.
-
-Instead of classifying commits only as "OK" or "Violation", the system shall determine the actual lifecycle state of every commit using Git history analysis.
-
-This will significantly reduce false positives and provide much more meaningful release governance.
+> **Purpose**
+>
+> This phase focuses on improving observability, logging, runtime diagnostics, user experience, background processing, and application usability. All requirements below are **mandatory** unless explicitly marked otherwise.
 
 ---
 
-# FR-31 Commit Lifecycle Analysis
+# 1. Objective
 
-The system shall analyze every commit collected during Release Validation.
+Enhance the application by introducing:
 
-Each commit shall be classified into one of the lifecycle states defined below.
+- Enterprise-grade logging
+- Runtime log level switching
+- Better auditability
+- Improved background job experience
+- Better cache utilization
+- Better Generate Report workflow
+- Improved Settings integration
+- UI usability improvements
+- Fix Version loading improvements
 
----
-
-# FR-32 Commit States
-
-Instead of showing only:
-
-- OK
-- Violation
-
-Introduce the following states.
-
-### State 1
-
-OK
-
-Meaning
-
-Valid release commit.
-
-Commit exists.
-
-No issue detected.
+The implementation should follow enterprise Java/Spring Boot best practices.
 
 ---
 
-### State 2
-
-Missing In Release
-
-Meaning
-
-Commit exists on Main.
-
-Expected for Release.
-
-Missing from Release Branch.
-
-Action
-
-Violation.
+# 2. Functional Requirements
 
 ---
 
-### State 3
+# FR-1 Enterprise Logging Framework
 
-Reverted
+Implement consistent logging across the entire application.
 
-Meaning
+Logging shall be available for:
 
-The original commit was introduced into the Release Branch but was later reverted using Git Revert.
-
-This shall NOT be displayed as a normal violation.
-
-Instead display
-
-Status
-
-Reverted
-
-Reason
-
-Commit intentionally reverted from Release Branch.
-
----
-
-### State 4
-
-Cherry Picked
-
-Meaning
-
-Commit exists through Cherry Pick.
-
-Different SHA may exist.
-
-Equivalent code exists.
-
-Not a violation.
+- UI Actions
+- REST Controllers
+- Services
+- Repository Layer
+- Scheduled Jobs
+- Background Jobs
+- External API Calls
+- Authentication
+- Authorization
+- Override Workflow
+- Approval Workflow
+- Generate Report
+- Kubernetes Calls
+- GitHub Calls
+- iTrack Calls
+- Veracode Calls
+- Database Updates
 
 ---
 
-### State 5
+# FR-2 User Context Logging
 
-Direct Release Commit
+Every log entry shall include the authenticated user.
 
-Meaning
+Use MDC (Mapped Diagnostic Context).
 
-Developer committed directly into Release Branch.
+Populate MDC with at minimum:
 
-Highlight separately.
+- Username
+- User Role
+- Session ID (if available)
+- Correlation ID
+- Request ID
 
----
-
-### State 6
-
-Unknown
-
-Meaning
-
-Unable to confidently determine lifecycle.
-
-Requires Manual Verification.
+All logs generated during the request lifecycle shall automatically include this information.
 
 ---
 
-# FR-33 Revert Detection
+# FR-3 Logging Standards
 
-The implementation shall detect Git Revert operations.
+Follow Spring Boot / SLF4J logging best practices.
 
-Review GitHub and Git documentation.
+Use log levels appropriately.
 
-Possible detection techniques include:
+### INFO
 
-- Standard "Revert" commit messages.
-- References to reverted commit SHA.
-- Parent commit relationships.
-- Patch comparison where applicable.
+Business events
 
-The implementation shall not rely only on commit message text.
+Examples:
 
-If possible,
-
-also verify through Git history relationships.
-
----
-
-# FR-34 Revert Classification
-
-If
-
-Commit A
-
-↓
-
-Later
-
-Revert Commit B
-
-↓
-
-Successfully reverses Commit A
-
-Then
-
-Commit A
-
-Status
-
-Reverted
-
-Commit B
-
-Status
-
-Revert Operation
-
-The UI shall clearly indicate that the original change has already been reverted.
-
-This should not appear as an active violation.
+- User logged in
+- Fetch Stories started
+- Generate Report started
+- Override submitted
+- Approval completed
+- Background Job started
+- Background Job completed
 
 ---
 
-# FR-35 Commit Status Priority
+### DEBUG
 
-Display priority shall follow:
+Detailed execution information
 
-Reverted
+Examples:
 
-↓
+- API payload summaries
+- Query execution details
+- Branch comparison details
+- Commit analysis
+- Kubernetes label parsing
+- Cache hit/miss information
 
-Missing In Release
-
-↓
-
-Direct Release Commit
-
-↓
-
-Cherry Picked
-
-↓
-
-OK
-
-↓
-
-Unknown
+Avoid logging sensitive data such as tokens, cookies, passwords, or secrets.
 
 ---
 
-# FR-36 Refresh Behaviour
+### WARN
 
-During Force Refresh
+Recoverable issues
 
-Commit lifecycle states shall be recalculated.
+Examples:
 
-Previous manual approvals shall remain unchanged.
-
----
-
-# FR-37 UI Enhancements
-
-Replace generic status text.
-
-Use badges.
-
-Examples
-
-🟢 OK
-
-🟡 Reverted
-
-🔵 Cherry Picked
-
-🟠 Direct Release
-
-🔴 Missing
-
-⚪ Unknown
-
-Use existing project theme.
-
-Avoid bright colors.
+- Missing optional configuration
+- Retry initiated
+- Missing deployment labels
 
 ---
 
-# FR-38 Tooltip
+### ERROR
 
-Every status badge shall display:
+Unexpected failures
 
-- Reason
-- Detection Method
-- Validation Rule
-- Suggested Action
-
-Example
-
-Status
-
-Reverted
-
-Tooltip
-
-"This commit was previously introduced into the Release Branch and later reverted using Git Revert. No additional action is currently required."
+Include full stack trace where appropriate.
 
 ---
 
-# FR-39 Git History Analysis
+# FR-4 Runtime Log Level Control
 
-During validation
+Introduce runtime log-level configuration.
 
-Analyze:
+Only **Admin** users shall have access.
 
-- Parent commits
-- Merge commits
-- Cherry Picks
-- Revert commits
-- Branch ancestry
+Settings Page
 
-Do not rely solely on branch comparison.
+Add:
 
----
+```
+Application Log Level
+```
 
-# FR-40 Branch Cut Awareness
+Supported values:
 
-The implementation shall consider the Release Branch creation point.
+- INFO
+- DEBUG
 
-Only commits after the branch cut shall participate in Missing Commit analysis.
+When changed,
 
-Commits before branch cut shall never be reported as missing.
+new requests shall immediately use the selected log level without requiring an application restart.
 
----
-
-# FR-41 Manual Verification
-
-If lifecycle cannot be determined with confidence,
-
-mark
-
-Manual Verification Required.
-
-Do not incorrectly report a violation.
+If runtime switching cannot safely change framework logger levels, implement an application-level logging toggle for custom debug logs while documenting the limitation.
 
 ---
 
-# Industry Best Practices
+# FR-5 UI Action Logging
 
-The implementation should follow these principles:
+Log all significant UI actions.
 
-1. Never rewrite Git history during validation.
-2. Treat Git Commit SHA as the primary identifier.
-3. Detect Git Revert instead of assuming deleted commits are missing.
-4. Differentiate Cherry Picks from Missing Commits.
-5. Use Production deployment metadata as the deployment anchor.
-6. Preserve complete audit history.
-7. Never delete imported commit history immediately.
-8. Keep validation deterministic and repeatable.
-9. Separate imported Git metadata from user actions (overrides/approvals).
-10. Produce explainable validation results rather than simple pass/fail statuses.
+Examples:
+
+- Team selected
+- Fix Version selected
+- Fetch Stories
+- Fetch Components
+- Generate Report
+- Review Commits opened
+- Override Requested
+- Override Approved
+- Release Readiness viewed
+- Scan History viewed
+- Settings updated
+- Test Connection executed
+
+Every action shall include:
+
+- Username
+- Timestamp
+- Team
+- Fix Version (where applicable)
 
 ---
 
-# Acceptance Criteria
+# FR-6 Comment Length Enhancement
 
-### AC-27
+Increase Override Comment capacity.
 
-The system shall classify every commit into one lifecycle state.
+Target:
 
-### AC-28
+Up to 2000 characters.
 
-Git Revert operations shall be detected and classified correctly.
+Minimum acceptable:
 
-### AC-29
+1000 characters.
 
-Reverted commits shall not be displayed as normal violations.
+If database limitations exist,
 
-### AC-30
+minimum acceptable size:
 
-Cherry-picked commits shall be distinguished from missing commits.
+500 characters.
 
-### AC-31
+Update:
 
-Direct Release Branch commits shall be highlighted independently.
+- Database column
+- Entity validation
+- DTO validation
+- UI validation
 
-### AC-32
+All layers must remain consistent.
 
-Commit lifecycle shall be recalculated during Force Refresh.
+---
 
-### AC-33
+# FR-7 Long Comment UI
 
-Lifecycle classification shall not overwrite manual approvals or audit history.
+Review the UI behavior for long comments.
 
-### AC-34
+Requirements:
 
-Every status badge shall include an explanatory tooltip.
+- Multi-line text area
+- Character counter
+- Graceful wrapping
+- Responsive layout
+- Read More / Read Less (if needed)
+- Proper scrolling for lengthy content
 
-### AC-35
+The page must remain clean and readable.
 
-Missing Commit validation shall consider the Release Branch cut date.
+---
 
-### AC-36
+# FR-8 Loading Message Improvements
 
-Unknown lifecycle states shall be marked for Manual Verification instead of being incorrectly classified as violations.
+During Component loading,
 
-### AC-37
+display:
 
-The implementation shall preserve backward compatibility with all existing commit validation logic until the lifecycle engine has been fully validated.
+- Team
+- Fix Version
+
+Example:
+
+```
+Loading components for
+
+Team: OC Platform
+
+Fix Version: 25.14
+
+Please wait...
+```
+
+This removes ambiguity for long-running operations.
+
+---
+
+# FR-9 Background Job Continuity
+
+Background jobs shall continue executing independently of UI navigation.
+
+Users shall be able to navigate freely without interrupting running jobs.
+
+Job execution shall not depend on the current browser page.
+
+---
+
+# FR-10 Automatic Cache Usage
+
+Once a background job completes,
+
+all generated data shall be stored in the database.
+
+Subsequent requests shall load data from the database cache instead of re-fetching external systems unless the user explicitly performs a Force Refresh.
+
+This includes:
+
+- Stories
+- Components
+- Previous Release Metadata
+- Kubernetes Metadata
+- Configuration Differences
+- Deployment Readiness
+
+---
+
+# FR-11 Background Job Completion Message
+
+During long-running operations,
+
+display friendly status messaging.
+
+Example:
+
+```
+Your report is being generated.
+
+Feel free to continue using the application.
+
+The results will automatically become available once processing completes.
+```
+
+Avoid blocking the UI.
+
+Do not freeze the browser.
+
+---
+
+# FR-12 Fix Version Loading
+
+Review the Fix Version implementation.
+
+Requirements:
+
+- Load Fix Versions directly from the database.
+- Eliminate duplicate entries.
+- Do not derive or calculate release identifiers.
+- Respect the existing data model.
+- Use only the persisted Fix Version values.
+
+---
+
+# FR-13 Fix Version Metadata
+
+Review Fix Version fields.
+
+Current understanding:
+
+- From Date
+- To Date
+
+Validate the existing implementation.
+
+Do not introduce unnecessary calculated dates.
+
+If an additional date exists, verify whether it is required.
+
+Remove or ignore it if it serves no business purpose.
+
+---
+
+# FR-14 Generate Report Validation
+
+The Generate Report page shall include a lightweight **Validate Connections** action.
+
+Purpose:
+
+Allow users to verify required external connections without navigating to Settings.
+
+This action shall test only the minimum required connections.
+
+Mandatory:
+
+- GitHub
+- iTrack
+- Production East OR Production West Kubernetes
+
+Display pass/fail status for each dependency.
+
+This validation shall not modify stored credentials.
+
+---
+
+# FR-15 Settings Ownership
+
+Credentials shall only be entered and modified in the Settings page.
+
+Remove credential input fields from other pages.
+
+Other pages may:
+
+- Display connection status
+- Trigger connection validation
+
+They must not allow credential editing.
+
+---
+
+# FR-16 Connection Validation
+
+Any page requiring external integrations may include a **Test Connection** action.
+
+This action shall:
+
+- Use credentials already stored in Settings
+- Perform validation
+- Update connection status indicators
+- Never request credentials again
+
+---
+
+# FR-17 Background Job UX
+
+All long-running operations shall be asynchronous.
+
+Provide:
+
+- Job ID
+- Current Status
+- Started Time
+- Last Updated Time
+- Completion Time (when available)
+
+Users shall be able to monitor progress through Scan History or Job History.
+
+---
+
+# FR-18 Logging for Background Jobs
+
+Every background job shall log:
+
+- Job ID
+- User
+- Team
+- Fix Version
+- Start Time
+- End Time
+- Duration
+- Success/Failure
+- External systems accessed
+- Number of records processed
+
+---
+
+# FR-19 Cache Logging
+
+Log cache behavior.
+
+Examples:
+
+- Cache Hit
+- Cache Miss
+- Cache Refresh
+- Force Refresh
+- Database Reload
+
+These logs should primarily be DEBUG level.
+
+---
+
+# FR-20 Security
+
+Never log:
+
+- GitHub Tokens
+- iTrack Tokens
+- Kubernetes Cookies
+- Veracode Keys
+- Passwords
+- Authorization Headers
+- Session Secrets
+
+Sensitive values must always be masked or omitted.
+
+---
+
+# 3. Non-Functional Requirements
+
+- Follow SLF4J logging best practices.
+- Keep log messages structured and meaningful.
+- Avoid duplicate logging.
+- Ensure asynchronous jobs are resilient.
+- Preserve existing functionality.
+- Avoid UI blocking.
+- Maintain backward compatibility.
+- Use reusable helper classes where appropriate.
+
+---
+
+# 4. Acceptance Criteria
+
+### AC-1
+Enterprise logging shall be implemented consistently across UI, backend, services, repositories, and background jobs.
+
+### AC-2
+Every log entry shall include user context using MDC (Username, Role, Correlation ID, etc.).
+
+### AC-3
+Logging levels shall follow INFO, DEBUG, WARN, and ERROR best practices.
+
+### AC-4
+Only Admin users shall be able to change the runtime log level.
+
+### AC-5
+Runtime log level changes shall take effect without restarting the application where technically feasible.
+
+### AC-6
+All major UI actions shall be logged with sufficient business context.
+
+### AC-7
+Override comments shall support at least 1000 characters (preferably up to 2000), with all application layers updated accordingly.
+
+### AC-8
+The UI shall remain clean and readable when displaying lengthy comments.
+
+### AC-9
+Component loading messages shall display both Team and Fix Version.
+
+### AC-10
+Background jobs shall continue running even if users navigate away from the current page.
+
+### AC-11
+Completed job results shall be persisted and reused from the database cache.
+
+### AC-12
+Long-running operations shall never block or freeze the UI.
+
+### AC-13
+Friendly progress messages shall be displayed while background jobs are executing.
+
+### AC-14
+Fix Version values shall be loaded directly from the database without duplicates or unnecessary calculations.
+
+### AC-15
+Only valid Fix Version metadata shall be displayed.
+
+### AC-16
+Generate Report shall include a lightweight **Validate Connections** action for required integrations.
+
+### AC-17
+Credential management shall remain exclusive to the Settings page.
+
+### AC-18
+Other pages may validate connections but shall never allow credential editing.
+
+### AC-19
+Background jobs shall expose Job ID, execution status, timestamps, and processing metrics.
+
+### AC-20
+Background job execution shall be fully logged.
+
+### AC-21
+Cache usage (hits, misses, refreshes) shall be logged at DEBUG level.
+
+### AC-22
+No sensitive credentials, cookies, or secrets shall ever be written to application logs.
+
+### AC-23
+All enhancements shall remain backward compatible with the existing implementation.
+
+---
+
+# Implementation Notes
+
+- Reuse existing services wherever possible.
+- Avoid duplicate implementations.
+- Prefer configuration-driven behavior.
+- Keep logging structured, searchable, and suitable for production support.
+- Validate all UI changes with long-running operations and large datasets.
+- Consider future integration with centralized logging platforms (e.g., ELK/OpenSearch, Splunk, Azure Monitor) by using consistent log formats and correlation IDs.
+- The implementation is complete only when all Functional Requirements (FR) and Acceptance Criteria (AC) in this document have been satisfied.
