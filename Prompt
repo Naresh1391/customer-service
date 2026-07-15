@@ -1,531 +1,782 @@
-# Phase 10 – Database Re-Architecture, Metadata Management, Backup & Recovery
-## Functional Requirements & Acceptance Criteria
-
-> **Objective**
->
-> This phase focuses entirely on re-architecting the persistence layer. The goal is to make the application production-ready from a database perspective while preserving all existing functionality. This should be treated as a database architecture exercise rather than a simple implementation task.
+# Phase - UI/UX Rebranding & Design System Modernization
+## SOC Compliance Portal
+### Version: UI Refresh 1.0
 
 ---
 
-# 1. Overall Design Principles
+# Objective
 
-The implementation must be approached from the perspective of an experienced:
+Act as a **Principal UI/UX Architect**, **Senior Frontend Architect**, **React.js Expert**, and **Enterprise Product Designer**.
 
-- Enterprise Database Architect
-- Solution Architect
-- Backend Architect
-- Spring Boot Architect
-- Production Support Engineer
+Before making any UI changes:
 
-The database should be redesigned considering future migration to PostgreSQL or Azure SQL Database while continuing to use H2 during development.
+- Analyze the complete React project.
+- Understand every screen.
+- Understand all existing business functionality.
+- Understand component hierarchy.
+- Understand routing.
+- Understand naming conventions.
+- Understand existing design system.
+- Understand existing backend integrations.
 
-**Important Constraints**
+The objective is **NOT** to rewrite the application.
 
-- Existing functionality must not break.
-- Existing APIs must continue to work.
-- Existing UI must continue to work.
-- Existing reports must continue to work.
-- Existing background jobs must continue to work.
-- Existing overrides, approvals, comments, and audit history must be preserved.
+The objective is to redesign the UI professionally without breaking even a single existing functionality.
 
 ---
 
-# 2. Database Architecture Review
+# Mandatory Rule
 
-## FR-1 Complete Database Review
+**DO NOT BREAK ANY EXISTING FUNCTIONALITY.**
 
-Perform a complete review of every database object.
+All backend APIs,
+all business logic,
+all validations,
+all workflows,
+all role-based permissions,
+all data loading,
+all report generation,
+all Review Commits functionality,
+all Release Readiness functionality,
+all Generate Report functionality,
+all Settings functionality,
+all authentication,
+must continue working exactly as today.
 
-Review:
-
-- Tables
-- Columns
-- Primary Keys
-- Indexes
-- Constraints
-- Relationships
-- Data Types
-- Naming Standards
-
-Prepare the database so it can later migrate to PostgreSQL/Azure SQL with minimal effort.
-
----
-
-## FR-2 Remove Unused Database Objects
-
-Review every table currently available.
-
-For each table classify it as:
-
-- Required
-- Required for future
-- Deprecated
-- Can be removed
-
-Do **not** remove tables that are planned for future features.
-
-However, if tables such as old project metadata or unused lookup tables are no longer referenced anywhere in the application (UI, backend, jobs, reports, APIs), they should be removed after verifying no dependencies exist.
-
-Examples to review:
-
-- Project Keys
-- Fix Versions
-- Lookup Tables
-- Temporary Tables
-- Old Metadata Tables
+Only improve UI/UX.
 
 ---
 
-## FR-3 Normalize Where Appropriate
+# Design Theme
 
-Review whether any table should be normalized.
+Use AT&T branding inspiration.
 
-Do **not** over-engineer.
+Reference:
 
-Avoid unnecessary joins.
+https://www.att.com
 
-Prefer readability and maintainability over excessive normalization.
+Do NOT copy the website.
 
----
+Take inspiration from
 
-## FR-4 Foreign Keys & Relationships
-
-Review all entities.
-
-Where business relationships genuinely exist, introduce appropriate foreign keys.
-
-Examples (where applicable):
-
-- Team → Fix Version
-- Scan → Team
-- Scan → Fix Version
-- Override → Commit
-- Approval → Override
-- Story → Scan
-- Component → Team
-
-Only introduce relationships where they provide real business value.
-
-Avoid creating unnecessary complexity.
+- spacing
+- typography
+- professional layout
+- enterprise feel
+- card layouts
+- dashboard design
+- clean navigation
+- button styles
+- consistent alignment
+- professional white space
 
 ---
 
-# 3. Standard Audit Columns
+# Color Theme
 
-Every business table should include standard audit columns where applicable.
+Keep current colors mostly unchanged.
 
-Recommended columns:
+Primary
 
-```
-created_at
-created_by
-updated_at
-updated_by
-```
+AT&T Blue
 
-Use UTC timestamps.
+Secondary
 
-Populate automatically using Spring Data auditing where possible.
+White
 
----
+Neutral
 
-# 4. Preserve User Data
+Light Gray
 
-## FR-5 Preserve Manual Comments
+Background
 
-User-entered information must never be lost.
+Very light gray
 
-Examples:
+Cards
 
-- Override comments
-- Approval comments
-- Manual notes
+White
 
-When a Force Refresh or Refresh operation occurs:
+Success
 
-- External system data may be refreshed.
-- System-generated metadata may be overwritten.
-- User-entered comments and approvals must always be preserved.
+Soft Green
 
-This is a mandatory requirement.
+Warning
 
----
+Amber
 
-## FR-6 Smart Merge Strategy
+Error
 
-When refreshing data from GitHub, iTrack, Kubernetes, or Veracode:
+Soft Red
 
-Do not blindly delete and insert.
+Avoid
 
-Instead:
+- Dark backgrounds
+- Black heavy themes
+- Neon colors
+- Too many gradients
 
-- Match using business keys (e.g., Commit SHA, Story ID, Component Name).
-- Update system-managed fields.
-- Preserve user-managed fields.
-- Insert new records.
-- Mark removed records appropriately if needed.
-
-Avoid destructive refresh operations.
+Keep enterprise feel.
 
 ---
 
-# 5. Timestamp-Based Refresh Logic
+# Typography
 
-Whenever duplicate records exist during synchronization:
+Use modern typography.
 
-Prefer the latest record based on:
+Improve
 
-```
-updated_at
-```
+- headings
+- sub headings
+- font sizes
+- spacing
+- readability
 
-Only overwrite records when the incoming data is newer or represents a valid refresh.
-
----
-
-# 6. Database Backup & Recovery
-
-## FR-7 Automatic Backup
-
-The application currently uses an H2 database.
-
-Since H2 is not intended for production persistence, implement an automatic backup mechanism.
-
-Every 15 minutes:
-
-- Export the latest database state.
-- Store it in the configured backup location.
-
-Initially, the backup target will be the local file system.
-
-The design should be abstracted so that Azure Blob Storage can later replace the local file system with minimal changes.
+Maintain consistency across every page.
 
 ---
 
-## FR-8 Restore on Startup
+# Global Layout Improvements
 
-During application startup:
+Redesign the complete layout.
 
-If the H2 database is empty or recreated:
+Improve
 
-- Detect the latest available backup.
-- Restore the database automatically.
-- Resume normal application operation.
+- spacing
+- margins
+- paddings
+- section grouping
+- alignment
+- responsiveness
 
-This should be transparent to the user.
-
----
-
-## FR-9 Backup Service Abstraction
-
-Create a storage abstraction.
-
-Example:
-
-```
-StorageProvider
-
-FileSystemStorageProvider
-
-AzureBlobStorageProvider
-```
-
-The application should not directly depend on the storage implementation.
-
-Future migration to Azure Blob Storage should only require changing the provider configuration.
+Nothing should look crowded.
 
 ---
 
-# 7. Azure Blob Storage Readiness
+# Sidebar
 
-Do **not** implement Azure Blob integration yet.
+Improve sidebar.
 
-Instead:
+Requirements
 
-Prepare the architecture.
+- modern icons
+- proper spacing
+- active indicator
+- hover effects
+- collapsible sidebar
+- smooth animation
+- better grouping
 
-Document the required configuration.
-
-Expected future configuration:
-
-- Storage Account
-- Container Name
-- Connection String or Managed Identity
-- SAS Token (optional)
-- Backup Folder
-- Restore Folder
-
-Add these items to:
-
-```
-docs/pending-items.md
-```
-
-with clear implementation notes.
+Do not change navigation structure.
 
 ---
 
-# 8. Database Migration Scripts
+# Top Header
 
-Generate production-ready DDL scripts.
+Improve header.
 
-Provide scripts for:
+Include
 
-- PostgreSQL
-- Azure SQL (where compatible)
+AT&T Branding
 
-Scripts should include:
+Welcome User
 
-- Tables
-- Primary Keys
-- Foreign Keys
-- Constraints
-- Indexes
-- Audit Columns
+Logged in Username
 
-Store scripts in a dedicated migration folder.
+Current Role
 
-Example:
+Notifications placeholder
 
-```
-database/
+Profile Menu
 
-    postgres/
+Better spacing
 
-    azure-sql/
-
-    migrations/
-
-```
-
-Future Flyway/Liquibase compatibility should be considered.
+Responsive layout
 
 ---
 
-# 9. Team Configuration Metadata
+# Dashboard
 
-## FR-10 Re-Architect Team Configuration
+Modernize dashboard.
 
-Currently, team configuration is stored in YAML.
+Use summary cards.
 
-Future goal:
+Example
 
-Support onboarding new teams without code changes.
+Stories
 
-Introduce database support for Team Configuration.
+Components
 
-Examples:
+Violations
 
-- Team Name
-- GitHub Organization
-- Repository Patterns
-- Helm Repository
-- Kubernetes Namespaces
-- Cluster URLs
-- Branch Naming Rules
-- Library Definitions
-- iTrack Project
-- Component Rules
-- Previous Branch Strategy
-- Deployment Strategy
+Pending Approval
 
----
+Branch Validation
 
-## FR-11 Hybrid Configuration
+SAST
 
-Current behavior:
+Deployment Readiness
 
-Configuration continues loading from YAML.
+Configuration Differences
 
-Future behavior:
+Scan History
 
-Configuration loads from Database.
+Each card should have
 
-For now:
-
-Implement database tables.
-
-Populate from YAML if necessary.
-
-Do not switch runtime loading yet.
-
-This future migration should be documented in:
-
-```
-docs/pending-items.md
-```
+- icon
+- count
+- color
+- quick navigation
 
 ---
 
-# 10. Team Onboarding Readiness
+# Generate Report Page
 
-The database design should support onboarding additional teams.
+Improve layout.
 
-Goal:
+Group sections into cards.
 
-A future administrator should only need to insert metadata into database tables to onboard a new team.
+Improve
 
-No code changes should be required.
+Filters
 
----
+Buttons
 
-# 11. iTrack Metadata
+Progress
 
-Move configurable iTrack-related metadata into Team Configuration.
+Loading
 
-Examples:
+Status
 
-- Project Keys
-- Story Fields
-- Issue Type Mapping
-- Custom Field IDs
+Messages
 
-Initially continue loading from YAML.
+Job execution status
 
-Database support should be ready.
+Background task progress
 
----
-
-# 12. Pending Items Documentation
-
-Update:
-
-```
-docs/pending-items.md
-```
-
-Include:
-
-- Azure Blob integration
-- Database migration
-- YAML → Database migration
-- Team onboarding steps
-- Flyway/Liquibase adoption
-- Production backup configuration
-- Metadata migration
-- Configuration cache strategy
-
-This document should become the project's central implementation checklist.
+Better alignment.
 
 ---
 
-# 13. Performance Review
+# Review Commits
 
-Review the database for:
+Redesign table.
 
-- Missing indexes
-- Frequently queried columns
-- Composite indexes
-- Slow lookup paths
-- Duplicate scans
-- Full table scans
+Improve
 
-Recommend and implement appropriate indexing where justified.
+filter visibility
 
-Avoid unnecessary indexes.
+table readability
 
----
+sticky headers
 
-# 14. Future Production Readiness
+column spacing
 
-Ensure the design supports future migration to:
+sorting icons
 
-- PostgreSQL
-- Azure SQL
-- Azure Blob Storage
-- Multiple Teams
-- Multiple Environments
-- Larger datasets
-- High-volume refresh operations
+status badges
 
----
+search
 
-# 15. Acceptance Criteria
+pagination
 
-### AC-1
-Perform a complete review of the existing database schema and redesign where necessary without breaking existing functionality.
+override dialog
 
-### AC-2
-Remove only genuinely unused tables or columns after verifying they are not referenced anywhere in the application.
+approval dialog
 
-### AC-3
-Introduce foreign keys and relationships only where they add real business value and do not overcomplicate the schema.
+tooltips
 
-### AC-4
-All business tables should include standard audit fields (`created_at`, `created_by`, `updated_at`, `updated_by`) where applicable.
-
-### AC-5
-Manual user-entered data (comments, approvals, notes, overrides) must always be preserved during refresh operations.
-
-### AC-6
-Refresh operations must perform intelligent merge/upsert logic instead of destructive delete-and-reinsert operations.
-
-### AC-7
-Record synchronization should use timestamps and business keys to determine the latest valid data.
-
-### AC-8
-Implement an automatic backup mechanism that exports the database to the local file system every 15 minutes.
-
-### AC-9
-On application startup, automatically restore the most recent backup if the H2 database is empty or recreated.
-
-### AC-10
-Implement a storage abstraction that supports both local file storage now and Azure Blob Storage in the future.
-
-### AC-11
-Document all Azure Blob Storage prerequisites and pending implementation tasks in `docs/pending-items.md`.
-
-### AC-12
-Generate production-ready DDL scripts for PostgreSQL and Azure SQL, including constraints, indexes, and audit fields.
-
-### AC-13
-Introduce database structures for Team Configuration while continuing to load runtime configuration from YAML during the current development phase.
-
-### AC-14
-Ensure the database design supports onboarding new teams using metadata only, without requiring code changes.
-
-### AC-15
-Move configurable iTrack metadata into the Team Configuration model while keeping YAML as the current runtime source.
-
-### AC-16
-Review and optimize indexes based on actual query patterns and expected production usage.
-
-### AC-17
-Maintain full backward compatibility with the existing UI, APIs, reports, background jobs, and business workflows.
-
-### AC-18
-Do not introduce unnecessary normalization, joins, or architectural complexity; prioritize maintainability and performance.
-
-### AC-19
-All future migration activities (YAML-to-DB, Azure Blob integration, Flyway/Liquibase adoption, production configuration) must be tracked in `docs/pending-items.md`.
-
-### AC-20
-The persistence layer should be production-ready, cloud-ready, and capable of scaling to additional teams and environments without requiring structural redesign.
+hover effects
 
 ---
 
-# Additional Architectural Recommendations (Please Evaluate)
+# Release Readiness
 
-1. **Introduce optimistic locking (`version` column)** on mutable business entities to prevent concurrent update conflicts.
+This page currently contains multiple sections.
 
-2. **Adopt soft-delete (`is_deleted`) only for business records** where historical traceability is important, instead of permanently deleting data.
+Redesign as professional dashboard.
 
-3. **Separate reference/master data from transactional data** (e.g., Team Configuration, Fix Versions, Namespace Metadata vs. Stories, Commits, Overrides).
+Show
 
-4. **Create reusable synchronization services** for GitHub, iTrack, Kubernetes, and Veracode so all refresh operations follow a consistent merge strategy.
+Summary Cards
 
-5. **Define clear retention policies** for backups, scan history, and transient job data (e.g., retain backups for 30 days, purge old job logs after a configurable period).
+↓
 
-6. **Use Flyway (preferred) or Liquibase** from the beginning for all schema evolution instead of manually maintaining DDL over time.
+Navigation Pills
 
-7. **Abstract configuration loading** behind a `ConfigurationProvider` interface so switching from YAML to database becomes a configuration change rather than a code rewrite.
+↓
 
-8. **Keep H2 strictly as a development database** and ensure no H2-specific SQL features are introduced that would complicate PostgreSQL or Azure SQL migration.
+Selected Section
 
-9. **Document the complete Entity Relationship Diagram (ERD)** and include it in the project documentation to simplify onboarding and long-term maintenance.
+Instead of one long page.
 
-10. **Validate the redesigned schema against expected production workloads**, especially around commit history, background jobs, approval workflows, deployment metadata, and future multi-team expansion.
+Example
+
+Stories Status
+
+Branch Validation
+
+SAST
+
+Deployment
+
+Configuration
+
+Each section opens independently.
 
 ---
 
-**Implementation Note:** This phase is an architectural refactoring. Any schema changes must include backward-compatible data migration logic where required, and all existing business functionality must continue to work without regression.
+# Tables
+
+Improve every table.
+
+Requirements
+
+Sticky header
+
+Better row spacing
+
+Alternate row color
+
+Hover highlight
+
+Responsive
+
+Resizable columns
+
+Professional pagination
+
+Search
+
+Column filters
+
+Status badges
+
+Icons
+
+Tooltips
+
+---
+
+# Status Badges
+
+Replace plain text.
+
+Example
+
+Accepted
+
+Green Badge
+
+Pending
+
+Amber Badge
+
+Violation
+
+Red Badge
+
+Approved
+
+Green
+
+Pending Approval
+
+Blue
+
+Reverted
+
+Purple
+
+Override
+
+Orange
+
+---
+
+# Icons
+
+Use professional icons consistently.
+
+Examples
+
+Story
+
+Bug
+
+Task
+
+Epic
+
+Repository
+
+Deployment
+
+Configuration
+
+Branch
+
+GitHub
+
+Veracode
+
+Warning
+
+Success
+
+Approval
+
+Notification
+
+---
+
+# Forms
+
+Improve every form.
+
+Better
+
+spacing
+
+labels
+
+validation
+
+error messages
+
+helper text
+
+button alignment
+
+---
+
+# Buttons
+
+Create consistent button styles.
+
+Primary
+
+Secondary
+
+Danger
+
+Success
+
+Outline
+
+Disabled
+
+Loading
+
+All buttons should have consistent height.
+
+---
+
+# Dialogs
+
+Improve dialogs.
+
+Better
+
+spacing
+
+titles
+
+descriptions
+
+buttons
+
+animations
+
+keyboard accessibility
+
+---
+
+# Loading Experience
+
+Improve loading.
+
+Instead of
+
+Loading...
+
+Use
+
+Skeleton loaders
+
+Progress indicators
+
+Estimated progress
+
+Friendly loading messages
+
+Background job status
+
+---
+
+# Empty State
+
+Whenever no data exists
+
+Show
+
+illustration
+
+friendly message
+
+action button
+
+---
+
+# Error Handling
+
+Improve all error screens.
+
+Instead of
+
+Unknown Error
+
+Show meaningful message
+
+Possible reason
+
+Retry button
+
+Contact Admin
+
+---
+
+# Notifications
+
+Replace browser alerts.
+
+Use
+
+Toast notifications
+
+Success
+
+Warning
+
+Error
+
+Information
+
+---
+
+# Accessibility
+
+Improve accessibility.
+
+Keyboard navigation
+
+ARIA labels
+
+Tab order
+
+Focus visibility
+
+Color contrast
+
+Screen reader support
+
+---
+
+# Responsiveness
+
+UI must work correctly on
+
+Laptop
+
+Large Monitor
+
+Tablet
+
+Different browser zoom levels
+
+---
+
+# Performance
+
+Reduce unnecessary re-rendering.
+
+Use
+
+Memoization
+
+Lazy loading
+
+Component optimization
+
+Code splitting
+
+---
+
+# Animations
+
+Keep subtle animations only.
+
+Examples
+
+Fade
+
+Slide
+
+Hover
+
+Card elevation
+
+Avoid flashy animations.
+
+---
+
+# Design Consistency
+
+Every page should follow same
+
+Spacing
+
+Typography
+
+Button styles
+
+Card styles
+
+Table styles
+
+Icons
+
+Colors
+
+Margins
+
+Padding
+
+---
+
+# Naming Improvements
+
+Review all UI labels.
+
+Rename wherever necessary.
+
+Examples
+
+Review Commits
+
+Release Readiness
+
+Generate Report
+
+Scan History
+
+Settings
+
+Use consistent enterprise terminology.
+
+---
+
+# User Experience Review
+
+Review entire application.
+
+Identify
+
+Confusing layouts
+
+Duplicate buttons
+
+Unnecessary clicks
+
+Poor navigation
+
+Unused components
+
+Improve wherever possible.
+
+---
+
+# Maintain Existing Features
+
+Nothing should break.
+
+All APIs
+
+All workflows
+
+All backend integrations
+
+All permissions
+
+All validations
+
+All reports
+
+must continue working.
+
+---
+
+# Deliverables
+
+1. Redesigned UI
+
+2. Improved UX
+
+3. Better navigation
+
+4. Better responsiveness
+
+5. Better accessibility
+
+6. Better loading experience
+
+7. Better enterprise look
+
+8. Better consistency
+
+9. Better typography
+
+10. Better spacing
+
+11. Modern cards
+
+12. Better dashboards
+
+13. Better forms
+
+14. Better dialogs
+
+15. Better tables
+
+16. Better status badges
+
+17. Better icons
+
+18. Maintain 100% backward compatibility
+
+19. No functional regressions
+
+20. Follow enterprise React.js UI best practices throughout the application.
+
+---
+
+# Final Acceptance Criteria
+
+✅ Existing functionality remains untouched.
+
+✅ Existing backend APIs remain unchanged.
+
+✅ Existing business logic remains unchanged.
+
+✅ Existing role-based access remains unchanged.
+
+✅ UI looks modern and enterprise-grade.
+
+✅ AT&T-inspired professional appearance.
+
+✅ Consistent design system across the application.
+
+✅ Responsive.
+
+✅ Accessible.
+
+✅ Production-ready quality.
