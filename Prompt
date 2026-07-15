@@ -1,848 +1,645 @@
-# Phase 7 (Revision 2) – Additional Acceptance Criteria & Enhancements
+# Phase 8 – Release Commit Validation & Compliance Enhancements
+## Consolidated Functional Requirements & Acceptance Criteria (Revision 1)
 
-> **This document extends the existing Phase 7 implementation.**
+> **Purpose**
 >
-> Do **not** rewrite the existing implementation. Instead, update the existing Phase 7 work with the following enhancements and acceptance criteria. Please reuse the existing architecture and avoid duplicate implementations.
+> This document consolidates all requirements discussed during this phase. Every requirement below is **mandatory** unless explicitly marked as optional. The implementation **must not omit, simplify, or replace** any requirement without explicit approval.
 
 ---
 
-# 1. Previous Release Version Loading from Kubernetes
+# 1. Objective
 
-## Current Situation
+Enhance the Release Commit Compliance Portal by improving:
 
-Currently, the "Previous Branch" is being populated using the existing implementation.
+- Release commit discovery
+- Previous release identification
+- Kubernetes integration
+- Commit validation
+- Trunk-based release validation
+- Refresh behavior
+- Library handling
+- UI improvements
+- Performance
+- Compliance validations
+- Auditability
 
-Although it works, this is **not the preferred long-term approach** because it does not always reflect what is actually deployed in the target Kubernetes environment.
-
----
-
-## New Requirement
-
-Introduce a configurable mechanism to determine how the **Previous Branch** should be loaded.
-
-Inside the Team Configuration (team_config), introduce a new configuration property.
-
-Example:
-
-```yaml
-loadPreviousVersionFromKubernetes: true
-```
-
-or
-
-```yaml
-loadPreviousVersionFromKubernetes: false
-```
+The implementation must remain backward compatible with the existing implementation until the new approach has been validated.
 
 ---
 
-## Behaviour
+# 2. Background
 
-### Case 1
+Our development model is:
 
-If
+- Developers continuously commit code to the **main/master branch**.
+- Every Major Release creates a **Release Branch** approximately **14 days before Production Release**.
+- Development continues on Main.
+- Remaining release stories are merged/cherry-picked into the Release Branch until Release completion.
+- Weekly/Bi-weekly releases are performed.
 
-```
-loadPreviousVersionFromKubernetes = false
-```
-
-Continue using the existing implementation exactly as today.
-
-No behavior change.
+The implementation must support this workflow.
 
 ---
 
-### Case 2
-
-If
-
-```
-loadPreviousVersionFromKubernetes = true
-```
-
-Do NOT use the existing logic.
-
-Instead, determine the Previous Version directly from Kubernetes.
+# 3. Functional Requirements
 
 ---
 
-# Kubernetes Flow
+## FR-1 Generate Report Preconditions
 
-For every component selected during Generate Report:
-
-Ignore Helm repositories.
-
-Only process the Main GitHub Repository.
-
-For every Main Repository:
-
-Determine its namespace.
-
-↓
-
-Find Deployment.
-
-↓
-
-Determine Active Deployment.
-
-(Blue / Green)
-
-↓
-
-Read Deployment Labels.
-
-↓
-
-Extract deployment metadata.
-
-↓
-
-Persist into Database.
-
----
-
-# Deployment Label Extraction
-
-Please review Kubernetes deployment labels thoroughly.
-
-Extract every useful metadata field available.
-
-At minimum capture:
-
-- GitHub Branch
-- Git Commit ID
-- Build Number
-- Deployment Timestamp
-- Release Version
-- Image Tag (if available)
-- Build URL (if available)
-- Pipeline Name (if available)
-- Any additional useful deployment metadata
-
-Do not limit the implementation to only the Branch.
-
-Design the solution to capture all meaningful metadata.
-
----
-
-# Database
-
-Persist these deployment metadata fields.
-
-These values will later be used for:
-
-- Previous Release comparison
-- Deployment Audit
-- Release Traceability
-- Rollback Analysis
-
----
-
-# Reusable Kubernetes Label Service
-
-Currently multiple modules require Kubernetes Deployment Labels.
-
-Examples:
-
-- Previous Version
-- Test3 Deployment Readiness
-- Test4 Deployment Readiness
-- Stage Deployment Readiness
-- Production Deployment Readiness
-
-The implementation must not duplicate this logic.
-
-Create a common reusable service.
-
-Example:
-
-```
-KubernetesDeploymentMetadataService
-```
-
-Responsibilities:
-
-- Discover Deployment
-- Detect Active Blue/Green
-- Read Deployment Labels
-- Parse Metadata
-- Return Common DTO
-
-Every module should reuse this service.
-
----
-
-# Acceptance Criteria
-
-There must be only one implementation responsible for Kubernetes Deployment Label extraction.
-
-No duplicate code.
-
-No duplicate Kubernetes API calls.
-
----
-
-# 2. Story Fetch Performance Improvement
-
-Fetching Stories occasionally becomes slow.
-
-Please optimize the implementation.
-
----
-
-## Reactive Processing
-
-Review the current implementation.
-
-If stories are currently processed sequentially,
-
-replace the implementation using Spring WebFlux.
-
-Preferred:
-
-- Flux
-- Mono
-
-Execute independent API calls in parallel.
-
----
-
-## Logging
-
-Introduce detailed timing logs.
-
-Examples:
-
-```
-Fetch Fix Version
-
-120 ms
-
-Fetch Stories
-
-2.3 sec
-
-Story Mapping
-
-400 ms
-
-Persist Stories
-
-620 ms
-
-Overall
-
-3.4 sec
-```
-
-These logs will later help identify performance bottlenecks.
-
----
-
-# 3. Component Discovery Performance
-
-The same optimization should be applied while loading Components.
-
-Current GitHub calls appear to execute sequentially.
-
-Replace with parallel execution wherever possible.
-
-Use:
-
-- Flux
-- Mono
-
-Avoid blocking operations.
-
----
-
-# 4. Fetch Stories UX Improvement
-
-Currently only one Fetch Stories button exists.
-
-This creates confusion because users sometimes want fresh data while other times they simply want to reuse already generated reports.
-
-Introduce two clearly distinguishable options.
-
----
-
-## Soft Fetch
-
-Purpose:
-
-Load Stories already available in the local database.
-
-Do NOT call iTrack.
-
-Use cached/generated data.
-
----
-
-## Force Fetch
-
-Purpose:
-
-Ignore cached data.
-
-Call iTrack again.
-
-Refresh stories from source.
-
-Persist newly retrieved data.
-
----
-
-## Components
-
-Apply the same concept.
-
-Soft Fetch
-
-↓
-
-Load existing Components from DB.
-
-Force Fetch
-
-↓
-
-Call GitHub.
-
-Reload components.
-
-Update DB.
-
----
-
-## UI Recommendation
-
-Avoid displaying two large buttons.
-
-Instead design a cleaner UI.
-
-Possible approaches:
-
-- Primary button with dropdown
-- Split button
-- Overflow menu
-- Refresh icon with options
-
-Use your UI expertise and existing design language to provide the best user experience.
-
-The interface should remain clean and intuitive.
-
----
-
-# 5. Deployment Readiness Verification
-
-Please re-evaluate the current Deployment Readiness implementation.
-
-Current observations indicate that Deployment Readiness may not be correctly identifying deployed branches for:
-
-- Test3
-- Test4
-- Stage
-- Production
-
-The same concern also applies to:
-
-Previous Version retrieval from Kubernetes.
-
----
-
-## Required Investigation
-
-Please review the implementation and document:
-
-- Which Kubernetes APIs are currently being used.
-- Why the current approach is unreliable.
-- What limitations exist.
-- What alternative Kubernetes APIs are available.
-- Which approach is recommended by Kubernetes documentation.
-
----
-
-## Documentation
-
-Create a technical report.
-
-Example:
-
-```
-docs/kubernetes-deployment-research.md
-```
-
-Include:
-
-- APIs evaluated
-- Deployment APIs
-- ReplicaSet APIs
-- Pod APIs
-- Label extraction approach
-- Metadata extraction
-- Blue/Green detection
-- Active deployment determination
-- Recommended implementation
-- Known limitations
-
----
-
-## Kubernetes Research
-
-Please review the official Kubernetes documentation before making implementation changes.
-
-Do not rely only on the current implementation.
-
-If a better API or architecture exists,
-
-prefer that approach.
-
----
-
-# 6. Acceptance Criteria
-
-The implementation should satisfy the following:
-
-✅ Previous Version loading is configurable.
-
-✅ Existing behavior remains available through configuration.
-
-✅ Kubernetes deployment metadata is reusable across all modules.
-
-✅ Deployment labels are extracted through one common service.
-
-✅ Stories are fetched using reactive parallel execution where beneficial.
-
-✅ Components are fetched using reactive parallel execution where beneficial.
-
-✅ Detailed execution timing logs are available.
-
-✅ Soft Fetch and Force Fetch are available for Stories.
-
-✅ Soft Fetch and Force Fetch are available for Components.
-
-✅ UI remains clean and user-friendly.
-
-✅ Kubernetes implementation is validated against official documentation.
-
-✅ A technical research document is produced explaining the chosen Kubernetes APIs and deployment metadata retrieval strategy.
-
----
-
-# Important Notes
-
-- Reuse all existing architecture.
-- Avoid duplicate implementations.
-- Keep the solution configurable.
-- Keep Kubernetes integrations environment-independent.
-- Use configuration flags instead of hardcoded behavior.
-- Ensure backward compatibility with the existing Phase 7 implementation.
-- The Kubernetes Deployment Metadata service created in this phase should become the single reusable implementation for all current and future Kubernetes-based
-features.
-
-
-
-# Release SOC Compliance Tracker – Phase 7
-# Settings Management, Session Credentials & Generate Report Improvements
-
-## Objective
-
-This phase focuses on improving the Settings module, session-based credential management, Kubernetes connection management, and simplifying the Generate Report workflow.
-
-The overall objective is to make the application production-ready by centralizing all external system credentials inside the Settings page (for Admin users only), validating connections, improving the Generate Report experience, and cleaning up obsolete configurations.
-
-Before implementation:
-
-- Analyze the existing project.
-- Reuse existing architecture.
-- Do not duplicate business logic.
-- Reuse existing services, repositories, controllers, DTOs and React components.
-- Keep the implementation modular, configurable, secure and production-ready.
-
----
-
-# 1. Session Credential Management
-
-Currently, external system credentials are read from the `.env` file.
-
-Examples include:
-
-- GitHub Token
-- iTrack Token
-- Veracode API ID
-- Veracode API Key
-
-These are useful only for local development.
-
-In production, credentials should **not** come from `.env`.
-
-Instead, the Settings page should allow Admin users to temporarily override these values for the current browser session.
-
-This functionality already exists partially but is not working correctly.
-
-Please review the complete implementation (UI + Backend) and fix it.
-
-Expected behavior:
-
-- Session credentials override `.env` values only for the current browser session.
-- Refreshing the browser clears session values unless intentionally restored.
-- Environment variables remain the fallback when no session value exists.
-- Session credentials must never be persisted permanently in the database.
-
----
-
-# 2. Settings Page Access
-
-The Settings page should remain accessible only to:
-
-- ROLE_ADMIN
-
-Viewer and Editor roles must not have access.
-
----
-
-# 3. Existing Connection Tests
-
-The Settings page already contains connection tests for:
-
-- GitHub
-- iTrack
-- Veracode
-
-These connection tests are currently unreliable.
-
-Review the implementation and make all three tests fully functional.
-
-Each connection test should clearly display:
-
-- Connection Successful
-- Authentication Failed
-- Invalid Token
-- Timeout
-- Service Unavailable
-
-Provide user-friendly messages.
-
----
-
-# 4. Kubernetes Session Configuration
-
-Extend the Settings page to support Kubernetes authentication.
-
-Add session-based cookie configuration for the following environments:
-
-- Test3
-- Test4
-- Stage West
-- Production East
-- Production West
-
-For each environment provide:
-
-- Cookie Input
-- Connection Test Button
-- Connection Status
-- Last Tested Timestamp (optional)
-
-Cookies should remain session-only.
-
-Never store them permanently.
-
----
-
-# 5. Kubernetes Connection Validation
-
-Implement backend connection testing.
-
-Each Kubernetes environment should have an independent connection test.
-
-Validate:
-
-- Authentication
-- Cluster Reachability
-- Namespace Access (if applicable)
-- Basic Kubernetes API response
-
-Show clear success or failure messages.
-
----
-
-# 6. Settings Cleanup
-
-The following Settings sections are no longer required:
-
-- iTrack Fields
-- Excluded Components
-
-Remove them completely.
-
-This includes:
-
-- UI
-- Backend
-- Database references (if any)
-- APIs
-- DTOs
-- Unused code
-
-Clean up the implementation completely.
-
----
-
-# 7. Generate Report - Fix Version Improvements
-
-The Fix Version dropdown currently displays duplicate values.
-
-This should be corrected.
-
-Expected behavior:
-
-- Display unique Fix Versions only.
-- Remove duplicate entries.
-- Sort logically (latest first if applicable).
-- Load directly from the Fix Version database table.
-- Do not recreate or duplicate Fix Version values.
-
-Review backend queries and frontend rendering to ensure duplicates are eliminated.
-
----
-
-# 8. Fix Version Fields
-
-The Fix Version table already contains required metadata such as:
-
-- Fix Version
-- From Date
-- To Date
-
-An additional Release Date field is currently being generated.
-
-This additional field is unnecessary.
-
-Remove it from:
-
-- UI
-- DTOs
-- Backend processing (if applicable)
-
-Use only the existing Fix Version information from the database.
-
----
-
-# 9. Deployment Validation Configuration
-
-The temporary "Deployment Validation Configuration" section inside Generate Report is no longer required.
-
-All Kubernetes authentication should now come from the Settings page.
-
-Remove this section completely from the Generate Report UI.
-
----
-
-# 10. Generate Report Prerequisite Validation
-
-Before enabling users to execute "Fetch Stories", display a small prerequisite status panel.
-
-This is only an informational indicator.
-
-Example:
-
-✓ GitHub Token Available
-
-✓ iTrack Token Available
-
-✓ Kubernetes Cookie Available (Optional)
-
-✓ Veracode Credentials Available (Optional)
-
-Use simple green/red indicators.
-
-Do not display raw credential values.
-
----
-
-# 11. Mandatory vs Optional Credentials
-
-Fetching Stories should only require the following mandatory credentials:
+Before enabling **Fetch Stories**, validate the following connections.
 
 Mandatory:
 
 - GitHub Token
 - iTrack Token
+- At least one Production Kubernetes Cookie
+    - Production East
+    - OR Production West
 
-Optional:
+If any mandatory connection is unavailable:
 
-- Veracode Credentials
-- Kubernetes Cookies
-- Other future integrations
-
-If mandatory credentials are missing:
-
-- Disable the Fetch Stories button.
-- Display a helpful message directing the user to the Settings page.
-
-Optional credentials should not block Fetch Stories.
-
-Instead, show informational warnings.
+- Disable Fetch Stories.
+- Clearly indicate which dependency is missing.
+- Display user-friendly status indicators.
 
 ---
 
-# 12. Generate Report Workflow
+## FR-2 Connection Status Indicators
 
-The remainder of the Generate Report flow is functioning correctly.
+Display connection status using visual indicators.
 
-No functional changes are required for:
+Example:
 
-- Story loading
-- Component loading
-- Component review
-- Review commits
+✅ Connected
 
-Only improve the prerequisite validation and remove obsolete configuration fields.
+❌ Not Connected
 
----
+⚠ Configuration Missing
 
-# 13. UI Improvements
-
-Improve the Settings page layout.
-
-Suggested grouping:
-
-## Source Control
-
-- GitHub Token
-- Test Connection
+Do not display technical exceptions directly.
 
 ---
 
-## iTrack
+## FR-3 Library Identification
 
-- Token
-- Test Connection
+Introduce support for Library Components.
 
----
+Libraries shall be defined through Team Configuration.
 
-## Veracode
+Libraries are NOT deployable microservices.
 
-- API ID
-- API Key
-- Test Connection
+Libraries are dependency artifacts only.
 
----
+UI must visually differentiate:
 
-## Kubernetes
-
-### Test3
-
-- Cookie
-- Test
-
-### Test4
-
-- Cookie
-- Test
-
-### Stage West
-
-- Cookie
-- Test
-
-### Production East
-
-- Cookie
-- Test
-
-### Production West
-
-- Cookie
-- Test
-
-Each section should clearly display connection status.
+- Microservice
+- Library
 
 ---
 
-# 14. Backend Improvements
+## FR-4 Library Processing Rules
 
-Review the credential resolution logic.
+Libraries shall:
 
-Recommended order:
+Participate in:
 
-1. Session Credential
-2. Environment Variable (.env)
-3. Error if unavailable
+- Git Commit Analysis
+- Story Validation
 
-This ensures local development remains simple while production relies on session configuration or future secret management.
+Skip:
 
----
-
-# 15. Future Design
-
-Design the Settings module so that future integrations (such as Azure Key Vault, HashiCorp Vault, or Kubernetes Secrets) can be added without redesigning the architecture.
-
-Credential providers should be easily replaceable.
+- Kubernetes Deployment Validation
+- Deployment Readiness
+- Previous Production Version Discovery
+- Blue/Green Validation
 
 ---
 
-# 16. Documentation
+## FR-5 Previous Release Version Resolution
 
-Update project documentation.
+Remove the previous configuration switch.
 
-Update:
+The system shall always resolve Previous Release Version using the following priority.
 
-docs/pending-items.md
+Priority 1
 
-Include remaining production tasks such as:
+Production Kubernetes
 
-- Azure Key Vault integration
-- Secret Manager integration
-- Production Kubernetes authentication
-- Token rotation strategy
-- Credential expiration handling
+↓
 
----
+Priority 2
 
-# 17. Deliverables
+Existing Git-based implementation
 
-Frontend
+↓
 
-- Fixed Settings page
-- Kubernetes session configuration
-- Connection test improvements
-- Fix Version dropdown cleanup
-- Generate Report prerequisite panel
-- Removal of obsolete configuration sections
+Priority 3
 
-Backend
+Leave Previous Release empty for manual selection.
 
-- Session credential handling
-- Kubernetes connection validation
-- Connection test APIs
-- Duplicate Fix Version resolution
-- Credential resolution improvements
-- Cleanup of unused code
-
-Documentation
-
-- Update docs/pending-items.md
-- Update Settings documentation
-- Document session credential flow
-- Document credential precedence (Session → Environment)
+The existing implementation shall remain as a fallback until explicitly removed.
 
 ---
 
-## Important Implementation Guidelines
+## FR-6 Production Deployment Metadata
 
-- Analyze the existing implementation before making changes.
-- Reuse existing services and architecture wherever possible.
-- Avoid duplicate implementations.
-- Remove all obsolete code related to iTrack Fields, Excluded Components, and Deployment Validation Configuration.
-- Ensure all connection tests are reliable and provide meaningful error messages.
-- Session credentials must never be persisted permanently.
-- Keep the implementation secure, modular, maintainable, and production-ready.
-```
+Retrieve deployment metadata from Kubernetes.
 
+At minimum capture:
 
+- Git Branch
+- Git Commit SHA
+- Build Number
+- Image Tag
+- Deployment Timestamp
+- Pipeline Information
+- Release Version
+- Additional deployment labels
 
+Persist all metadata into the database.
 
+---
 
+## FR-7 Kubernetes Metadata Service
+
+Create one reusable service.
+
+Example
+
+KubernetesDeploymentMetadataService
+
+Responsibilities:
+
+- Discover Deployment
+- Detect Active Blue/Green
+- Read Labels
+- Parse Metadata
+- Return Common DTO
+
+No duplicate implementations.
+
+---
+
+## FR-8 Release Commit Analysis
+
+Current implementation compares:
+
+Previous Release
+
+↓
+
+Current Release
+
+Continue using this implementation.
+
+Do NOT remove it.
+
+---
+
+## FR-9 Production Commit Anchor
+
+Additionally retrieve:
+
+Production Git Commit SHA.
+
+This commit becomes the deployment anchor.
+
+Initially compare both approaches.
+
+Log differences.
+
+Do not replace the current implementation until validated.
+
+---
+
+## FR-10 Commit Collection Strategy
+
+Collect commits from:
+
+- Release Branch
+- Production Deployment Metadata
+
+Validate both.
+
+Compare results.
+
+---
+
+## FR-11 Main Branch Validation
+
+After Release Branch creation:
+
+Developers continue committing to Main.
+
+The implementation shall:
+
+- Analyze Main branch.
+- Consider commits after Release Branch creation.
+- Filter commits belonging only to Release Stories.
+
+Ignore unrelated commits.
+
+---
+
+## FR-12 Missing Release Commit Detection
+
+If a Release Story contains commits on Main
+
+BUT
+
+those commits are not available in Release Branch
+
+Create Violation.
+
+---
+
+## FR-13 Hard Push / Cherry Pick Support
+
+Correctly handle:
+
+- Cherry Picks
+- Direct Release Branch Commits
+- Squash Merge (where detectable)
+- Rebase (where detectable)
+
+If uncertain
+
+Perform additional history analysis.
+
+---
+
+## FR-14 Commit History Fallback
+
+If Production SHA cannot be found:
+
+Search configurable commit history.
+
+Example:
+
+100 commits backwards.
+
+This value must be configurable.
+
+Never hardcode.
+
+---
+
+## FR-15 Story Filtering
+
+Only Release Stories shall participate.
+
+Ignore commits unrelated to Release Stories.
+
+---
+
+## FR-16 Commit Entity
+
+Treat Commit as Master Data.
+
+Suggested fields:
+
+- SHA
+- Repository
+- Branch
+- Story
+- Commit Date
+- Author
+- Committer
+- Source Branch
+- Release Branch
+- Merge Status
+- Validation Status
+
+---
+
+## FR-17 Commit Validation Table
+
+Create separate validation entity.
+
+Store:
+
+- Validation Type
+- Override Reason
+- Approval
+- Admin Decision
+- Comments
+- Audit History
+
+Never overwrite validation history.
+
+---
+
+## FR-18 Refresh Behaviour
+
+Force Refresh shall update:
+
+- Git metadata
+- Story mappings
+- Branch mappings
+- Repository mappings
+
+Imported metadata shall be refreshed using the latest external data.
+
+---
+
+## FR-19 Preserve Manual Actions
+
+Refresh shall NEVER delete:
+
+- Override Reasons
+- Pending Approval
+- Approval History
+- Admin Decisions
+- Comments
+- Audit Trail
+
+These shall remain associated using Commit SHA wherever possible.
+
+---
+
+## FR-20 Commit Identity
+
+Commit SHA shall be treated as the primary business identifier.
+
+Never rely solely on Commit Message.
+
+---
+
+## FR-21 Historical Consistency
+
+If a refreshed import no longer contains an imported commit:
+
+Do NOT physically delete it immediately.
+
+Mark it as:
+
+Removed From Latest Import
+
+This preserves auditability.
+
+---
+
+## FR-22 Safe Refresh
+
+Only imported metadata may be refreshed.
+
+Manual workflow information shall never be overwritten.
+
+---
+
+## FR-23 Story Issue Type
+
+While fetching stories from iTrack,
+
+also retrieve the **Issue Type**.
+
+Examples:
+
+- Story
+- Bug
+- Task
+- Epic
+- Spike
+- Improvement
+- Defect
+- Any additional supported issue types
+
+Persist the Issue Type in the database.
+
+---
+
+## FR-24 Issue Type UI
+
+Display the Issue Type beside every Story.
+
+Do NOT display large text.
+
+Instead,
+
+display the standard issue icon.
+
+Examples:
+
+🐞 Bug
+
+📖 Story
+
+⚡ Task
+
+⭐ Epic
+
+(or the closest equivalent icon set already used by iTrack/Jira)
+
+The icon shall be:
+
+- Small
+- Consistent
+- Professional
+- Non-intrusive
+
+Hovering the icon shall display the Issue Type name.
+
+---
+
+## FR-25 Violation Categories
+
+Replace generic "Violation".
+
+Introduce categories.
+
+Examples:
+
+- Missing Commit
+- Story Not Accepted
+- Missing Release Commit
+- Branch Validation Failed
+- Deployment Validation Failed
+- Configuration Difference
+- Manual Override Pending
+- Unknown
+
+---
+
+## FR-26 Violation Explanation
+
+Every violation shall contain:
+
+- Type
+- Description
+- Reason
+- Suggested Resolution
+
+---
+
+## FR-27 Violation Tooltip
+
+Every violation shall display an Information icon.
+
+Hovering shall explain:
+
+- Why it is a violation.
+- Which validation failed.
+- Which Story caused it.
+- Which Commit caused it.
+- Suggested next action.
+
+The explanation must be user-friendly.
+
+---
+
+## FR-28 Performance
+
+Use parallel processing wherever possible.
+
+Preferred:
+
+Spring WebFlux
+
+Flux
+
+Mono
+
+Avoid sequential API processing.
+
+---
+
+## FR-29 Logging
+
+Log execution timing.
+
+Examples:
+
+- Story Fetch
+- Component Fetch
+- Kubernetes Calls
+- Git Calls
+- Validation Time
+- Total Execution
+
+---
+
+## FR-30 Kubernetes Research
+
+Review Kubernetes documentation.
+
+Document:
+
+- APIs evaluated
+- Deployment API
+- ReplicaSet API
+- Pod API
+- Label retrieval
+- Blue/Green detection
+- Deployment metadata strategy
+
+Create:
+
+docs/kubernetes-deployment-research.md
+
+---
+
+# 4. Non-Functional Requirements
+
+- No duplicate implementations.
+- Prefer reusable services.
+- Configuration-driven behavior.
+- Backward compatible.
+- Thread-safe.
+- Production-ready.
+- Comprehensive logging.
+- Graceful error handling.
+- Modular architecture.
+
+---
+
+# 5. Acceptance Criteria
+
+### AC-1
+Mandatory connections must be validated before Fetch Stories.
+
+### AC-2
+Connection status must be visible using user-friendly indicators.
+
+### AC-3
+Libraries must be visually distinguished and excluded from deployment-specific validations.
+
+### AC-4
+Previous Release Version must resolve using Kubernetes → Existing Logic → Manual Selection.
+
+### AC-5
+Production deployment metadata must be captured and persisted.
+
+### AC-6
+Only one reusable Kubernetes metadata service shall exist.
+
+### AC-7
+Existing Release comparison logic must remain intact.
+
+### AC-8
+Production Git Commit SHA must be collected and used as a deployment anchor.
+
+### AC-9
+Release Branch and Production metadata must both participate in commit analysis.
+
+### AC-10
+Main branch commits after Release Branch creation must be analyzed for Release Stories.
+
+### AC-11
+Missing commits belonging to Release Stories shall be reported as violations.
+
+### AC-12
+Cherry-picks, direct release commits, squash merges, and rebases shall be handled where possible.
+
+### AC-13
+Fallback commit history search shall be configurable.
+
+### AC-14
+Only Release Story commits shall participate in validation.
+
+### AC-15
+Commit SHA shall be the primary business identifier.
+
+### AC-16
+Imported Git metadata shall refresh correctly.
+
+### AC-17
+Manual overrides, approvals, comments, and audit history shall never be lost during refresh.
+
+### AC-18
+Removed commits shall be marked instead of immediately deleted.
+
+### AC-19
+Commit validation history shall be preserved independently of imported metadata.
+
+### AC-20
+Issue Type shall be fetched, persisted, and displayed using compact standard icons with hover text.
+
+### AC-21
+Every violation shall have a category, detailed explanation, and recommended resolution.
+
+### AC-22
+Hovering over the information icon shall clearly explain the violation and recommended action.
+
+### AC-23
+Reactive parallel processing shall be used wherever beneficial to improve performance.
+
+### AC-24
+Execution timing logs shall be available for all major operations.
+
+### AC-25
+A Kubernetes research document shall accompany the implementation.
+
+### AC-26
+The implementation shall remain fully backward compatible until the new production-based approach has been validated and explicitly approved for replacing the existing logic.
+
+---
+
+# Implementation Notes
+
+- Do not remove any existing functionality unless explicitly instructed.
+- Prefer extending existing services over creating duplicate logic.
+- Keep all new behavior configurable where appropriate.
+- Ensure all database migrations preserve existing data.
+- Follow clean architecture principles and maximize code reuse.
+- The implementation is considered complete only when **every Functional Requirement (FR)** and **every Acceptance Criterion (AC)** in this document has been satisfied.
