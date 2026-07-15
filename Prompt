@@ -1,554 +1,531 @@
-# Phase 9 – Logging, Runtime Configuration, UI/UX & Background Job Enhancements
-## Functional Requirements & Acceptance Criteria (Revision 1)
+# Phase 10 – Database Re-Architecture, Metadata Management, Backup & Recovery
+## Functional Requirements & Acceptance Criteria
 
-> **Purpose**
+> **Objective**
 >
-> This phase focuses on improving observability, logging, runtime diagnostics, user experience, background processing, and application usability. All requirements below are **mandatory** unless explicitly marked otherwise.
+> This phase focuses entirely on re-architecting the persistence layer. The goal is to make the application production-ready from a database perspective while preserving all existing functionality. This should be treated as a database architecture exercise rather than a simple implementation task.
 
 ---
 
-# 1. Objective
+# 1. Overall Design Principles
 
-Enhance the application by introducing:
+The implementation must be approached from the perspective of an experienced:
 
-- Enterprise-grade logging
-- Runtime log level switching
-- Better auditability
-- Improved background job experience
-- Better cache utilization
-- Better Generate Report workflow
-- Improved Settings integration
-- UI usability improvements
-- Fix Version loading improvements
+- Enterprise Database Architect
+- Solution Architect
+- Backend Architect
+- Spring Boot Architect
+- Production Support Engineer
 
-The implementation should follow enterprise Java/Spring Boot best practices.
+The database should be redesigned considering future migration to PostgreSQL or Azure SQL Database while continuing to use H2 during development.
 
----
+**Important Constraints**
 
-# 2. Functional Requirements
-
----
-
-# FR-1 Enterprise Logging Framework
-
-Implement consistent logging across the entire application.
-
-Logging shall be available for:
-
-- UI Actions
-- REST Controllers
-- Services
-- Repository Layer
-- Scheduled Jobs
-- Background Jobs
-- External API Calls
-- Authentication
-- Authorization
-- Override Workflow
-- Approval Workflow
-- Generate Report
-- Kubernetes Calls
-- GitHub Calls
-- iTrack Calls
-- Veracode Calls
-- Database Updates
+- Existing functionality must not break.
+- Existing APIs must continue to work.
+- Existing UI must continue to work.
+- Existing reports must continue to work.
+- Existing background jobs must continue to work.
+- Existing overrides, approvals, comments, and audit history must be preserved.
 
 ---
 
-# FR-2 User Context Logging
+# 2. Database Architecture Review
 
-Every log entry shall include the authenticated user.
+## FR-1 Complete Database Review
 
-Use MDC (Mapped Diagnostic Context).
+Perform a complete review of every database object.
 
-Populate MDC with at minimum:
+Review:
 
-- Username
-- User Role
-- Session ID (if available)
-- Correlation ID
-- Request ID
+- Tables
+- Columns
+- Primary Keys
+- Indexes
+- Constraints
+- Relationships
+- Data Types
+- Naming Standards
 
-All logs generated during the request lifecycle shall automatically include this information.
-
----
-
-# FR-3 Logging Standards
-
-Follow Spring Boot / SLF4J logging best practices.
-
-Use log levels appropriately.
-
-### INFO
-
-Business events
-
-Examples:
-
-- User logged in
-- Fetch Stories started
-- Generate Report started
-- Override submitted
-- Approval completed
-- Background Job started
-- Background Job completed
+Prepare the database so it can later migrate to PostgreSQL/Azure SQL with minimal effort.
 
 ---
 
-### DEBUG
+## FR-2 Remove Unused Database Objects
 
-Detailed execution information
+Review every table currently available.
 
-Examples:
+For each table classify it as:
 
-- API payload summaries
-- Query execution details
-- Branch comparison details
-- Commit analysis
-- Kubernetes label parsing
-- Cache hit/miss information
+- Required
+- Required for future
+- Deprecated
+- Can be removed
 
-Avoid logging sensitive data such as tokens, cookies, passwords, or secrets.
+Do **not** remove tables that are planned for future features.
 
----
+However, if tables such as old project metadata or unused lookup tables are no longer referenced anywhere in the application (UI, backend, jobs, reports, APIs), they should be removed after verifying no dependencies exist.
 
-### WARN
+Examples to review:
 
-Recoverable issues
-
-Examples:
-
-- Missing optional configuration
-- Retry initiated
-- Missing deployment labels
+- Project Keys
+- Fix Versions
+- Lookup Tables
+- Temporary Tables
+- Old Metadata Tables
 
 ---
 
-### ERROR
+## FR-3 Normalize Where Appropriate
 
-Unexpected failures
+Review whether any table should be normalized.
 
-Include full stack trace where appropriate.
+Do **not** over-engineer.
+
+Avoid unnecessary joins.
+
+Prefer readability and maintainability over excessive normalization.
 
 ---
 
-# FR-4 Runtime Log Level Control
+## FR-4 Foreign Keys & Relationships
 
-Introduce runtime log-level configuration.
+Review all entities.
 
-Only **Admin** users shall have access.
+Where business relationships genuinely exist, introduce appropriate foreign keys.
 
-Settings Page
+Examples (where applicable):
 
-Add:
+- Team → Fix Version
+- Scan → Team
+- Scan → Fix Version
+- Override → Commit
+- Approval → Override
+- Story → Scan
+- Component → Team
+
+Only introduce relationships where they provide real business value.
+
+Avoid creating unnecessary complexity.
+
+---
+
+# 3. Standard Audit Columns
+
+Every business table should include standard audit columns where applicable.
+
+Recommended columns:
 
 ```
-Application Log Level
+created_at
+created_by
+updated_at
+updated_by
 ```
 
-Supported values:
+Use UTC timestamps.
 
-- INFO
-- DEBUG
-
-When changed,
-
-new requests shall immediately use the selected log level without requiring an application restart.
-
-If runtime switching cannot safely change framework logger levels, implement an application-level logging toggle for custom debug logs while documenting the limitation.
+Populate automatically using Spring Data auditing where possible.
 
 ---
 
-# FR-5 UI Action Logging
+# 4. Preserve User Data
 
-Log all significant UI actions.
+## FR-5 Preserve Manual Comments
+
+User-entered information must never be lost.
 
 Examples:
 
-- Team selected
-- Fix Version selected
-- Fetch Stories
-- Fetch Components
-- Generate Report
-- Review Commits opened
-- Override Requested
-- Override Approved
-- Release Readiness viewed
-- Scan History viewed
-- Settings updated
-- Test Connection executed
+- Override comments
+- Approval comments
+- Manual notes
 
-Every action shall include:
+When a Force Refresh or Refresh operation occurs:
 
-- Username
-- Timestamp
-- Team
-- Fix Version (where applicable)
+- External system data may be refreshed.
+- System-generated metadata may be overwritten.
+- User-entered comments and approvals must always be preserved.
+
+This is a mandatory requirement.
 
 ---
 
-# FR-6 Comment Length Enhancement
+## FR-6 Smart Merge Strategy
 
-Increase Override Comment capacity.
+When refreshing data from GitHub, iTrack, Kubernetes, or Veracode:
 
-Target:
+Do not blindly delete and insert.
 
-Up to 2000 characters.
+Instead:
 
-Minimum acceptable:
+- Match using business keys (e.g., Commit SHA, Story ID, Component Name).
+- Update system-managed fields.
+- Preserve user-managed fields.
+- Insert new records.
+- Mark removed records appropriately if needed.
 
-1000 characters.
+Avoid destructive refresh operations.
 
-If database limitations exist,
+---
 
-minimum acceptable size:
+# 5. Timestamp-Based Refresh Logic
 
-500 characters.
+Whenever duplicate records exist during synchronization:
+
+Prefer the latest record based on:
+
+```
+updated_at
+```
+
+Only overwrite records when the incoming data is newer or represents a valid refresh.
+
+---
+
+# 6. Database Backup & Recovery
+
+## FR-7 Automatic Backup
+
+The application currently uses an H2 database.
+
+Since H2 is not intended for production persistence, implement an automatic backup mechanism.
+
+Every 15 minutes:
+
+- Export the latest database state.
+- Store it in the configured backup location.
+
+Initially, the backup target will be the local file system.
+
+The design should be abstracted so that Azure Blob Storage can later replace the local file system with minimal changes.
+
+---
+
+## FR-8 Restore on Startup
+
+During application startup:
+
+If the H2 database is empty or recreated:
+
+- Detect the latest available backup.
+- Restore the database automatically.
+- Resume normal application operation.
+
+This should be transparent to the user.
+
+---
+
+## FR-9 Backup Service Abstraction
+
+Create a storage abstraction.
+
+Example:
+
+```
+StorageProvider
+
+FileSystemStorageProvider
+
+AzureBlobStorageProvider
+```
+
+The application should not directly depend on the storage implementation.
+
+Future migration to Azure Blob Storage should only require changing the provider configuration.
+
+---
+
+# 7. Azure Blob Storage Readiness
+
+Do **not** implement Azure Blob integration yet.
+
+Instead:
+
+Prepare the architecture.
+
+Document the required configuration.
+
+Expected future configuration:
+
+- Storage Account
+- Container Name
+- Connection String or Managed Identity
+- SAS Token (optional)
+- Backup Folder
+- Restore Folder
+
+Add these items to:
+
+```
+docs/pending-items.md
+```
+
+with clear implementation notes.
+
+---
+
+# 8. Database Migration Scripts
+
+Generate production-ready DDL scripts.
+
+Provide scripts for:
+
+- PostgreSQL
+- Azure SQL (where compatible)
+
+Scripts should include:
+
+- Tables
+- Primary Keys
+- Foreign Keys
+- Constraints
+- Indexes
+- Audit Columns
+
+Store scripts in a dedicated migration folder.
+
+Example:
+
+```
+database/
+
+    postgres/
+
+    azure-sql/
+
+    migrations/
+
+```
+
+Future Flyway/Liquibase compatibility should be considered.
+
+---
+
+# 9. Team Configuration Metadata
+
+## FR-10 Re-Architect Team Configuration
+
+Currently, team configuration is stored in YAML.
+
+Future goal:
+
+Support onboarding new teams without code changes.
+
+Introduce database support for Team Configuration.
+
+Examples:
+
+- Team Name
+- GitHub Organization
+- Repository Patterns
+- Helm Repository
+- Kubernetes Namespaces
+- Cluster URLs
+- Branch Naming Rules
+- Library Definitions
+- iTrack Project
+- Component Rules
+- Previous Branch Strategy
+- Deployment Strategy
+
+---
+
+## FR-11 Hybrid Configuration
+
+Current behavior:
+
+Configuration continues loading from YAML.
+
+Future behavior:
+
+Configuration loads from Database.
+
+For now:
+
+Implement database tables.
+
+Populate from YAML if necessary.
+
+Do not switch runtime loading yet.
+
+This future migration should be documented in:
+
+```
+docs/pending-items.md
+```
+
+---
+
+# 10. Team Onboarding Readiness
+
+The database design should support onboarding additional teams.
+
+Goal:
+
+A future administrator should only need to insert metadata into database tables to onboard a new team.
+
+No code changes should be required.
+
+---
+
+# 11. iTrack Metadata
+
+Move configurable iTrack-related metadata into Team Configuration.
+
+Examples:
+
+- Project Keys
+- Story Fields
+- Issue Type Mapping
+- Custom Field IDs
+
+Initially continue loading from YAML.
+
+Database support should be ready.
+
+---
+
+# 12. Pending Items Documentation
 
 Update:
 
-- Database column
-- Entity validation
-- DTO validation
-- UI validation
-
-All layers must remain consistent.
-
----
-
-# FR-7 Long Comment UI
-
-Review the UI behavior for long comments.
-
-Requirements:
-
-- Multi-line text area
-- Character counter
-- Graceful wrapping
-- Responsive layout
-- Read More / Read Less (if needed)
-- Proper scrolling for lengthy content
-
-The page must remain clean and readable.
-
----
-
-# FR-8 Loading Message Improvements
-
-During Component loading,
-
-display:
-
-- Team
-- Fix Version
-
-Example:
-
 ```
-Loading components for
-
-Team: OC Platform
-
-Fix Version: 25.14
-
-Please wait...
+docs/pending-items.md
 ```
 
-This removes ambiguity for long-running operations.
+Include:
+
+- Azure Blob integration
+- Database migration
+- YAML → Database migration
+- Team onboarding steps
+- Flyway/Liquibase adoption
+- Production backup configuration
+- Metadata migration
+- Configuration cache strategy
+
+This document should become the project's central implementation checklist.
 
 ---
 
-# FR-9 Background Job Continuity
+# 13. Performance Review
 
-Background jobs shall continue executing independently of UI navigation.
+Review the database for:
 
-Users shall be able to navigate freely without interrupting running jobs.
+- Missing indexes
+- Frequently queried columns
+- Composite indexes
+- Slow lookup paths
+- Duplicate scans
+- Full table scans
 
-Job execution shall not depend on the current browser page.
+Recommend and implement appropriate indexing where justified.
 
----
-
-# FR-10 Automatic Cache Usage
-
-Once a background job completes,
-
-all generated data shall be stored in the database.
-
-Subsequent requests shall load data from the database cache instead of re-fetching external systems unless the user explicitly performs a Force Refresh.
-
-This includes:
-
-- Stories
-- Components
-- Previous Release Metadata
-- Kubernetes Metadata
-- Configuration Differences
-- Deployment Readiness
+Avoid unnecessary indexes.
 
 ---
 
-# FR-11 Background Job Completion Message
+# 14. Future Production Readiness
 
-During long-running operations,
+Ensure the design supports future migration to:
 
-display friendly status messaging.
-
-Example:
-
-```
-Your report is being generated.
-
-Feel free to continue using the application.
-
-The results will automatically become available once processing completes.
-```
-
-Avoid blocking the UI.
-
-Do not freeze the browser.
+- PostgreSQL
+- Azure SQL
+- Azure Blob Storage
+- Multiple Teams
+- Multiple Environments
+- Larger datasets
+- High-volume refresh operations
 
 ---
 
-# FR-12 Fix Version Loading
-
-Review the Fix Version implementation.
-
-Requirements:
-
-- Load Fix Versions directly from the database.
-- Eliminate duplicate entries.
-- Do not derive or calculate release identifiers.
-- Respect the existing data model.
-- Use only the persisted Fix Version values.
-
----
-
-# FR-13 Fix Version Metadata
-
-Review Fix Version fields.
-
-Current understanding:
-
-- From Date
-- To Date
-
-Validate the existing implementation.
-
-Do not introduce unnecessary calculated dates.
-
-If an additional date exists, verify whether it is required.
-
-Remove or ignore it if it serves no business purpose.
-
----
-
-# FR-14 Generate Report Validation
-
-The Generate Report page shall include a lightweight **Validate Connections** action.
-
-Purpose:
-
-Allow users to verify required external connections without navigating to Settings.
-
-This action shall test only the minimum required connections.
-
-Mandatory:
-
-- GitHub
-- iTrack
-- Production East OR Production West Kubernetes
-
-Display pass/fail status for each dependency.
-
-This validation shall not modify stored credentials.
-
----
-
-# FR-15 Settings Ownership
-
-Credentials shall only be entered and modified in the Settings page.
-
-Remove credential input fields from other pages.
-
-Other pages may:
-
-- Display connection status
-- Trigger connection validation
-
-They must not allow credential editing.
-
----
-
-# FR-16 Connection Validation
-
-Any page requiring external integrations may include a **Test Connection** action.
-
-This action shall:
-
-- Use credentials already stored in Settings
-- Perform validation
-- Update connection status indicators
-- Never request credentials again
-
----
-
-# FR-17 Background Job UX
-
-All long-running operations shall be asynchronous.
-
-Provide:
-
-- Job ID
-- Current Status
-- Started Time
-- Last Updated Time
-- Completion Time (when available)
-
-Users shall be able to monitor progress through Scan History or Job History.
-
----
-
-# FR-18 Logging for Background Jobs
-
-Every background job shall log:
-
-- Job ID
-- User
-- Team
-- Fix Version
-- Start Time
-- End Time
-- Duration
-- Success/Failure
-- External systems accessed
-- Number of records processed
-
----
-
-# FR-19 Cache Logging
-
-Log cache behavior.
-
-Examples:
-
-- Cache Hit
-- Cache Miss
-- Cache Refresh
-- Force Refresh
-- Database Reload
-
-These logs should primarily be DEBUG level.
-
----
-
-# FR-20 Security
-
-Never log:
-
-- GitHub Tokens
-- iTrack Tokens
-- Kubernetes Cookies
-- Veracode Keys
-- Passwords
-- Authorization Headers
-- Session Secrets
-
-Sensitive values must always be masked or omitted.
-
----
-
-# 3. Non-Functional Requirements
-
-- Follow SLF4J logging best practices.
-- Keep log messages structured and meaningful.
-- Avoid duplicate logging.
-- Ensure asynchronous jobs are resilient.
-- Preserve existing functionality.
-- Avoid UI blocking.
-- Maintain backward compatibility.
-- Use reusable helper classes where appropriate.
-
----
-
-# 4. Acceptance Criteria
+# 15. Acceptance Criteria
 
 ### AC-1
-Enterprise logging shall be implemented consistently across UI, backend, services, repositories, and background jobs.
+Perform a complete review of the existing database schema and redesign where necessary without breaking existing functionality.
 
 ### AC-2
-Every log entry shall include user context using MDC (Username, Role, Correlation ID, etc.).
+Remove only genuinely unused tables or columns after verifying they are not referenced anywhere in the application.
 
 ### AC-3
-Logging levels shall follow INFO, DEBUG, WARN, and ERROR best practices.
+Introduce foreign keys and relationships only where they add real business value and do not overcomplicate the schema.
 
 ### AC-4
-Only Admin users shall be able to change the runtime log level.
+All business tables should include standard audit fields (`created_at`, `created_by`, `updated_at`, `updated_by`) where applicable.
 
 ### AC-5
-Runtime log level changes shall take effect without restarting the application where technically feasible.
+Manual user-entered data (comments, approvals, notes, overrides) must always be preserved during refresh operations.
 
 ### AC-6
-All major UI actions shall be logged with sufficient business context.
+Refresh operations must perform intelligent merge/upsert logic instead of destructive delete-and-reinsert operations.
 
 ### AC-7
-Override comments shall support at least 1000 characters (preferably up to 2000), with all application layers updated accordingly.
+Record synchronization should use timestamps and business keys to determine the latest valid data.
 
 ### AC-8
-The UI shall remain clean and readable when displaying lengthy comments.
+Implement an automatic backup mechanism that exports the database to the local file system every 15 minutes.
 
 ### AC-9
-Component loading messages shall display both Team and Fix Version.
+On application startup, automatically restore the most recent backup if the H2 database is empty or recreated.
 
 ### AC-10
-Background jobs shall continue running even if users navigate away from the current page.
+Implement a storage abstraction that supports both local file storage now and Azure Blob Storage in the future.
 
 ### AC-11
-Completed job results shall be persisted and reused from the database cache.
+Document all Azure Blob Storage prerequisites and pending implementation tasks in `docs/pending-items.md`.
 
 ### AC-12
-Long-running operations shall never block or freeze the UI.
+Generate production-ready DDL scripts for PostgreSQL and Azure SQL, including constraints, indexes, and audit fields.
 
 ### AC-13
-Friendly progress messages shall be displayed while background jobs are executing.
+Introduce database structures for Team Configuration while continuing to load runtime configuration from YAML during the current development phase.
 
 ### AC-14
-Fix Version values shall be loaded directly from the database without duplicates or unnecessary calculations.
+Ensure the database design supports onboarding new teams using metadata only, without requiring code changes.
 
 ### AC-15
-Only valid Fix Version metadata shall be displayed.
+Move configurable iTrack metadata into the Team Configuration model while keeping YAML as the current runtime source.
 
 ### AC-16
-Generate Report shall include a lightweight **Validate Connections** action for required integrations.
+Review and optimize indexes based on actual query patterns and expected production usage.
 
 ### AC-17
-Credential management shall remain exclusive to the Settings page.
+Maintain full backward compatibility with the existing UI, APIs, reports, background jobs, and business workflows.
 
 ### AC-18
-Other pages may validate connections but shall never allow credential editing.
+Do not introduce unnecessary normalization, joins, or architectural complexity; prioritize maintainability and performance.
 
 ### AC-19
-Background jobs shall expose Job ID, execution status, timestamps, and processing metrics.
+All future migration activities (YAML-to-DB, Azure Blob integration, Flyway/Liquibase adoption, production configuration) must be tracked in `docs/pending-items.md`.
 
 ### AC-20
-Background job execution shall be fully logged.
-
-### AC-21
-Cache usage (hits, misses, refreshes) shall be logged at DEBUG level.
-
-### AC-22
-No sensitive credentials, cookies, or secrets shall ever be written to application logs.
-
-### AC-23
-All enhancements shall remain backward compatible with the existing implementation.
+The persistence layer should be production-ready, cloud-ready, and capable of scaling to additional teams and environments without requiring structural redesign.
 
 ---
 
-# Implementation Notes
+# Additional Architectural Recommendations (Please Evaluate)
 
-- Reuse existing services wherever possible.
-- Avoid duplicate implementations.
-- Prefer configuration-driven behavior.
-- Keep logging structured, searchable, and suitable for production support.
-- Validate all UI changes with long-running operations and large datasets.
-- Consider future integration with centralized logging platforms (e.g., ELK/OpenSearch, Splunk, Azure Monitor) by using consistent log formats and correlation IDs.
-- The implementation is complete only when all Functional Requirements (FR) and Acceptance Criteria (AC) in this document have been satisfied.
+1. **Introduce optimistic locking (`version` column)** on mutable business entities to prevent concurrent update conflicts.
+
+2. **Adopt soft-delete (`is_deleted`) only for business records** where historical traceability is important, instead of permanently deleting data.
+
+3. **Separate reference/master data from transactional data** (e.g., Team Configuration, Fix Versions, Namespace Metadata vs. Stories, Commits, Overrides).
+
+4. **Create reusable synchronization services** for GitHub, iTrack, Kubernetes, and Veracode so all refresh operations follow a consistent merge strategy.
+
+5. **Define clear retention policies** for backups, scan history, and transient job data (e.g., retain backups for 30 days, purge old job logs after a configurable period).
+
+6. **Use Flyway (preferred) or Liquibase** from the beginning for all schema evolution instead of manually maintaining DDL over time.
+
+7. **Abstract configuration loading** behind a `ConfigurationProvider` interface so switching from YAML to database becomes a configuration change rather than a code rewrite.
+
+8. **Keep H2 strictly as a development database** and ensure no H2-specific SQL features are introduced that would complicate PostgreSQL or Azure SQL migration.
+
+9. **Document the complete Entity Relationship Diagram (ERD)** and include it in the project documentation to simplify onboarding and long-term maintenance.
+
+10. **Validate the redesigned schema against expected production workloads**, especially around commit history, background jobs, approval workflows, deployment metadata, and future multi-team expansion.
+
+---
+
+**Implementation Note:** This phase is an architectural refactoring. Any schema changes must include backward-compatible data migration logic where required, and all existing business functionality must continue to work without regression.
