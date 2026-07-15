@@ -1,645 +1,371 @@
-# Phase 8 – Release Commit Validation & Compliance Enhancements
-## Consolidated Functional Requirements & Acceptance Criteria (Revision 1)
+# Phase 8 (Revision 2)
+## Commit Lifecycle Classification & Industry Best Practices
 
-> **Purpose**
->
-> This document consolidates all requirements discussed during this phase. Every requirement below is **mandatory** unless explicitly marked as optional. The implementation **must not omit, simplify, or replace** any requirement without explicit approval.
-
----
-
-# 1. Objective
-
-Enhance the Release Commit Compliance Portal by improving:
-
-- Release commit discovery
-- Previous release identification
-- Kubernetes integration
-- Commit validation
-- Trunk-based release validation
-- Refresh behavior
-- Library handling
-- UI improvements
-- Performance
-- Compliance validations
-- Auditability
-
-The implementation must remain backward compatible with the existing implementation until the new approach has been validated.
+> This document extends the existing Phase 8 implementation.
+> Existing functionality must remain intact unless explicitly stated otherwise.
 
 ---
 
-# 2. Background
+# Objective
 
-Our development model is:
+Enhance Release Commit Validation by introducing intelligent commit lifecycle analysis.
 
-- Developers continuously commit code to the **main/master branch**.
-- Every Major Release creates a **Release Branch** approximately **14 days before Production Release**.
-- Development continues on Main.
-- Remaining release stories are merged/cherry-picked into the Release Branch until Release completion.
-- Weekly/Bi-weekly releases are performed.
+Instead of classifying commits only as "OK" or "Violation", the system shall determine the actual lifecycle state of every commit using Git history analysis.
 
-The implementation must support this workflow.
+This will significantly reduce false positives and provide much more meaningful release governance.
 
 ---
 
-# 3. Functional Requirements
+# FR-31 Commit Lifecycle Analysis
+
+The system shall analyze every commit collected during Release Validation.
+
+Each commit shall be classified into one of the lifecycle states defined below.
 
 ---
 
-## FR-1 Generate Report Preconditions
+# FR-32 Commit States
 
-Before enabling **Fetch Stories**, validate the following connections.
+Instead of showing only:
 
-Mandatory:
+- OK
+- Violation
 
-- GitHub Token
-- iTrack Token
-- At least one Production Kubernetes Cookie
-    - Production East
-    - OR Production West
+Introduce the following states.
 
-If any mandatory connection is unavailable:
+### State 1
 
-- Disable Fetch Stories.
-- Clearly indicate which dependency is missing.
-- Display user-friendly status indicators.
+OK
 
----
+Meaning
 
-## FR-2 Connection Status Indicators
+Valid release commit.
 
-Display connection status using visual indicators.
+Commit exists.
 
-Example:
-
-✅ Connected
-
-❌ Not Connected
-
-⚠ Configuration Missing
-
-Do not display technical exceptions directly.
+No issue detected.
 
 ---
 
-## FR-3 Library Identification
+### State 2
 
-Introduce support for Library Components.
+Missing In Release
 
-Libraries shall be defined through Team Configuration.
+Meaning
 
-Libraries are NOT deployable microservices.
+Commit exists on Main.
 
-Libraries are dependency artifacts only.
+Expected for Release.
 
-UI must visually differentiate:
+Missing from Release Branch.
 
-- Microservice
-- Library
+Action
 
----
-
-## FR-4 Library Processing Rules
-
-Libraries shall:
-
-Participate in:
-
-- Git Commit Analysis
-- Story Validation
-
-Skip:
-
-- Kubernetes Deployment Validation
-- Deployment Readiness
-- Previous Production Version Discovery
-- Blue/Green Validation
+Violation.
 
 ---
 
-## FR-5 Previous Release Version Resolution
+### State 3
 
-Remove the previous configuration switch.
+Reverted
 
-The system shall always resolve Previous Release Version using the following priority.
+Meaning
 
-Priority 1
+The original commit was introduced into the Release Branch but was later reverted using Git Revert.
 
-Production Kubernetes
+This shall NOT be displayed as a normal violation.
+
+Instead display
+
+Status
+
+Reverted
+
+Reason
+
+Commit intentionally reverted from Release Branch.
+
+---
+
+### State 4
+
+Cherry Picked
+
+Meaning
+
+Commit exists through Cherry Pick.
+
+Different SHA may exist.
+
+Equivalent code exists.
+
+Not a violation.
+
+---
+
+### State 5
+
+Direct Release Commit
+
+Meaning
+
+Developer committed directly into Release Branch.
+
+Highlight separately.
+
+---
+
+### State 6
+
+Unknown
+
+Meaning
+
+Unable to confidently determine lifecycle.
+
+Requires Manual Verification.
+
+---
+
+# FR-33 Revert Detection
+
+The implementation shall detect Git Revert operations.
+
+Review GitHub and Git documentation.
+
+Possible detection techniques include:
+
+- Standard "Revert" commit messages.
+- References to reverted commit SHA.
+- Parent commit relationships.
+- Patch comparison where applicable.
+
+The implementation shall not rely only on commit message text.
+
+If possible,
+
+also verify through Git history relationships.
+
+---
+
+# FR-34 Revert Classification
+
+If
+
+Commit A
 
 ↓
 
-Priority 2
+Later
 
-Existing Git-based implementation
+Revert Commit B
 
 ↓
 
-Priority 3
+Successfully reverses Commit A
 
-Leave Previous Release empty for manual selection.
+Then
 
-The existing implementation shall remain as a fallback until explicitly removed.
+Commit A
 
----
+Status
 
-## FR-6 Production Deployment Metadata
+Reverted
 
-Retrieve deployment metadata from Kubernetes.
+Commit B
 
-At minimum capture:
+Status
 
-- Git Branch
-- Git Commit SHA
-- Build Number
-- Image Tag
-- Deployment Timestamp
-- Pipeline Information
-- Release Version
-- Additional deployment labels
+Revert Operation
 
-Persist all metadata into the database.
+The UI shall clearly indicate that the original change has already been reverted.
+
+This should not appear as an active violation.
 
 ---
 
-## FR-7 Kubernetes Metadata Service
+# FR-35 Commit Status Priority
 
-Create one reusable service.
+Display priority shall follow:
+
+Reverted
+
+↓
+
+Missing In Release
+
+↓
+
+Direct Release Commit
+
+↓
+
+Cherry Picked
+
+↓
+
+OK
+
+↓
+
+Unknown
+
+---
+
+# FR-36 Refresh Behaviour
+
+During Force Refresh
+
+Commit lifecycle states shall be recalculated.
+
+Previous manual approvals shall remain unchanged.
+
+---
+
+# FR-37 UI Enhancements
+
+Replace generic status text.
+
+Use badges.
+
+Examples
+
+🟢 OK
+
+🟡 Reverted
+
+🔵 Cherry Picked
+
+🟠 Direct Release
+
+🔴 Missing
+
+⚪ Unknown
+
+Use existing project theme.
+
+Avoid bright colors.
+
+---
+
+# FR-38 Tooltip
+
+Every status badge shall display:
+
+- Reason
+- Detection Method
+- Validation Rule
+- Suggested Action
 
 Example
 
-KubernetesDeploymentMetadataService
+Status
 
-Responsibilities:
+Reverted
 
-- Discover Deployment
-- Detect Active Blue/Green
-- Read Labels
-- Parse Metadata
-- Return Common DTO
+Tooltip
 
-No duplicate implementations.
+"This commit was previously introduced into the Release Branch and later reverted using Git Revert. No additional action is currently required."
 
 ---
 
-## FR-8 Release Commit Analysis
+# FR-39 Git History Analysis
 
-Current implementation compares:
+During validation
 
-Previous Release
+Analyze:
 
-↓
-
-Current Release
-
-Continue using this implementation.
-
-Do NOT remove it.
-
----
-
-## FR-9 Production Commit Anchor
-
-Additionally retrieve:
-
-Production Git Commit SHA.
-
-This commit becomes the deployment anchor.
-
-Initially compare both approaches.
-
-Log differences.
-
-Do not replace the current implementation until validated.
-
----
-
-## FR-10 Commit Collection Strategy
-
-Collect commits from:
-
-- Release Branch
-- Production Deployment Metadata
-
-Validate both.
-
-Compare results.
-
----
-
-## FR-11 Main Branch Validation
-
-After Release Branch creation:
-
-Developers continue committing to Main.
-
-The implementation shall:
-
-- Analyze Main branch.
-- Consider commits after Release Branch creation.
-- Filter commits belonging only to Release Stories.
-
-Ignore unrelated commits.
-
----
-
-## FR-12 Missing Release Commit Detection
-
-If a Release Story contains commits on Main
-
-BUT
-
-those commits are not available in Release Branch
-
-Create Violation.
-
----
-
-## FR-13 Hard Push / Cherry Pick Support
-
-Correctly handle:
-
+- Parent commits
+- Merge commits
 - Cherry Picks
-- Direct Release Branch Commits
-- Squash Merge (where detectable)
-- Rebase (where detectable)
+- Revert commits
+- Branch ancestry
 
-If uncertain
-
-Perform additional history analysis.
+Do not rely solely on branch comparison.
 
 ---
 
-## FR-14 Commit History Fallback
+# FR-40 Branch Cut Awareness
 
-If Production SHA cannot be found:
+The implementation shall consider the Release Branch creation point.
 
-Search configurable commit history.
+Only commits after the branch cut shall participate in Missing Commit analysis.
 
-Example:
-
-100 commits backwards.
-
-This value must be configurable.
-
-Never hardcode.
+Commits before branch cut shall never be reported as missing.
 
 ---
 
-## FR-15 Story Filtering
+# FR-41 Manual Verification
 
-Only Release Stories shall participate.
+If lifecycle cannot be determined with confidence,
 
-Ignore commits unrelated to Release Stories.
+mark
 
----
+Manual Verification Required.
 
-## FR-16 Commit Entity
-
-Treat Commit as Master Data.
-
-Suggested fields:
-
-- SHA
-- Repository
-- Branch
-- Story
-- Commit Date
-- Author
-- Committer
-- Source Branch
-- Release Branch
-- Merge Status
-- Validation Status
+Do not incorrectly report a violation.
 
 ---
 
-## FR-17 Commit Validation Table
+# Industry Best Practices
 
-Create separate validation entity.
+The implementation should follow these principles:
 
-Store:
-
-- Validation Type
-- Override Reason
-- Approval
-- Admin Decision
-- Comments
-- Audit History
-
-Never overwrite validation history.
-
----
-
-## FR-18 Refresh Behaviour
-
-Force Refresh shall update:
-
-- Git metadata
-- Story mappings
-- Branch mappings
-- Repository mappings
-
-Imported metadata shall be refreshed using the latest external data.
+1. Never rewrite Git history during validation.
+2. Treat Git Commit SHA as the primary identifier.
+3. Detect Git Revert instead of assuming deleted commits are missing.
+4. Differentiate Cherry Picks from Missing Commits.
+5. Use Production deployment metadata as the deployment anchor.
+6. Preserve complete audit history.
+7. Never delete imported commit history immediately.
+8. Keep validation deterministic and repeatable.
+9. Separate imported Git metadata from user actions (overrides/approvals).
+10. Produce explainable validation results rather than simple pass/fail statuses.
 
 ---
 
-## FR-19 Preserve Manual Actions
+# Acceptance Criteria
 
-Refresh shall NEVER delete:
+### AC-27
 
-- Override Reasons
-- Pending Approval
-- Approval History
-- Admin Decisions
-- Comments
-- Audit Trail
+The system shall classify every commit into one lifecycle state.
 
-These shall remain associated using Commit SHA wherever possible.
+### AC-28
 
----
+Git Revert operations shall be detected and classified correctly.
 
-## FR-20 Commit Identity
+### AC-29
 
-Commit SHA shall be treated as the primary business identifier.
+Reverted commits shall not be displayed as normal violations.
 
-Never rely solely on Commit Message.
+### AC-30
 
----
+Cherry-picked commits shall be distinguished from missing commits.
 
-## FR-21 Historical Consistency
+### AC-31
 
-If a refreshed import no longer contains an imported commit:
+Direct Release Branch commits shall be highlighted independently.
 
-Do NOT physically delete it immediately.
+### AC-32
 
-Mark it as:
+Commit lifecycle shall be recalculated during Force Refresh.
 
-Removed From Latest Import
+### AC-33
 
-This preserves auditability.
+Lifecycle classification shall not overwrite manual approvals or audit history.
 
----
+### AC-34
 
-## FR-22 Safe Refresh
+Every status badge shall include an explanatory tooltip.
 
-Only imported metadata may be refreshed.
+### AC-35
 
-Manual workflow information shall never be overwritten.
+Missing Commit validation shall consider the Release Branch cut date.
 
----
+### AC-36
 
-## FR-23 Story Issue Type
+Unknown lifecycle states shall be marked for Manual Verification instead of being incorrectly classified as violations.
 
-While fetching stories from iTrack,
+### AC-37
 
-also retrieve the **Issue Type**.
-
-Examples:
-
-- Story
-- Bug
-- Task
-- Epic
-- Spike
-- Improvement
-- Defect
-- Any additional supported issue types
-
-Persist the Issue Type in the database.
-
----
-
-## FR-24 Issue Type UI
-
-Display the Issue Type beside every Story.
-
-Do NOT display large text.
-
-Instead,
-
-display the standard issue icon.
-
-Examples:
-
-🐞 Bug
-
-📖 Story
-
-⚡ Task
-
-⭐ Epic
-
-(or the closest equivalent icon set already used by iTrack/Jira)
-
-The icon shall be:
-
-- Small
-- Consistent
-- Professional
-- Non-intrusive
-
-Hovering the icon shall display the Issue Type name.
-
----
-
-## FR-25 Violation Categories
-
-Replace generic "Violation".
-
-Introduce categories.
-
-Examples:
-
-- Missing Commit
-- Story Not Accepted
-- Missing Release Commit
-- Branch Validation Failed
-- Deployment Validation Failed
-- Configuration Difference
-- Manual Override Pending
-- Unknown
-
----
-
-## FR-26 Violation Explanation
-
-Every violation shall contain:
-
-- Type
-- Description
-- Reason
-- Suggested Resolution
-
----
-
-## FR-27 Violation Tooltip
-
-Every violation shall display an Information icon.
-
-Hovering shall explain:
-
-- Why it is a violation.
-- Which validation failed.
-- Which Story caused it.
-- Which Commit caused it.
-- Suggested next action.
-
-The explanation must be user-friendly.
-
----
-
-## FR-28 Performance
-
-Use parallel processing wherever possible.
-
-Preferred:
-
-Spring WebFlux
-
-Flux
-
-Mono
-
-Avoid sequential API processing.
-
----
-
-## FR-29 Logging
-
-Log execution timing.
-
-Examples:
-
-- Story Fetch
-- Component Fetch
-- Kubernetes Calls
-- Git Calls
-- Validation Time
-- Total Execution
-
----
-
-## FR-30 Kubernetes Research
-
-Review Kubernetes documentation.
-
-Document:
-
-- APIs evaluated
-- Deployment API
-- ReplicaSet API
-- Pod API
-- Label retrieval
-- Blue/Green detection
-- Deployment metadata strategy
-
-Create:
-
-docs/kubernetes-deployment-research.md
-
----
-
-# 4. Non-Functional Requirements
-
-- No duplicate implementations.
-- Prefer reusable services.
-- Configuration-driven behavior.
-- Backward compatible.
-- Thread-safe.
-- Production-ready.
-- Comprehensive logging.
-- Graceful error handling.
-- Modular architecture.
-
----
-
-# 5. Acceptance Criteria
-
-### AC-1
-Mandatory connections must be validated before Fetch Stories.
-
-### AC-2
-Connection status must be visible using user-friendly indicators.
-
-### AC-3
-Libraries must be visually distinguished and excluded from deployment-specific validations.
-
-### AC-4
-Previous Release Version must resolve using Kubernetes → Existing Logic → Manual Selection.
-
-### AC-5
-Production deployment metadata must be captured and persisted.
-
-### AC-6
-Only one reusable Kubernetes metadata service shall exist.
-
-### AC-7
-Existing Release comparison logic must remain intact.
-
-### AC-8
-Production Git Commit SHA must be collected and used as a deployment anchor.
-
-### AC-9
-Release Branch and Production metadata must both participate in commit analysis.
-
-### AC-10
-Main branch commits after Release Branch creation must be analyzed for Release Stories.
-
-### AC-11
-Missing commits belonging to Release Stories shall be reported as violations.
-
-### AC-12
-Cherry-picks, direct release commits, squash merges, and rebases shall be handled where possible.
-
-### AC-13
-Fallback commit history search shall be configurable.
-
-### AC-14
-Only Release Story commits shall participate in validation.
-
-### AC-15
-Commit SHA shall be the primary business identifier.
-
-### AC-16
-Imported Git metadata shall refresh correctly.
-
-### AC-17
-Manual overrides, approvals, comments, and audit history shall never be lost during refresh.
-
-### AC-18
-Removed commits shall be marked instead of immediately deleted.
-
-### AC-19
-Commit validation history shall be preserved independently of imported metadata.
-
-### AC-20
-Issue Type shall be fetched, persisted, and displayed using compact standard icons with hover text.
-
-### AC-21
-Every violation shall have a category, detailed explanation, and recommended resolution.
-
-### AC-22
-Hovering over the information icon shall clearly explain the violation and recommended action.
-
-### AC-23
-Reactive parallel processing shall be used wherever beneficial to improve performance.
-
-### AC-24
-Execution timing logs shall be available for all major operations.
-
-### AC-25
-A Kubernetes research document shall accompany the implementation.
-
-### AC-26
-The implementation shall remain fully backward compatible until the new production-based approach has been validated and explicitly approved for replacing the existing logic.
-
----
-
-# Implementation Notes
-
-- Do not remove any existing functionality unless explicitly instructed.
-- Prefer extending existing services over creating duplicate logic.
-- Keep all new behavior configurable where appropriate.
-- Ensure all database migrations preserve existing data.
-- Follow clean architecture principles and maximize code reuse.
-- The implementation is considered complete only when **every Functional Requirement (FR)** and **every Acceptance Criterion (AC)** in this document has been satisfied.
+The implementation shall preserve backward compatibility with all existing commit validation logic until the lifecycle engine has been fully validated.
