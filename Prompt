@@ -1,306 +1,149 @@
-# Phase 8.x Enhancement – Production Kubernetes Based Previous Branch Resolution & Commit Anchor Improvements
+# Phase 8.x Enhancement – Release Branch Resolution, Branch Cut Status & UI Simplification
 
 ## Objective
 
-Enhance the **Generate Report → Fetch Components** workflow to use **Production Kubernetes as the primary source of truth** for determining the previous release branch and production commit anchor. The existing GitHub-based approach should become a fallback, not the primary mechanism.
+Enhance the `release_branches` data model and Fetch Components workflow to improve release branch tracking, branch cut validation, production branch resolution, and library handling. These enhancements are incremental to the previous implementation and must not break any existing functionality.
 
 ---
 
 # Acceptance Criteria
 
-## AC-1: Production Kubernetes must be the Primary Source
+## AC-1: Add Branch Cut Status Column
 
-During **Fetch Components**, do **NOT** determine the previous branch directly from GitHub as the first approach.
+Enhance the `release_branches` table by introducing a new status column.
 
-Instead:
+Suggested names (choose the most appropriate one):
 
-1. Use the configured **Production Kubernetes cookie**.
-2. Connect to the configured Production Kubernetes cluster.
-3. Resolve the deployment for every **Main GitHub Repository**.
-4. **Do not process Helm repositories** for this operation.
+- `branch_cut_status`
+- `release_branch_status`
+- `branch_resolution_status`
 
----
+Preferred value examples:
 
-## AC-2: Resolve Active Deployment
+- `BRANCH_CUT_COMPLETED`
+- `BRANCH_CUT_PENDING`
 
-For every microservice:
-
-- Locate both Blue and Green deployments.
-- Determine which deployment is currently ACTIVE.
-
-Existing deployment selection logic should be reused.
-
-Validation should consider:
-
-- Active pod count
-- Deployment availability
-- Deployment timestamp
-- Existing active deployment validation logic
-
-Do not duplicate this implementation.
-
-Extract it into a reusable service if required.
+Avoid storing free-text messages.
 
 ---
 
-## AC-3: Read Deployment Labels
+## AC-2: Automatically Calculate Branch Cut Status
 
-Once the active deployment is identified:
+After the Current Branch has been resolved, determine whether the release branch has already been cut.
 
-Read deployment labels/metadata and capture:
+Use the existing Fix Version metadata.
 
-- Current deployed Git Branch
-- Git Commit SHA
-- Deployment Timestamp
-- Build information
-- Any additional useful deployment metadata already exposed through Kubernetes labels
+Each Fix Version already contains:
 
-Review the Kubernetes label payload and capture all meaningful metadata that may be useful for future reporting.
-
----
-
-## AC-4: Store Production Branch Information
-
-Enhance the `release_branches` table.
-
-For every component maintain:
-
-- Previous Branch (existing)
-- Production Previous Branch (new)
-- Production Commit Anchor (Git SHA)
-- Production Deployment Timestamp
-- Resolution Source
-- Last Updated Timestamp
-
-These fields must always be updated whenever Fetch Components performs a fresh refresh.
-
----
-
-## AC-5: Resolution Source
-
-Populate Resolution Source correctly.
-
-Possible values:
-
-- PROD_KUBERNETES
-- GITHUB_FALLBACK
-- MANUAL
-- USER_OVERRIDE
-
-Do not leave this value as MANUAL when the branch was resolved automatically.
-
-If branch came from Kubernetes:
-
-```
-Resolution Source = PROD_KUBERNETES
-```
-
-If GitHub fallback is used:
-
-```
-Resolution Source = GITHUB_FALLBACK
-```
-
-If user manually changes:
-
-```
-Resolution Source = USER_OVERRIDE
-```
-
----
-
-## AC-6: Branch Equality Detection
-
-Compare:
-
-Previous Branch
-
-vs
-
-Production Previous Branch
-
-If both are identical:
-
-- Automatically mark Resolution Source as:
-
-```
-PROD_KUBERNETES
-```
-
-This indicates that the automatically detected production branch has been accepted.
-
----
-
-## AC-7: Preserve Manual Override
-
-Users must still be able to manually change the Previous Branch.
-
-Do not remove this flexibility.
-
-Manual override should:
-
-- update Previous Branch
-- preserve Production Previous Branch
-- update Resolution Source = USER_OVERRIDE
-
-Production branch should never be overwritten by user edits.
-
----
-
-## AC-8: Store Production Commit Anchor
-
-Production Commit Anchor currently exists in the database.
-
-Ensure it is actually populated.
-
-Store:
-
-- Git Commit SHA
-- Full SHA if available
-- Short SHA may be displayed in UI
-
-Database should always store the complete SHA.
-
----
-
-## AC-9: Display Production Commit Anchor
-
-Expose Production Commit Anchor in the UI.
-
-Recommended display:
-
-Previous Branch
-
-Production Previous Branch
-
-Production Commit Anchor
-
-Resolution Source
-
-Deployment Timestamp
-
-Short SHA can be shown in UI.
-
-Full SHA should be available through:
-
-- Tooltip
-- Copy button
-- Hover popup
-
----
-
-## AC-10: Fetch Logic Priority
-
-Previous Branch resolution order must become:
-
-1. Production Kubernetes
-2. Existing GitHub Logic
-3. Blank (user selection)
-
-Never directly jump to GitHub without attempting Kubernetes first.
-
----
-
-## AC-11: Fallback Behaviour
-
-If Kubernetes lookup fails:
-
-Attempt existing GitHub logic.
-
-If GitHub also fails:
-
-Leave Previous Branch empty.
-
-Allow user selection.
-
-Log warning.
-
-Do not fail Fetch Components.
-
----
-
-## AC-12: Common Kubernetes Service
-
-All Kubernetes deployment metadata extraction should use one reusable service.
-
-This service should be reused by:
-
-- Deployment Readiness
-- Previous Branch Detection
-- Production Commit Anchor
-- Future Configuration Comparison
-- Future Release Validation
-
-Avoid duplicate Kubernetes API implementations.
-
----
-
-## AC-13: Performance
-
-Fetching deployment metadata should execute in parallel using Reactor.
-
-Use:
-
-- Flux
-- Mono
-- Parallel execution
-
-Avoid sequential Kubernetes calls.
-
-Limit concurrency appropriately to avoid overwhelming the Kubernetes API.
-
----
-
-## AC-14: Logging
-
-Log important milestones.
-
-Examples:
-
-- Production deployment detected
-- Active deployment identified
-- Branch resolved
-- Commit SHA resolved
-- Resolution source selected
-- GitHub fallback used
-- Manual override retained
-
-Use INFO logs.
-
-Detailed payloads should be DEBUG only.
-
-Include MDC username and Job ID in all logs.
-
----
-
-## AC-15: Database Updates
-
-Every successful Fetch Components execution should update:
-
-- Previous Branch
-- Production Previous Branch
-- Production Commit Anchor
-- Resolution Source
-- Deployment Timestamp
-- Updated Timestamp
-
-User comments and approval history must never be overwritten.
-
----
-
-## AC-16: UI Enhancements
-
-Display additional columns:
-
-- Previous Branch
-- Production Previous Branch
-- Production Commit Anchor
-- Resolution Source
-- Deployment Timestamp
-
-Use status badges for Resolution Source.
+- From Date
+- To Date
 
 Example:
+
+```
+Fix Version
+2026.07.18
+
+From
+12-Jul-2026
+
+To
+18-Jul-2026
+```
+
+The existing Current Branch selection logic already determines the latest release branch for the selected Fix Version.
+
+Reuse that logic.
+
+---
+
+## AC-3: Branch Cut Completed Rule
+
+If the resolved Current Branch belongs to the selected Fix Version window:
+
+```
+Branch Cut Status
+
+=
+
+BRANCH_CUT_COMPLETED
+```
+
+Example
+
+Selected Fix Version
+
+```
+12-Jul → 18-Jul
+```
+
+Resolved Current Branch
+
+```
+release/2026.07.18
+```
+
+Status
+
+```
+BRANCH_CUT_COMPLETED
+```
+
+---
+
+## AC-4: Branch Cut Pending Rule
+
+If no Current Branch exists for the selected Fix Version window:
+
+```
+Branch Cut Status
+
+=
+
+BRANCH_CUT_PENDING
+```
+
+This indicates that the release branch has not yet been created.
+
+---
+
+## AC-5: Store Branch Cut Status in Database
+
+Persist the calculated status into the `release_branches` table.
+
+It must be recalculated every time:
+
+- Fetch Components
+- Force Refresh
+- Generate Report
+- Component Refresh
+
+runs.
+
+Never rely on stale values.
+
+---
+
+## AC-6: Do Not Expose Internal Production Fields in UI
+
+The following fields are intended for backend processing only and **must not** be displayed in the UI:
+
+- Production Previous Branch
+- Production Commit Anchor
+- Production Deployment Timestamp
+- Production Environment Details
+- Kubernetes Deployment Metadata
+- Internal Resolution Metadata
+
+These values should continue to be stored in the database.
+
+---
+
+## AC-7: Display Only Resolution Source
+
+The UI should display only the **Resolution Source**.
+
+Examples:
 
 🟢 PROD_KUBERNETES
 
@@ -310,25 +153,185 @@ Example:
 
 ⚪ MANUAL
 
----
-
-## AC-17: Backward Compatibility
-
-Do not remove the existing GitHub branch detection logic.
-
-Retain it as a fallback until explicitly instructed to remove it.
+No additional production metadata should appear in the grid.
 
 ---
 
-# Expected Result
+## AC-8: Recalculate Resolution Source After User Changes
+
+When the user modifies the Previous Branch manually and proceeds with **Generate Report**:
+
+1. Refresh the latest Production Kubernetes information.
+2. Compare the selected Previous Branch with the Production Previous Branch.
+3. Recalculate the Resolution Source.
+
+Rules:
+
+If both branches match:
+
+```
+Resolution Source = PROD_KUBERNETES
+```
+
+If they differ because the user selected another branch:
+
+```
+Resolution Source = USER_OVERRIDE
+```
+
+If Production lookup failed and GitHub fallback was used:
+
+```
+Resolution Source = GITHUB_FALLBACK
+```
+
+This calculation must always reflect the latest state and should not rely on previously stored values.
+
+---
+
+## AC-9: Keep Production Metadata in Sync
+
+Every Generate Report execution must refresh:
+
+- Production Previous Branch
+- Production Commit SHA
+- Branch Cut Status
+- Resolution Source
+
+before persisting updates.
+
+---
+
+## AC-10: Helm Repository Must Always Follow Main Repository
+
+This is a mandatory consistency rule.
+
+Example:
+
+Main Repository
+
+```
+order-enrichment-ms
+```
+
+Helm Repository
+
+```
+order-enrichment-ms-helm
+```
+
+If the Main Repository resolves:
+
+```
+Previous Branch
+
+release/2026.07.18
+```
+
+then the Helm Repository must automatically use:
+
+```
+release/2026.07.18
+```
+
+The Helm repository should never attempt an independent Production Kubernetes lookup.
+
+It must inherit the values from its corresponding Main Repository.
+
+---
+
+## AC-11: Helm Resolution Source
+
+When the Helm branch is inherited from the Main Repository:
+
+```
+Resolution Source = PROD_KUBERNETES
+```
+
+Do not mark Helm repositories as Manual or GitHub unless the Main Repository itself used those mechanisms.
+
+This ensures complete consistency between Main and Helm repositories.
+
+---
+
+## AC-12: Library Repository Handling
+
+Some repositories are libraries and are **not deployed** into Kubernetes.
+
+Examples include (not limited to):
+
+- Camunda Common Resources
+- Camunda Pipeline Resources
+- OC-TMF Order Transform
+- Other shared libraries configured in Team Configuration
+
+These repositories should not use Production Kubernetes for Previous Branch resolution.
+
+Instead:
+
+- Continue using the existing GitHub-based branch resolution logic.
+- Do not attempt Kubernetes lookup.
+- Do not mark them as Production resolved.
+
+---
+
+## AC-13: Team Configuration for Libraries
+
+Maintain the list of library repositories in Team Configuration.
+
+For now:
+
+- Continue loading from the Team Configuration (YAML/config).
+- Do not hardcode library names.
+- Future migration to database configuration is already planned.
+
+---
+
+## AC-14: Library Resolution Source
+
+For library repositories:
+
+```
+Resolution Source = GITHUB_FALLBACK
+```
+
+unless the user manually changes the branch, in which case:
+
+```
+Resolution Source = USER_OVERRIDE
+```
+
+---
+
+## AC-15: Preserve Existing Functionality
+
+These enhancements must not impact:
+
+- Fetch Stories
+- Fetch Components
+- Generate Report
+- Review Commits
+- Release Readiness
+- Deployment Readiness
+- Configuration Comparison
+- SAST Scan
+- Approval Workflow
+- Override Workflow
+- Existing Branch Comparison Logic
+
+All existing features must continue to work without regression.
+
+---
+
+# Final Expected Behaviour
 
 After Fetch Components:
 
-- Production Kubernetes determines the actual deployed branch.
-- Active deployment is identified automatically.
-- Production Git Commit SHA is captured and stored.
-- Previous Branch and Production Previous Branch are both maintained.
-- Resolution Source clearly indicates how the branch was resolved.
-- GitHub remains only a fallback mechanism.
-- Existing workflows remain fully backward compatible.
-- All enhancements are implemented without breaking existing functionality.
+- Current Branch is resolved using the existing Fix Version logic.
+- Branch Cut Status is automatically calculated and stored.
+- Production metadata is stored internally but hidden from the UI.
+- Only Resolution Source is displayed to users.
+- Generate Report recalculates Resolution Source using the latest Production Kubernetes data.
+- Helm repositories always inherit branch information from their corresponding Main Repository.
+- Library repositories continue using GitHub-based branch resolution.
+- All enhancements remain backward compatible and do not break existing functionality.
