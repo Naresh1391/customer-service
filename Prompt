@@ -1,782 +1,334 @@
-# Phase - UI/UX Rebranding & Design System Modernization
-## SOC Compliance Portal
-### Version: UI Refresh 1.0
+# Phase 8.x Enhancement – Production Kubernetes Based Previous Branch Resolution & Commit Anchor Improvements
+
+## Objective
+
+Enhance the **Generate Report → Fetch Components** workflow to use **Production Kubernetes as the primary source of truth** for determining the previous release branch and production commit anchor. The existing GitHub-based approach should become a fallback, not the primary mechanism.
 
 ---
 
-# Objective
+# Acceptance Criteria
 
-Act as a **Principal UI/UX Architect**, **Senior Frontend Architect**, **React.js Expert**, and **Enterprise Product Designer**.
+## AC-1: Production Kubernetes must be the Primary Source
 
-Before making any UI changes:
+During **Fetch Components**, do **NOT** determine the previous branch directly from GitHub as the first approach.
 
-- Analyze the complete React project.
-- Understand every screen.
-- Understand all existing business functionality.
-- Understand component hierarchy.
-- Understand routing.
-- Understand naming conventions.
-- Understand existing design system.
-- Understand existing backend integrations.
+Instead:
 
-The objective is **NOT** to rewrite the application.
-
-The objective is to redesign the UI professionally without breaking even a single existing functionality.
+1. Use the configured **Production Kubernetes cookie**.
+2. Connect to the configured Production Kubernetes cluster.
+3. Resolve the deployment for every **Main GitHub Repository**.
+4. **Do not process Helm repositories** for this operation.
 
 ---
 
-# Mandatory Rule
+## AC-2: Resolve Active Deployment
 
-**DO NOT BREAK ANY EXISTING FUNCTIONALITY.**
+For every microservice:
 
-All backend APIs,
-all business logic,
-all validations,
-all workflows,
-all role-based permissions,
-all data loading,
-all report generation,
-all Review Commits functionality,
-all Release Readiness functionality,
-all Generate Report functionality,
-all Settings functionality,
-all authentication,
-must continue working exactly as today.
+- Locate both Blue and Green deployments.
+- Determine which deployment is currently ACTIVE.
 
-Only improve UI/UX.
+Existing deployment selection logic should be reused.
 
----
+Validation should consider:
 
-# Design Theme
+- Active pod count
+- Deployment availability
+- Deployment timestamp
+- Existing active deployment validation logic
 
-Use AT&T branding inspiration.
+Do not duplicate this implementation.
 
-Reference:
-
-https://www.att.com
-
-Do NOT copy the website.
-
-Take inspiration from
-
-- spacing
-- typography
-- professional layout
-- enterprise feel
-- card layouts
-- dashboard design
-- clean navigation
-- button styles
-- consistent alignment
-- professional white space
+Extract it into a reusable service if required.
 
 ---
 
-# Color Theme
+## AC-3: Read Deployment Labels
 
-Keep current colors mostly unchanged.
+Once the active deployment is identified:
 
-Primary
+Read deployment labels/metadata and capture:
 
-AT&T Blue
+- Current deployed Git Branch
+- Git Commit SHA
+- Deployment Timestamp
+- Build information
+- Any additional useful deployment metadata already exposed through Kubernetes labels
 
-Secondary
-
-White
-
-Neutral
-
-Light Gray
-
-Background
-
-Very light gray
-
-Cards
-
-White
-
-Success
-
-Soft Green
-
-Warning
-
-Amber
-
-Error
-
-Soft Red
-
-Avoid
-
-- Dark backgrounds
-- Black heavy themes
-- Neon colors
-- Too many gradients
-
-Keep enterprise feel.
+Review the Kubernetes label payload and capture all meaningful metadata that may be useful for future reporting.
 
 ---
 
-# Typography
+## AC-4: Store Production Branch Information
 
-Use modern typography.
+Enhance the `release_branches` table.
 
-Improve
+For every component maintain:
 
-- headings
-- sub headings
-- font sizes
-- spacing
-- readability
+- Previous Branch (existing)
+- Production Previous Branch (new)
+- Production Commit Anchor (Git SHA)
+- Production Deployment Timestamp
+- Resolution Source
+- Last Updated Timestamp
 
-Maintain consistency across every page.
-
----
-
-# Global Layout Improvements
-
-Redesign the complete layout.
-
-Improve
-
-- spacing
-- margins
-- paddings
-- section grouping
-- alignment
-- responsiveness
-
-Nothing should look crowded.
+These fields must always be updated whenever Fetch Components performs a fresh refresh.
 
 ---
 
-# Sidebar
+## AC-5: Resolution Source
 
-Improve sidebar.
+Populate Resolution Source correctly.
 
-Requirements
+Possible values:
 
-- modern icons
-- proper spacing
-- active indicator
-- hover effects
-- collapsible sidebar
-- smooth animation
-- better grouping
+- PROD_KUBERNETES
+- GITHUB_FALLBACK
+- MANUAL
+- USER_OVERRIDE
 
-Do not change navigation structure.
+Do not leave this value as MANUAL when the branch was resolved automatically.
 
----
+If branch came from Kubernetes:
 
-# Top Header
+```
+Resolution Source = PROD_KUBERNETES
+```
 
-Improve header.
+If GitHub fallback is used:
 
-Include
+```
+Resolution Source = GITHUB_FALLBACK
+```
 
-AT&T Branding
+If user manually changes:
 
-Welcome User
-
-Logged in Username
-
-Current Role
-
-Notifications placeholder
-
-Profile Menu
-
-Better spacing
-
-Responsive layout
+```
+Resolution Source = USER_OVERRIDE
+```
 
 ---
 
-# Dashboard
+## AC-6: Branch Equality Detection
 
-Modernize dashboard.
+Compare:
 
-Use summary cards.
+Previous Branch
 
-Example
+vs
 
-Stories
+Production Previous Branch
 
-Components
+If both are identical:
 
-Violations
+- Automatically mark Resolution Source as:
 
-Pending Approval
+```
+PROD_KUBERNETES
+```
 
-Branch Validation
-
-SAST
-
-Deployment Readiness
-
-Configuration Differences
-
-Scan History
-
-Each card should have
-
-- icon
-- count
-- color
-- quick navigation
+This indicates that the automatically detected production branch has been accepted.
 
 ---
 
-# Generate Report Page
+## AC-7: Preserve Manual Override
 
-Improve layout.
+Users must still be able to manually change the Previous Branch.
 
-Group sections into cards.
+Do not remove this flexibility.
 
-Improve
+Manual override should:
 
-Filters
+- update Previous Branch
+- preserve Production Previous Branch
+- update Resolution Source = USER_OVERRIDE
 
-Buttons
-
-Progress
-
-Loading
-
-Status
-
-Messages
-
-Job execution status
-
-Background task progress
-
-Better alignment.
+Production branch should never be overwritten by user edits.
 
 ---
 
-# Review Commits
+## AC-8: Store Production Commit Anchor
 
-Redesign table.
+Production Commit Anchor currently exists in the database.
 
-Improve
+Ensure it is actually populated.
 
-filter visibility
+Store:
 
-table readability
+- Git Commit SHA
+- Full SHA if available
+- Short SHA may be displayed in UI
 
-sticky headers
-
-column spacing
-
-sorting icons
-
-status badges
-
-search
-
-pagination
-
-override dialog
-
-approval dialog
-
-tooltips
-
-hover effects
+Database should always store the complete SHA.
 
 ---
 
-# Release Readiness
+## AC-9: Display Production Commit Anchor
 
-This page currently contains multiple sections.
+Expose Production Commit Anchor in the UI.
 
-Redesign as professional dashboard.
+Recommended display:
 
-Show
+Previous Branch
 
-Summary Cards
+Production Previous Branch
 
-↓
+Production Commit Anchor
 
-Navigation Pills
+Resolution Source
 
-↓
+Deployment Timestamp
 
-Selected Section
+Short SHA can be shown in UI.
 
-Instead of one long page.
+Full SHA should be available through:
 
-Example
-
-Stories Status
-
-Branch Validation
-
-SAST
-
-Deployment
-
-Configuration
-
-Each section opens independently.
+- Tooltip
+- Copy button
+- Hover popup
 
 ---
 
-# Tables
+## AC-10: Fetch Logic Priority
 
-Improve every table.
+Previous Branch resolution order must become:
 
-Requirements
+1. Production Kubernetes
+2. Existing GitHub Logic
+3. Blank (user selection)
 
-Sticky header
-
-Better row spacing
-
-Alternate row color
-
-Hover highlight
-
-Responsive
-
-Resizable columns
-
-Professional pagination
-
-Search
-
-Column filters
-
-Status badges
-
-Icons
-
-Tooltips
+Never directly jump to GitHub without attempting Kubernetes first.
 
 ---
 
-# Status Badges
+## AC-11: Fallback Behaviour
 
-Replace plain text.
+If Kubernetes lookup fails:
 
-Example
+Attempt existing GitHub logic.
 
-Accepted
+If GitHub also fails:
 
-Green Badge
+Leave Previous Branch empty.
 
-Pending
+Allow user selection.
 
-Amber Badge
+Log warning.
 
-Violation
-
-Red Badge
-
-Approved
-
-Green
-
-Pending Approval
-
-Blue
-
-Reverted
-
-Purple
-
-Override
-
-Orange
+Do not fail Fetch Components.
 
 ---
 
-# Icons
+## AC-12: Common Kubernetes Service
 
-Use professional icons consistently.
+All Kubernetes deployment metadata extraction should use one reusable service.
 
-Examples
+This service should be reused by:
 
-Story
+- Deployment Readiness
+- Previous Branch Detection
+- Production Commit Anchor
+- Future Configuration Comparison
+- Future Release Validation
 
-Bug
-
-Task
-
-Epic
-
-Repository
-
-Deployment
-
-Configuration
-
-Branch
-
-GitHub
-
-Veracode
-
-Warning
-
-Success
-
-Approval
-
-Notification
+Avoid duplicate Kubernetes API implementations.
 
 ---
 
-# Forms
+## AC-13: Performance
 
-Improve every form.
+Fetching deployment metadata should execute in parallel using Reactor.
 
-Better
+Use:
 
-spacing
+- Flux
+- Mono
+- Parallel execution
 
-labels
+Avoid sequential Kubernetes calls.
 
-validation
-
-error messages
-
-helper text
-
-button alignment
+Limit concurrency appropriately to avoid overwhelming the Kubernetes API.
 
 ---
 
-# Buttons
+## AC-14: Logging
 
-Create consistent button styles.
+Log important milestones.
 
-Primary
+Examples:
 
-Secondary
+- Production deployment detected
+- Active deployment identified
+- Branch resolved
+- Commit SHA resolved
+- Resolution source selected
+- GitHub fallback used
+- Manual override retained
 
-Danger
+Use INFO logs.
 
-Success
+Detailed payloads should be DEBUG only.
 
-Outline
-
-Disabled
-
-Loading
-
-All buttons should have consistent height.
-
----
-
-# Dialogs
-
-Improve dialogs.
-
-Better
-
-spacing
-
-titles
-
-descriptions
-
-buttons
-
-animations
-
-keyboard accessibility
+Include MDC username and Job ID in all logs.
 
 ---
 
-# Loading Experience
+## AC-15: Database Updates
 
-Improve loading.
+Every successful Fetch Components execution should update:
 
-Instead of
+- Previous Branch
+- Production Previous Branch
+- Production Commit Anchor
+- Resolution Source
+- Deployment Timestamp
+- Updated Timestamp
 
-Loading...
-
-Use
-
-Skeleton loaders
-
-Progress indicators
-
-Estimated progress
-
-Friendly loading messages
-
-Background job status
+User comments and approval history must never be overwritten.
 
 ---
 
-# Empty State
+## AC-16: UI Enhancements
 
-Whenever no data exists
+Display additional columns:
 
-Show
+- Previous Branch
+- Production Previous Branch
+- Production Commit Anchor
+- Resolution Source
+- Deployment Timestamp
 
-illustration
+Use status badges for Resolution Source.
 
-friendly message
+Example:
 
-action button
+🟢 PROD_KUBERNETES
 
----
+🟡 GITHUB_FALLBACK
 
-# Error Handling
+🔵 USER_OVERRIDE
 
-Improve all error screens.
-
-Instead of
-
-Unknown Error
-
-Show meaningful message
-
-Possible reason
-
-Retry button
-
-Contact Admin
+⚪ MANUAL
 
 ---
 
-# Notifications
+## AC-17: Backward Compatibility
 
-Replace browser alerts.
+Do not remove the existing GitHub branch detection logic.
 
-Use
-
-Toast notifications
-
-Success
-
-Warning
-
-Error
-
-Information
+Retain it as a fallback until explicitly instructed to remove it.
 
 ---
 
-# Accessibility
-
-Improve accessibility.
-
-Keyboard navigation
-
-ARIA labels
-
-Tab order
-
-Focus visibility
-
-Color contrast
-
-Screen reader support
-
----
-
-# Responsiveness
-
-UI must work correctly on
-
-Laptop
-
-Large Monitor
-
-Tablet
-
-Different browser zoom levels
-
----
-
-# Performance
-
-Reduce unnecessary re-rendering.
-
-Use
-
-Memoization
-
-Lazy loading
-
-Component optimization
-
-Code splitting
-
----
-
-# Animations
-
-Keep subtle animations only.
-
-Examples
-
-Fade
-
-Slide
-
-Hover
-
-Card elevation
-
-Avoid flashy animations.
-
----
-
-# Design Consistency
-
-Every page should follow same
-
-Spacing
-
-Typography
-
-Button styles
-
-Card styles
-
-Table styles
-
-Icons
-
-Colors
-
-Margins
-
-Padding
-
----
-
-# Naming Improvements
-
-Review all UI labels.
-
-Rename wherever necessary.
-
-Examples
-
-Review Commits
-
-Release Readiness
-
-Generate Report
-
-Scan History
-
-Settings
-
-Use consistent enterprise terminology.
-
----
-
-# User Experience Review
-
-Review entire application.
-
-Identify
-
-Confusing layouts
-
-Duplicate buttons
-
-Unnecessary clicks
-
-Poor navigation
-
-Unused components
-
-Improve wherever possible.
-
----
-
-# Maintain Existing Features
-
-Nothing should break.
-
-All APIs
-
-All workflows
-
-All backend integrations
-
-All permissions
-
-All validations
-
-All reports
-
-must continue working.
-
----
-
-# Deliverables
-
-1. Redesigned UI
-
-2. Improved UX
-
-3. Better navigation
-
-4. Better responsiveness
-
-5. Better accessibility
-
-6. Better loading experience
-
-7. Better enterprise look
-
-8. Better consistency
-
-9. Better typography
-
-10. Better spacing
-
-11. Modern cards
-
-12. Better dashboards
-
-13. Better forms
-
-14. Better dialogs
-
-15. Better tables
-
-16. Better status badges
-
-17. Better icons
-
-18. Maintain 100% backward compatibility
-
-19. No functional regressions
-
-20. Follow enterprise React.js UI best practices throughout the application.
-
----
-
-# Final Acceptance Criteria
-
-✅ Existing functionality remains untouched.
-
-✅ Existing backend APIs remain unchanged.
-
-✅ Existing business logic remains unchanged.
-
-✅ Existing role-based access remains unchanged.
-
-✅ UI looks modern and enterprise-grade.
-
-✅ AT&T-inspired professional appearance.
-
-✅ Consistent design system across the application.
-
-✅ Responsive.
-
-✅ Accessible.
-
-✅ Production-ready quality.
+# Expected Result
+
+After Fetch Components:
+
+- Production Kubernetes determines the actual deployed branch.
+- Active deployment is identified automatically.
+- Production Git Commit SHA is captured and stored.
+- Previous Branch and Production Previous Branch are both maintained.
+- Resolution Source clearly indicates how the branch was resolved.
+- GitHub remains only a fallback mechanism.
+- Existing workflows remain fully backward compatible.
+- All enhancements are implemented without breaking existing functionality.
