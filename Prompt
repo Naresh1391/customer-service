@@ -1,337 +1,359 @@
-# Phase 8.x Enhancement – Release Branch Resolution, Branch Cut Status & UI Simplification
+# Phase 9 – Team Key Standardization, Commit Evaluation & Cherry-Pick Detection Enhancements
 
 ## Objective
 
-Enhance the `release_branches` data model and Fetch Components workflow to improve release branch tracking, branch cut validation, production branch resolution, and library handling. These enhancements are incremental to the previous implementation and must not break any existing functionality.
+This phase focuses on standardizing the application around **Team Key** (instead of Project Key) and improving the commit evaluation logic so that the system accurately identifies:
+
+- Commits already present in the release branch
+- Commits that still require cherry-picking from the master branch
+- Reverted commits
+- Valid release commits
+
+These enhancements must **not break any existing functionality** and must integrate with the current Review Commits workflow.
 
 ---
 
 # Acceptance Criteria
 
-## AC-1: Add Branch Cut Status Column
-
-Enhance the `release_branches` table by introducing a new status column.
-
-Suggested names (choose the most appropriate one):
-
-- `branch_cut_status`
-- `release_branch_status`
-- `branch_resolution_status`
-
-Preferred value examples:
-
-- `BRANCH_CUT_COMPLETED`
-- `BRANCH_CUT_PENDING`
-
-Avoid storing free-text messages.
-
 ---
 
-## AC-2: Automatically Calculate Branch Cut Status
+## AC-1: Replace Project Key with Team Key Across the Application
 
-After the Current Branch has been resolved, determine whether the release branch has already been cut.
+The application should no longer use **Project Key** for release-related processing.
 
-Use the existing Fix Version metadata.
-
-Each Fix Version already contains:
-
-- From Date
-- To Date
-
-Example:
-
-```
-Fix Version
-2026.07.18
-
-From
-12-Jul-2026
-
-To
-18-Jul-2026
-```
-
-The existing Current Branch selection logic already determines the latest release branch for the selected Fix Version.
-
-Reuse that logic.
-
----
-
-## AC-3: Branch Cut Completed Rule
-
-If the resolved Current Branch belongs to the selected Fix Version window:
-
-```
-Branch Cut Status
-
-=
-
-BRANCH_CUT_COMPLETED
-```
-
-Example
-
-Selected Fix Version
-
-```
-12-Jul → 18-Jul
-```
-
-Resolved Current Branch
-
-```
-release/2026.07.18
-```
-
-Status
-
-```
-BRANCH_CUT_COMPLETED
-```
-
----
-
-## AC-4: Branch Cut Pending Rule
-
-If no Current Branch exists for the selected Fix Version window:
-
-```
-Branch Cut Status
-
-=
-
-BRANCH_CUT_PENDING
-```
-
-This indicates that the release branch has not yet been created.
-
----
-
-## AC-5: Store Branch Cut Status in Database
-
-Persist the calculated status into the `release_branches` table.
-
-It must be recalculated every time:
-
-- Fetch Components
-- Force Refresh
-- Generate Report
-- Component Refresh
-
-runs.
-
-Never rely on stale values.
-
----
-
-## AC-6: Do Not Expose Internal Production Fields in UI
-
-The following fields are intended for backend processing only and **must not** be displayed in the UI:
-
-- Production Previous Branch
-- Production Commit Anchor
-- Production Deployment Timestamp
-- Production Environment Details
-- Kubernetes Deployment Metadata
-- Internal Resolution Metadata
-
-These values should continue to be stored in the database.
-
----
-
-## AC-7: Display Only Resolution Source
-
-The UI should display only the **Resolution Source**.
+Instead, everything should use **Team Key**.
 
 Examples:
 
-🟢 PROD_KUBERNETES
+- Team Key = `OC`
+- Project Keys under Team = `SPTOC`, `OCE`, etc.
 
-🟡 GITHUB_FALLBACK
+A release always belongs to a **Team**, not to an individual Project.
 
-🔵 USER_OVERRIDE
-
-⚪ MANUAL
-
-No additional production metadata should appear in the grid.
+Therefore, all release processing must use Team Key.
 
 ---
 
-## AC-8: Recalculate Resolution Source After User Changes
+## AC-2: Team Configuration
 
-When the user modifies the Previous Branch manually and proceeds with **Generate Report**:
+The `team-config.yaml` already contains the Team Key.
 
-1. Refresh the latest Production Kubernetes information.
-2. Compare the selected Previous Branch with the Production Previous Branch.
-3. Recalculate the Resolution Source.
+Use this Team Key as the single source of truth.
 
-Rules:
+All backend services, UI pages, database operations and APIs should traverse using Team Key.
 
-If both branches match:
-
-```
-Resolution Source = PROD_KUBERNETES
-```
-
-If they differ because the user selected another branch:
-
-```
-Resolution Source = USER_OVERRIDE
-```
-
-If Production lookup failed and GitHub fallback was used:
-
-```
-Resolution Source = GITHUB_FALLBACK
-```
-
-This calculation must always reflect the latest state and should not rely on previously stored values.
+Project Key should no longer drive release processing.
 
 ---
 
-## AC-9: Keep Production Metadata in Sync
+## AC-3: Replace Project Key Everywhere
 
-Every Generate Report execution must refresh:
+Review the complete application and replace Project Key with Team Key wherever applicable.
 
-- Production Previous Branch
-- Production Commit SHA
-- Branch Cut Status
-- Resolution Source
+This includes (but is not limited to):
 
-before persisting updates.
-
----
-
-## AC-10: Helm Repository Must Always Follow Main Repository
-
-This is a mandatory consistency rule.
-
-Example:
-
-Main Repository
-
-```
-order-enrichment-ms
-```
-
-Helm Repository
-
-```
-order-enrichment-ms-helm
-```
-
-If the Main Repository resolves:
-
-```
-Previous Branch
-
-release/2026.07.18
-```
-
-then the Helm Repository must automatically use:
-
-```
-release/2026.07.18
-```
-
-The Helm repository should never attempt an independent Production Kubernetes lookup.
-
-It must inherit the values from its corresponding Main Repository.
-
----
-
-## AC-11: Helm Resolution Source
-
-When the Helm branch is inherited from the Main Repository:
-
-```
-Resolution Source = PROD_KUBERNETES
-```
-
-Do not mark Helm repositories as Manual or GitHub unless the Main Repository itself used those mechanisms.
-
-This ensures complete consistency between Main and Helm repositories.
-
----
-
-## AC-12: Library Repository Handling
-
-Some repositories are libraries and are **not deployed** into Kubernetes.
-
-Examples include (not limited to):
-
-- Camunda Common Resources
-- Camunda Pipeline Resources
-- OC-TMF Order Transform
-- Other shared libraries configured in Team Configuration
-
-These repositories should not use Production Kubernetes for Previous Branch resolution.
-
-Instead:
-
-- Continue using the existing GitHub-based branch resolution logic.
-- Do not attempt Kubernetes lookup.
-- Do not mark them as Production resolved.
-
----
-
-## AC-13: Team Configuration for Libraries
-
-Maintain the list of library repositories in Team Configuration.
-
-For now:
-
-- Continue loading from the Team Configuration (YAML/config).
-- Do not hardcode library names.
-- Future migration to database configuration is already planned.
-
----
-
-## AC-14: Library Resolution Source
-
-For library repositories:
-
-```
-Resolution Source = GITHUB_FALLBACK
-```
-
-unless the user manually changes the branch, in which case:
-
-```
-Resolution Source = USER_OVERRIDE
-```
-
----
-
-## AC-15: Preserve Existing Functionality
-
-These enhancements must not impact:
-
-- Fetch Stories
-- Fetch Components
 - Generate Report
 - Review Commits
 - Release Readiness
-- Deployment Readiness
-- Configuration Comparison
-- SAST Scan
-- Approval Workflow
-- Override Workflow
-- Existing Branch Comparison Logic
+- Scan History
+- Settings
+- Team Configuration
+- Database queries
+- API request parameters
+- DTOs
+- Entity fields
+- Service layer
+- Repository layer
+- UI labels
+- Logging
+- Background jobs
 
-All existing features must continue to work without regression.
+The user should only see **Team Key**.
+
+Project Key should not appear in the UI.
 
 ---
 
-# Final Expected Behaviour
+## AC-4: Generate Report UI
 
-After Fetch Components:
+Rename the existing **Project Key** selector to **Team Key**.
 
-- Current Branch is resolved using the existing Fix Version logic.
-- Branch Cut Status is automatically calculated and stored.
-- Production metadata is stored internally but hidden from the UI.
-- Only Resolution Source is displayed to users.
-- Generate Report recalculates Resolution Source using the latest Production Kubernetes data.
-- Helm repositories always inherit branch information from their corresponding Main Repository.
-- Library repositories continue using GitHub-based branch resolution.
-- All enhancements remain backward compatible and do not break existing functionality.
+All dropdowns, labels and API payloads should use Team Key.
+
+Existing functionality must remain unchanged.
+
+---
+
+## AC-5: Release Branch Commit Collection
+
+The existing logic fetches commits between:
+
+```
+Previous Release Branch
+        →
+Current Release Branch
+```
+
+These commits represent everything that is already included in the release.
+
+**Every one of these commits must be stored in the `commits` table.**
+
+Do not filter them out.
+
+These commits form the baseline for release validation.
+
+---
+
+## AC-6: Persist All Release Branch Commits
+
+Every commit fetched between:
+
+```
+Previous Branch
+→
+Current Branch
+```
+
+must be persisted into the Commit database with complete metadata, including:
+
+- Commit SHA
+- Commit Message
+- Author
+- Commit Timestamp
+- Repository
+- Branch
+- Story Mapping
+- Evaluation Status
+
+No valid release-branch commit should be skipped.
+
+---
+
+## AC-7: Parallel Master Branch Commit Fetch
+
+Continue fetching commits in parallel between:
+
+```
+Current Release Branch
+        →
+Master Branch
+```
+
+This represents commits that were made **after the release branch was cut**.
+
+Existing parallel implementation should remain.
+
+---
+
+## AC-8: Story-Based Filtering for Master Branch Commits
+
+Not every Master branch commit belongs to the current release.
+
+After fetching Master commits:
+
+- Compare each commit against the list of release stories already loaded from iTrack.
+- Match using the existing story parsing logic from commit messages.
+
+Only commits that belong to the selected release stories should be considered.
+
+Ignore unrelated commits.
+
+---
+
+## AC-9: Cherry-Pick Detection
+
+If a commit:
+
+- Exists in Master
+- Matches one of the selected release stories
+- Does **not** exist in the Current Release Branch
+
+then classify it as:
+
+```
+CHERRY_PICK_REQUIRED
+```
+
+This indicates that the change belongs to the release but has not yet been cherry-picked into the release branch.
+
+This should be clearly visible in the Review Commits page.
+
+---
+
+## AC-10: Cherry-Pick Status
+
+Introduce a dedicated evaluation status.
+
+Suggested value:
+
+```
+CHERRY_PICK_REQUIRED
+```
+
+This should not be treated as a generic violation.
+
+It should have its own status and visual indicator.
+
+---
+
+## AC-11: Preserve Existing Evaluation Logic
+
+Do **not** remove the existing validation logic.
+
+The current validation for release commits should continue to work.
+
+The Cherry-Pick evaluation should be an additional validation layer.
+
+---
+
+## AC-12: Reverted Commit Detection
+
+Enhance commit evaluation to detect reverted commits.
+
+If:
+
+- Commit A exists
+- A corresponding Git revert commit exists for Commit A
+
+then classify the original change as:
+
+```
+REVERTED
+```
+
+This is **not** a violation.
+
+This is an expected and valid release scenario.
+
+Use GitHub metadata and commit history to reliably identify revert relationships.
+
+---
+
+## AC-13: Reverted Commit Status
+
+Introduce a dedicated evaluation status.
+
+Suggested value:
+
+```
+REVERTED
+```
+
+Display this status in the Review Commits table with a distinct badge (for example, purple or neutral).
+
+Do not classify reverted commits as violations.
+
+---
+
+## AC-14: Valid Commit Status
+
+Only commits that:
+
+- Are present in the release branch
+- Are not reverted
+- Match the release stories
+- Require no further action
+
+should be marked as:
+
+```
+OK
+```
+
+The `OK` status must represent a genuinely valid release commit.
+
+---
+
+## AC-15: Evaluation Priority
+
+Commit evaluation should follow this order:
+
+1. **REVERTED**
+2. **CHERRY_PICK_REQUIRED**
+3. **VIOLATION** (existing validation rules)
+4. **OVERRIDDEN** (existing workflow)
+5. **PENDING_APPROVAL** (existing workflow)
+6. **OK**
+
+This ensures a deterministic and easy-to-understand evaluation model.
+
+---
+
+## AC-16: Database Persistence
+
+Persist the evaluation result for every commit.
+
+Recommended values include:
+
+- OK
+- VIOLATION
+- REVERTED
+- CHERRY_PICK_REQUIRED
+- OVERRIDDEN
+- PENDING_APPROVAL
+
+Do not overwrite user comments or approval history during refreshes.
+
+Use Commit SHA as the stable identifier when merging refreshed data.
+
+---
+
+## AC-17: UI Improvements
+
+In the Review Commits table:
+
+- Display the new statuses with clear badges.
+- Add an information tooltip explaining each status.
+- For `CHERRY_PICK_REQUIRED`, explain that the commit exists in the Master branch but is not yet present in the Release branch and should be cherry-picked.
+- For `REVERTED`, explain that the original commit has been reverted and is therefore not considered a release violation.
+
+---
+
+## AC-18: Logging
+
+Add INFO logs for:
+
+- Team Key resolution
+- Release branch commit fetch
+- Master branch commit fetch
+- Story-based filtering
+- Cherry-pick detection
+- Reverted commit detection
+- Commit evaluation summary
+
+Add DEBUG logs for detailed comparison and Git history analysis.
+
+Include MDC values such as Username and Job ID in all logs.
+
+---
+
+## AC-19: Performance
+
+Maintain Reactor-based parallel processing (`Flux`/`Mono`) for:
+
+- Release branch commit retrieval
+- Master branch commit retrieval
+- Story mapping
+- Commit evaluation
+
+Avoid sequential processing where parallel execution is feasible.
+
+---
+
+## AC-20: Backward Compatibility
+
+These enhancements must not break or change the existing behavior of:
+
+- Generate Report
+- Fetch Stories
+- Fetch Components
+- Review Commits
+- Release Readiness
+- Override Workflow
+- Approval Workflow
+- Branch Validation
+- Deployment Readiness
+- Configuration Comparison
+- SAST Reporting
+
+All existing functionality must continue to operate exactly as before while incorporating the new Team Key standardization and enhanced commit evaluation logic.
