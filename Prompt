@@ -1,359 +1,191 @@
-# Phase 9 – Team Key Standardization, Commit Evaluation & Cherry-Pick Detection Enhancements
+Phase 8C – Report Service Optimization & Component Metadata Enhancement
 
 ## Objective
 
-This phase focuses on standardizing the application around **Team Key** (instead of Project Key) and improving the commit evaluation logic so that the system accurately identifies:
-
-- Commits already present in the release branch
-- Commits that still require cherry-picking from the master branch
-- Reverted commits
-- Valid release commits
-
-These enhancements must **not break any existing functionality** and must integrate with the current Review Commits workflow.
+Redesign the report generation flow to follow a **database-first architecture**, eliminate redundant Kubernetes calls, reduce external system dependencies, and expand the Components data model to become the single source of truth for report generation.
 
 ---
 
-# Acceptance Criteria
+# Functional Requirements & Acceptance Criteria
+
+## AC-001: Eliminate Duplicate Kubernetes Calls
+
+### Current Observation
+During debugging it was observed that `ReportService` invokes Kubernetes APIs again while preparing the report, even though the same deployment metadata was already fetched during **Component Fetch / Previous Release Resolution**.
+
+### Required Implementation
+- Kubernetes should be called only once during the component fetch phase.
+- All Kubernetes metadata must be persisted immediately into the database.
+- During Generate Report, `ReportService` must read only from the database.
+- No duplicate Kubernetes calls are allowed unless a user explicitly performs a refresh.
 
 ---
 
-## AC-1: Replace Project Key with Team Key Across the Application
+## AC-002: Database-First Architecture
 
-The application should no longer use **Project Key** for release-related processing.
+Adopt the following flow:
 
-Instead, everything should use **Team Key**.
-
-Examples:
-
-- Team Key = `OC`
-- Project Keys under Team = `SPTOC`, `OCE`, etc.
-
-A release always belongs to a **Team**, not to an individual Project.
-
-Therefore, all release processing must use Team Key.
+1. Fetch component metadata from GitHub.
+2. Fetch deployment metadata from Kubernetes.
+3. Persist all data into the Components table (and related persistence tables).
+4. Load the Component Preview only from persisted data.
+5. Allow user overrides.
+6. Save overrides back to the database.
+7. Start report generation using only persisted database records.
 
 ---
 
-## AC-2: Team Configuration
+## AC-003: Expand Components Table
 
-The `team-config.yaml` already contains the Team Key.
+Extend the Components table to store all Kubernetes metadata required for report generation, including (but not limited to):
 
-Use this Team Key as the single source of truth.
+- Previous release branch
+- Current release branch
+- Production branch
+- Production Git SHA
+- Active deployment (Blue/Green)
+- Namespace
+- Cluster/environment
+- Resolution source
+- Deployment metadata
+- Kubernetes synchronization timestamp
+- Override status
 
-All backend services, UI pages, database operations and APIs should traverse using Team Key.
-
-Project Key should no longer drive release processing.
-
----
-
-## AC-3: Replace Project Key Everywhere
-
-Review the complete application and replace Project Key with Team Key wherever applicable.
-
-This includes (but is not limited to):
-
-- Generate Report
-- Review Commits
-- Release Readiness
-- Scan History
-- Settings
-- Team Configuration
-- Database queries
-- API request parameters
-- DTOs
-- Entity fields
-- Service layer
-- Repository layer
-- UI labels
-- Logging
-- Background jobs
-
-The user should only see **Team Key**.
-
-Project Key should not appear in the UI.
+The Components table becomes the authoritative cache for report generation.
 
 ---
 
-## AC-4: Generate Report UI
+## AC-004: Persist Before Preview
 
-Rename the existing **Project Key** selector to **Team Key**.
+Before showing the Component Preview:
 
-All dropdowns, labels and API payloads should use Team Key.
+- Complete GitHub resolution.
+- Complete Kubernetes resolution.
+- Persist all resolved metadata.
+- Load the preview from the database only.
 
-Existing functionality must remain unchanged.
-
----
-
-## AC-5: Release Branch Commit Collection
-
-The existing logic fetches commits between:
-
-```
-Previous Release Branch
-        →
-Current Release Branch
-```
-
-These commits represent everything that is already included in the release.
-
-**Every one of these commits must be stored in the `commits` table.**
-
-Do not filter them out.
-
-These commits form the baseline for release validation.
+No in-memory objects should be rendered directly in the preview.
 
 ---
 
-## AC-6: Persist All Release Branch Commits
+## AC-005: Save Overrides Before Report Generation
 
-Every commit fetched between:
+When the user clicks **Generate Report**:
 
-```
-Previous Branch
-→
-Current Branch
-```
-
-must be persisted into the Commit database with complete metadata, including:
-
-- Commit SHA
-- Commit Message
-- Author
-- Commit Timestamp
-- Repository
-- Branch
-- Story Mapping
-- Evaluation Status
-
-No valid release-branch commit should be skipped.
+1. Save all component overrides.
+2. Update the Components table.
+3. Persist resolution source and branch selections.
+4. Only then invoke the report generation process.
 
 ---
 
-## AC-7: Parallel Master Branch Commit Fetch
+## AC-006: Minimize External Calls
 
-Continue fetching commits in parallel between:
+The application must minimize calls to:
 
-```
-Current Release Branch
-        →
-Master Branch
-```
+- GitHub
+- Kubernetes
+- iTrack
+- Veracode
 
-This represents commits that were made **after the release branch was cut**.
-
-Existing parallel implementation should remain.
+Database records must always be used first whenever valid cached information exists.
 
 ---
 
-## AC-8: Story-Based Filtering for Master Branch Commits
+## AC-007: Store Stories List Per Component
 
-Not every Master branch commit belongs to the current release.
+Enhance the Components table with a `stories_list` field.
 
-After fetching Master commits:
+Requirements:
 
-- Compare each commit against the list of release stories already loaded from iTrack.
-- Match using the existing story parsing logic from commit messages.
-
-Only commits that belong to the selected release stories should be considered.
-
-Ignore unrelated commits.
+- Store every story associated with the component.
+- Support multiple stories per component.
+- A comma-separated value is acceptable initially (future normalization is allowed).
 
 ---
 
-## AC-9: Cherry-Pick Detection
+## AC-008: Store Responsible Teams
 
-If a commit:
+Enhance the Components table with a `teams_list` field.
 
-- Exists in Master
-- Matches one of the selected release stories
-- Does **not** exist in the Current Release Branch
+Requirements:
 
-then classify it as:
+- Store all owning/responsible teams for the associated stories.
+- Support multiple teams.
+- Persist before preview generation.
 
-```
-CHERRY_PICK_REQUIRED
-```
+Purpose:
 
-This indicates that the change belongs to the release but has not yet been cherry-picked into the release branch.
-
-This should be clearly visible in the Review Commits page.
-
----
-
-## AC-10: Cherry-Pick Status
-
-Introduce a dedicated evaluation status.
-
-Suggested value:
-
-```
-CHERRY_PICK_REQUIRED
-```
-
-This should not be treated as a generic violation.
-
-It should have its own status and visual indicator.
+- Ownership tracking
+- Reporting
+- Notifications
+- Future dashboards
 
 ---
 
-## AC-11: Preserve Existing Evaluation Logic
+## AC-009: Update Metadata After Override
 
-Do **not** remove the existing validation logic.
+After the user modifies component details:
 
-The current validation for release commits should continue to work.
+- Save updated branches.
+- Save updated resolution source.
+- Save updated stories list.
+- Save updated teams list.
 
-The Cherry-Pick evaluation should be an additional validation layer.
-
----
-
-## AC-12: Reverted Commit Detection
-
-Enhance commit evaluation to detect reverted commits.
-
-If:
-
-- Commit A exists
-- A corresponding Git revert commit exists for Commit A
-
-then classify the original change as:
-
-```
-REVERTED
-```
-
-This is **not** a violation.
-
-This is an expected and valid release scenario.
-
-Use GitHub metadata and commit history to reliably identify revert relationships.
+The database must always reflect the latest user-approved state before report generation.
 
 ---
 
-## AC-13: Reverted Commit Status
+## AC-010: Optimize ReportService
 
-Introduce a dedicated evaluation status.
+Refactor `ReportService` so that it:
 
-Suggested value:
-
-```
-REVERTED
-```
-
-Display this status in the Review Commits table with a distinct badge (for example, purple or neutral).
-
-Do not classify reverted commits as violations.
+- Reads component metadata only from the database.
+- Does not re-fetch Kubernetes deployment information.
+- Does not duplicate external API requests.
+- Uses persisted cache as the single source of truth.
 
 ---
 
-## AC-14: Valid Commit Status
+## AC-011: Compliance Analyzer Improvements
 
-Only commits that:
+Review and redesign:
 
-- Are present in the release branch
-- Are not reverted
-- Match the release stories
-- Require no further action
+`ComplianceAnalyzerService.analyzeCommitDetailed(...)`
 
-should be marked as:
+The valid story detection logic must be updated to comply with the previously agreed business rules, including:
 
-```
-OK
-```
-
-The `OK` status must represent a genuinely valid release commit.
-
----
-
-## AC-15: Evaluation Priority
-
-Commit evaluation should follow this order:
-
-1. **REVERTED**
-2. **CHERRY_PICK_REQUIRED**
-3. **VIOLATION** (existing validation rules)
-4. **OVERRIDDEN** (existing workflow)
-5. **PENDING_APPROVAL** (existing workflow)
-6. **OK**
-
-This ensures a deterministic and easy-to-understand evaluation model.
-
----
-
-## AC-16: Database Persistence
-
-Persist the evaluation result for every commit.
-
-Recommended values include:
-
-- OK
-- VIOLATION
-- REVERTED
-- CHERRY_PICK_REQUIRED
-- OVERRIDDEN
-- PENDING_APPROVAL
-
-Do not overwrite user comments or approval history during refreshes.
-
-Use Commit SHA as the stable identifier when merging refreshed data.
-
----
-
-## AC-17: UI Improvements
-
-In the Review Commits table:
-
-- Display the new statuses with clear badges.
-- Add an information tooltip explaining each status.
-- For `CHERRY_PICK_REQUIRED`, explain that the commit exists in the Master branch but is not yet present in the Release branch and should be cherry-picked.
-- For `REVERTED`, explain that the original commit has been reverted and is therefore not considered a release violation.
-
----
-
-## AC-18: Logging
-
-Add INFO logs for:
-
-- Team Key resolution
-- Release branch commit fetch
-- Master branch commit fetch
-- Story-based filtering
+- Release branch validation
+- Previous production branch validation
+- Production Git SHA anchor
+- Story-to-commit mapping
 - Cherry-pick detection
-- Reverted commit detection
-- Commit evaluation summary
+- Missing release commit detection
+- Reverted commit handling
+- Manual overrides
+- Trunk-based development scenarios
 
-Add DEBUG logs for detailed comparison and Git history analysis.
-
-Include MDC values such as Username and Job ID in all logs.
-
----
-
-## AC-19: Performance
-
-Maintain Reactor-based parallel processing (`Flux`/`Mono`) for:
-
-- Release branch commit retrieval
-- Master branch commit retrieval
-- Story mapping
-- Commit evaluation
-
-Avoid sequential processing where parallel execution is feasible.
+Do not remove the existing implementation until the new logic has been validated.
 
 ---
 
-## AC-20: Backward Compatibility
+# Non-Regression Requirements
 
-These enhancements must not break or change the existing behavior of:
+- Existing functionality must continue to work.
+- User comments and overrides must never be lost.
+- Database remains the primary cache.
+- External calls should be performed only during explicit refresh operations.
+- Future PostgreSQL/Azure SQL migration must remain supported.
 
-- Generate Report
-- Fetch Stories
-- Fetch Components
-- Review Commits
-- Release Readiness
-- Override Workflow
-- Approval Workflow
-- Branch Validation
-- Deployment Readiness
-- Configuration Comparison
-- SAST Reporting
+---
 
-All existing functionality must continue to operate exactly as before while incorporating the new Team Key standardization and enhanced commit evaluation logic.
+# Definition of Done
+
+- Kubernetes is read only during refresh/component fetch.
+- Report generation uses only database data.
+- Components table contains all required Kubernetes metadata.
+- Stories and Teams are persisted for every component.
+- Preview is rendered from persisted records.
+- Overrides are saved before report generation.
+- Compliance Analyzer logic is updated and verified.
+- External API calls are minimized without changing business functionality.
