@@ -1,290 +1,262 @@
-Phase 11 – Release Readiness (Deployment Section) UI/UX & Backend Re-Architecture
+# Phase 11.1 – Minor Enhancements (Generate Report, Release Readiness & Settings)
 
-Objective
+## Objective
 
-Completely redesign and stabilize the Release Readiness → Deployment section.
+This phase focuses on minor usability improvements, exclusion handling enhancements, tooltip improvements, deployment readiness behavior refinements, and settings cleanup.
 
-The objective is to:
+These changes are incremental improvements and **must not modify any existing working business logic**.
 
-* simplify the UI,
-* remove redundant information,
-* improve usability,
-* reduce screen clutter,
-* correctly reuse Settings page Kubernetes connections,
-* validate deployments accurately,
-* verify deployment freshness using Git SHA,
-* and ensure all frontend/backend APIs work correctly.
+---
 
-This is a mandatory implementation. Existing working functionality must not regress.
+# Acceptance Criteria
 
-⸻
+## 1. Introduce User Exclusion Alongside System Exclusion
 
-Acceptance Criteria
+### Current Behavior
 
-1. Remove Redundant Connection Status
+Components can currently be excluded only through the predefined iTrack exclusion configuration.
 
-Current Problem
+These exclusions are automatically ignored during report generation.
 
-Release Readiness currently shows:
+### Required Enhancement
 
-* GitHub Connection
-* iTrack Connection
-* Kubernetes PROD Connection
+Introduce two different exclusion types:
 
-These are already displayed in Generate Report.
+- System Excluded (configured through iTrack/team configuration)
+- User Excluded (selected manually by the user from the Component Preview screen)
 
-This duplication wastes screen space.
-
-Required Changes
-
-* Remove the entire top Connection Status panel from Release Readiness.
-* Do NOT remove it from Generate Report.
-* Generate Report remains the only page that displays GitHub/iTrack/Production connection validation.
-
-⸻
-
-2. Complete UI Layout Redesign
-
-Current layout occupies almost half of the screen before users can even see deployment information.
-
-Current sections include:
-
-* Team
-* Fix Version
-* Statistics
-* Story Count
-* Branch Count
-* Deployment Config
-* Connection Status
-* Filters
-
-This consumes excessive vertical space.
-
-Required
-
-Act as a senior UI/UX architect.
-
-Redesign this page so that:
-
-* important deployment information appears immediately
-* filters consume minimal space
-* statistics are compact
-* spacing is reduced
-* unnecessary headers are removed
-* controls align consistently with other tabs
-* screen utilization is significantly improved
-
-Target:
-
-* configuration area should consume approximately 35–40% of the visible screen height
-* remaining area should prioritize deployment readiness information
-
-Do not simply reduce margins.
-
-Reorganize the layout intelligently.
-
-⸻
-
-3. Remove Deployment Cookie Inputs
-
-Current deployment page still asks users for:
-
-* Kubernetes Cookie
-* Environment
-* Test Cookie
-
-These are already managed from Settings.
-
-This creates duplicate configuration.
-
-Required
-
-Remove completely:
-
-* Environment dropdown
-* Kubernetes Cookie input
-* Test Cookie input
-* Production Cookie input
-* Any runtime cookie entry
-
-Users should manage cookies ONLY from:
-
-Settings → Connections
-
-Deployment page becomes completely read-only regarding authentication.
-
-⸻
-
-4. Reuse Session Settings
-
-Settings page already stores:
-
-* Test Cookie
-* Stage West Cookie
-* Production East Cookie
-* Production West Cookie
-
-Deployment page must automatically reuse these session values.
-
-No duplicate entry should exist.
-
-⸻
-
-5. Deployment Connection Status
-
-Instead of the removed cookie controls, display a compact deployment readiness status.
+Both exclusion types must be stored independently.
 
 Example:
 
-* ✅ Test Cookie Ready
-* ✅ Stage West Ready
-* ✅ Production East Ready
-* ❌ Production West Missing
+- exclude (System)
+- userExclude (User)
 
-Status should update using the same mechanism already implemented in Generate Report.
+Do not merge both into one field.
 
-No duplicate validation logic.
+---
 
-Reuse existing implementation.
+## 2. Component Preview – User Exclude Option
 
-⸻
+While selecting components before Generate Report:
 
-6. Remove Environment Selector
+Users should be able to manually exclude any component.
 
-Current deployment UI still asks users to select environment.
+This exclusion should be stored as:
 
-This is unnecessary.
+- userExclude = true
 
-The application always validates these fixed environments:
+System exclusions remain untouched.
 
-* Test-3
-* Test-4
-* Stage-West
-* Production-East
-* Production-West
+---
 
-Therefore:
+## 3. Generate Report Must Respect User Exclusions
 
-Remove Environment dropdown completely.
+During Generate Report:
 
-No manual environment selection.
+Current logic already skips:
 
-⸻
+- System Excluded components
 
-7. Fixed Deployment Targets
+Enhance the logic to also skip:
 
-Deployment validation always evaluates these five environments:
+- User Excluded components
 
-* Test-3
-* Test-4
-* Stage-West
-* Production-East
-* Production-West
+Both exclusion types must be ignored during:
 
-No additional environments should appear.
+- Commit Analysis
+- Story Mapping
+- Compliance Analysis
+- Violation Detection
+- Report Generation
 
-⸻
+No external calls should be performed for excluded components.
 
-8. Namespace Resolution
+---
 
-Namespaces must NOT be hardcoded.
+# Release Readiness Enhancements
 
-Read namespaces from Team Configuration.
+## 4. Branch Cut Validation - Hide System Exclusions
+
+Current behavior shows all components.
+
+Required:
+
+Do NOT display components excluded through iTrack/System configuration.
+
+Those components are intentionally excluded.
+
+Therefore they should not participate in Branch Cut Validation.
+
+---
+
+## 5. Branch Cut Validation - Show User Exclusions
+
+Unlike system exclusions,
+
+User Excluded components should still appear in Branch Cut Validation.
+
+Reason:
+
+Users excluded them manually.
+
+Branch Cut validation should still indicate their status.
+
+These components should remain visible but clearly marked as User Excluded.
+
+---
+
+## 6. Team Tooltip Enhancement
+
+Current UI shows:
+
+Team A
+
+Team B
+
++2
+
+This is good.
+
+Enhancement:
+
+Hovering over:
+
+- Team A
+- Team B
+- +2
+
+should display the complete list of teams.
+
+Example tooltip:
+
+Wireless-4
+
+Ordering
+
+Activation
+
+Fulfillment
+
+Support
+
+Display full comma-separated (or line-separated) team list.
+
+---
+
+## 7. Stories Tooltip Enhancement
+
+Current UI truncates stories.
+
+Maintain existing UI.
+
+Enhancement:
+
+Hover over:
+
+- Story
+- +3
+
+Display complete list of stories.
+
+Tooltip should include every mapped story.
+
+---
+
+# Deployment Readiness Improvements
+
+## 8. Force Refresh Should Work Only For Selected Environment
+
+Current implementation:
+
+Force Refresh All Environments
+
+refreshes every environment.
+
+This is not required.
+
+Required:
+
+Only refresh the currently selected environment.
 
 Example:
 
-team-config.yaml
+Selected:
 
-contains
+Test-3
 
-* Test-3 Namespace
-* Test-4 Namespace
-* Stage-West Namespace
-* Production-East Namespace
-* Production-West Namespace
+Refresh should call ONLY:
 
-Deployment service must always resolve namespace from Team Configuration.
+Test-3
 
-Never hardcode namespace names.
+NOT:
 
-⸻
+- Test-4
+- Stage-West
+- Production-East
+- Production-West
 
-9. Fix Namespace Bugs
+---
 
-Current implementation appears to use incorrect namespaces.
+## 9. Hide Refresh Button Until Environment Selected
 
-Examples observed:
+Current behavior:
 
-* Test-3 namespace incorrect
-* Test-4 namespace incorrect
-* Production namespace mapping inconsistent
+Refresh button always visible.
 
-Review entire namespace resolution flow.
+Required:
 
-Validate:
+If no environment selected:
 
-Frontend
+Hide:
 
-↓
+Force Refresh Deployment Readiness
 
-Backend
+After selecting an environment:
 
-↓
+Display:
 
-Namespace resolution
+Force Refresh Deployment Readiness
 
-↓
+---
 
-Kubernetes API
+## 10. Invalid Only Switch
 
-↓
+Current behavior appears regardless of selection.
 
-Deployment retrieval
+Required:
 
-End-to-end.
+Invalid Only switch should become visible only after an environment is selected.
 
-⸻
-
-10. Force Refresh Button
-
-Deployment page should expose only one primary action.
-
-Button:
-
-Force Refresh Deployment Status
-
-Behavior:
-
-* refresh all five environments
-* execute asynchronously
-* update UI automatically
-* no manual refresh per environment
-
-Remove unnecessary buttons.
-
-⸻
-
-11. Validate Backend APIs
-
-Current deployment data appears inconsistent.
-
-Review entire flow.
-
-Verify:
-
-Frontend
+No environment
 
 ↓
 
-Controller
+No switch.
+
+Environment selected
 
 ↓
 
-Service
+Switch visible.
 
-↓
+---
 
-Kubernetes Client
+## 11. Deployment Validation Scope
+
+Every deployment validation must execute only for:
+
+Selected Environment
+
+Never invoke APIs for all environments unless an explicit "Refresh All" feature is introduced in the future.
+
+---
+
+## 12. Backend API Optimization
+
+Ensure deployment backend receives:
+
+Selected Environment
 
 ↓
 
@@ -292,240 +264,128 @@ Namespace
 
 ↓
 
-Deployment
+Deployment Validation
 
-↓
+Only.
 
-Pod
+No unnecessary Kubernetes calls.
 
-↓
+---
 
-Labels
+# Settings Page Enhancement
 
-↓
+## 13. Replace Test-3/Test-4 Cookies
 
-DTO
+Current Settings page contains:
 
-↓
+- Test-3 Cookie
+- Test-4 Cookie
 
-UI
+This is incorrect.
 
-Confirm every API returns expected data.
+Actual infrastructure uses:
 
-Fix any broken mappings.
+One Test Cookie
 
-⸻
+shared across all Test namespaces.
 
-12. Verify Deployment Freshness Using Git SHA
+Replace:
 
-This is a major enhancement.
+- Test-3 Cookie
+- Test-4 Cookie
 
-Current deployment validation only checks whether deployment exists.
+with:
 
-This is insufficient.
+Test Kubernetes Cookie
 
-Scenario:
+This single cookie must be reused for:
 
-* Branch cut completed
-* Test deployment completed
-* Stage deployment completed
-* Another developer commits to Release branch afterwards
+- Test-1 (future)
+- Test-2 (future)
+- Test-3
+- Test-4
 
-Deployment still exists.
+---
 
-But latest code is NOT deployed.
+## 14. Backend Cookie Mapping
 
-Current implementation incorrectly reports deployment as valid.
+Backend should also maintain:
 
-⸻
+Test Cookie
 
-Required Validation
+instead of
 
-For every deployment:
+Test-3 Cookie
 
-Read:
+Test-4 Cookie
 
-Deployment
+All Test namespace authentication should reuse the same cookie.
 
-↓
+---
 
-Pod
+## 15. Preserve Existing Deployment Logic
 
-↓
+Existing deployment status logic should remain unchanged.
 
-Labels
+Only improve:
 
-↓
+- Environment selection
+- Refresh behavior
+- Cookie reuse
+- UI visibility
 
-Latest Git SHA deployed
+No existing deployment validation should break.
 
-Then compare against:
+---
 
-Latest Git SHA available on Release Branch
+# General Requirements
 
-If both SHAs match:
+## 16. Backward Compatibility
 
-Deployment is current.
+All current working functionality must continue to work.
 
-If SHAs differ:
+Do not modify existing report generation behavior other than adding User Exclusion support.
 
-Deployment is stale.
+---
 
-⸻
+## 17. UI Consistency
 
-13. Deployment Status Messages
+Maintain the same design language already introduced across the application.
 
-Instead of generic status, provide meaningful messages.
+Do not introduce new styles.
 
-Examples:
+Reuse:
 
-✅ Environment is up-to-date
+- Existing badges
+- Existing tooltip components
+- Existing switches
+- Existing status indicators
 
-⚠ Deployment is behind Release Branch
+---
 
-⚠ Latest Release commit has not been deployed
+## 18. Testing Checklist
 
-⚠ Redeployment required
+Before completing this phase, verify:
 
-Choose concise, user-friendly wording.
+- System Excluded components hidden from Branch Cut Validation
+- User Excluded components visible in Branch Cut Validation
+- Generate Report ignores User Excluded components
+- Generate Report ignores System Excluded components
+- Team tooltip displays complete team list
+- Story tooltip displays complete story list
+- Force Refresh only refreshes selected environment
+- Refresh button hidden until environment selected
+- Invalid Only switch visible only after environment selection
+- Settings page contains only one Test Kubernetes Cookie
+- Backend reuses Test Cookie across all Test namespaces
+- Existing functionality remains unaffected
 
-Avoid technical jargon where possible.
+---
 
-⸻
+# Deferred Item (Do Not Implement in This Phase)
 
-14. Compare Against Latest Release Commit
+The Review Commits lifecycle/status redesign discussed during validation is intentionally deferred.
 
-Deployment validation should compare against:
+Do **NOT** modify the Review Commits section in this phase.
 
-Latest commit on Release Branch
-
-NOT
-
-Previous production SHA
-
-NOT
-
-Previous deployment SHA
-
-Always compare deployment against current Release Branch head.
-
-⸻
-
-15. Detect Post-Deployment Commits
-
-System must detect this scenario:
-
-1. Release deployed
-2. Deployment completed
-3. New commit pushed to Release Branch
-
-Deployment immediately becomes outdated.
-
-UI should clearly indicate:
-
-Deployment requires redeployment because newer commits exist.
-
-⸻
-
-16. Preserve Existing Working Functionality
-
-Do NOT regress existing features.
-
-Existing deployment validation that already works must continue working.
-
-Only improve validation accuracy.
-
-⸻
-
-17. Improve Deployment UX
-
-Loading experience should feel polished.
-
-Examples:
-
-“Refreshing deployment status…”
-
-“Checking Kubernetes deployments…”
-
-“Comparing deployed Git SHA…”
-
-“Validating deployment readiness…”
-
-Avoid generic spinner without context.
-
-⸻
-
-18. Backend Logging
-
-Add structured INFO logs:
-
-* deployment validation started
-* namespace selected
-* deployment located
-* active deployment identified
-* Git SHA extracted
-* release SHA retrieved
-* SHA comparison completed
-* deployment status calculated
-
-Add DEBUG logs:
-
-* Kubernetes responses
-* label extraction
-* namespace mapping
-* SHA comparison details
-
-Use MDC username consistently.
-
-⸻
-
-19. Error Handling
-
-If namespace cannot be reached:
-
-Display meaningful error.
-
-If deployment missing:
-
-Display “Deployment not found.”
-
-If Git SHA missing:
-
-Display “Unable to determine deployed version.”
-
-Do not expose stack traces.
-
-⸻
-
-20. Performance
-
-Avoid unnecessary Kubernetes calls.
-
-Reuse cached deployment metadata whenever valid.
-
-Only refresh when:
-
-* Force Refresh clicked
-* Cache expired
-* Team/Fix Version changed
-
-⸻
-
-21. Testing Requirements
-
-Before marking complete, validate:
-
-* Settings cookies reused correctly
-* No duplicate cookie inputs
-* Correct namespace mapping
-* Force Refresh works
-* All five environments refresh
-* Git SHA comparison works
-* Deployment freshness detection works
-* Backend APIs return expected data
-* UI updates automatically
-* Existing functionality remains intact
-
-No acceptance criterion should be skipped.
-
-Implementation is considered complete only after all above points have been verified end-to-end.
+That redesign will be addressed separately after business rule validation.
