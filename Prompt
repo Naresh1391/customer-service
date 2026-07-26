@@ -1,191 +1,496 @@
-Phase 8C – Report Service Optimization & Component Metadata Enhancement
+# Phase X - UI/UX & Commit Validation Improvements
+## Mandatory Acceptance Criteria
 
-## Objective
-
-Redesign the report generation flow to follow a **database-first architecture**, eliminate redundant Kubernetes calls, reduce external system dependencies, and expand the Components data model to become the single source of truth for report generation.
-
----
-
-# Functional Requirements & Acceptance Criteria
-
-## AC-001: Eliminate Duplicate Kubernetes Calls
-
-### Current Observation
-During debugging it was observed that `ReportService` invokes Kubernetes APIs again while preparing the report, even though the same deployment metadata was already fetched during **Component Fetch / Previous Release Resolution**.
-
-### Required Implementation
-- Kubernetes should be called only once during the component fetch phase.
-- All Kubernetes metadata must be persisted immediately into the database.
-- During Generate Report, `ReportService` must read only from the database.
-- No duplicate Kubernetes calls are allowed unless a user explicitly performs a refresh.
+> **Important**
+>
+> This phase is an enhancement only.
+> Existing functionality must NOT break.
+> Existing business logic must remain intact unless explicitly mentioned below.
 
 ---
 
-## AC-002: Database-First Architecture
+# 1. Generate Report - Stories Section UI
 
-Adopt the following flow:
+## Requirement
 
-1. Fetch component metadata from GitHub.
-2. Fetch deployment metadata from Kubernetes.
-3. Persist all data into the Components table (and related persistence tables).
-4. Load the Component Preview only from persisted data.
-5. Allow user overrides.
-6. Save overrides back to the database.
-7. Start report generation using only persisted database records.
+The **Stories** section UI occupies very little screen width compared to the Components section.
 
----
+Currently:
 
-## AC-003: Expand Components Table
+- Stories table looks compressed.
+- Components table utilizes the available width much better.
 
-Extend the Components table to store all Kubernetes metadata required for report generation, including (but not limited to):
+### Acceptance Criteria
 
-- Previous release branch
-- Current release branch
-- Production branch
-- Production Git SHA
-- Active deployment (Blue/Green)
-- Namespace
-- Cluster/environment
-- Resolution source
-- Deployment metadata
-- Kubernetes synchronization timestamp
-- Override status
-
-The Components table becomes the authoritative cache for report generation.
+1. Increase the width of the Stories section.
+2. Follow the same responsive layout used by the Components section.
+3. Keep consistent spacing and margins.
+4. Do not change any functionality.
+5. Only improve the layout.
 
 ---
 
-## AC-004: Persist Before Preview
+# 2. Previous Release Branch Display (Production Kubernetes)
 
-Before showing the Component Preview:
+Current behavior:
 
-- Complete GitHub resolution.
-- Complete Kubernetes resolution.
-- Persist all resolved metadata.
-- Load the preview from the database only.
+Previous branch is fetched correctly from Production Kubernetes.
 
-No in-memory objects should be rendered directly in the preview.
+Example value coming from Kubernetes:
 
----
+```
+release-26-07-rel
+```
 
-## AC-005: Save Overrides Before Report Generation
+Actual Git branch:
 
-When the user clicks **Generate Report**:
+```
+release/26.07.rel
+```
 
-1. Save all component overrides.
-2. Update the Components table.
-3. Persist resolution source and branch selections.
-4. Only then invoke the report generation process.
+The Kubernetes value is correct internally.
 
----
+However the UI is displaying that value directly.
 
-## AC-006: Minimize External Calls
+Users think this branch never exists.
 
-The application must minimize calls to:
+## Required behavior
 
-- GitHub
-- Kubernetes
-- iTrack
-- Veracode
+When displaying Previous Branch:
 
-Database records must always be used first whenever valid cached information exists.
+- Preserve the original production value internally.
+- Maintain Production Branch Name exactly as received.
+- While showing Previous Branch in UI:
 
----
+Find the matching Git branch from the GitHub branch list.
 
-## AC-007: Store Stories List Per Component
+Display:
 
-Enhance the Components table with a `stories_list` field.
+```
+release/26.07.rel
+```
 
-Requirements:
+instead of
 
-- Store every story associated with the component.
-- Support multiple stories per component.
-- A comma-separated value is acceptable initially (future normalization is allowed).
+```
+release-26-07-rel
+```
 
----
+## Acceptance Criteria
 
-## AC-008: Store Responsible Teams
-
-Enhance the Components table with a `teams_list` field.
-
-Requirements:
-
-- Store all owning/responsible teams for the associated stories.
-- Support multiple teams.
-- Persist before preview generation.
-
-Purpose:
-
-- Ownership tracking
-- Reporting
-- Notifications
-- Future dashboards
+- Internal Production branch remains unchanged.
+- Previous Branch displayed must always exist in GitHub.
+- User must never see invalid/non-existing branch names.
+- Existing production resolution logic must remain unchanged.
+- Resolution Source logic must remain unchanged.
 
 ---
 
-## AC-009: Update Metadata After Override
+# 3. Validate Previous Branch Comparison Logic
 
-After the user modifies component details:
+Need complete verification.
 
-- Save updated branches.
-- Save updated resolution source.
-- Save updated stories list.
-- Save updated teams list.
+Developer must review backend logs.
 
-The database must always reflect the latest user-approved state before report generation.
+Verify:
 
----
+- Previous branch comparison
+- Git compare APIs
+- Branch mapping logic
+- Kubernetes branch parsing
+- GitHub comparison APIs
 
-## AC-010: Optimize ReportService
+Acceptance Criteria
 
-Refactor `ReportService` so that it:
+If current implementation is already correct:
 
-- Reads component metadata only from the database.
-- Does not re-fetch Kubernetes deployment information.
-- Does not duplicate external API requests.
-- Uses persisted cache as the single source of truth.
+- Keep it unchanged.
 
----
+If any issue exists:
 
-## AC-011: Compliance Analyzer Improvements
+- Fix it.
 
-Review and redesign:
-
-`ComplianceAnalyzerService.analyzeCommitDetailed(...)`
-
-The valid story detection logic must be updated to comply with the previously agreed business rules, including:
-
-- Release branch validation
-- Previous production branch validation
-- Production Git SHA anchor
-- Story-to-commit mapping
-- Cherry-pick detection
-- Missing release commit detection
-- Reverted commit handling
-- Manual overrides
-- Trunk-based development scenarios
-
-Do not remove the existing implementation until the new logic has been validated.
+No regressions allowed.
 
 ---
 
-# Non-Regression Requirements
+# 4. Generate Report Progress UX
 
-- Existing functionality must continue to work.
-- User comments and overrides must never be lost.
-- Database remains the primary cache.
-- External calls should be performed only during explicit refresh operations.
-- Future PostgreSQL/Azure SQL migration must remain supported.
+Current behavior
+
+User clicks:
+
+Generate Report
+
+Spinner keeps rotating.
+
+User has no idea that processing is asynchronous.
+
+## Required
+
+Replace generic spinner message with a better UX message.
+
+Example:
+
+```
+Report generation is running in the background.
+
+You can continue using the application.
+
+Results will automatically appear in the Review Commits section once processing completes.
+```
+
+Acceptance Criteria
+
+- No blocking UI
+- Better user guidance
+- Friendly message
+- Async behavior clearly communicated
 
 ---
 
-# Definition of Done
+# 5. Review Commits Screen UX Improvements
 
-- Kubernetes is read only during refresh/component fetch.
-- Report generation uses only database data.
-- Components table contains all required Kubernetes metadata.
-- Stories and Teams are persisted for every component.
-- Preview is rendered from persisted records.
-- Overrides are saved before report generation.
-- Compliance Analyzer logic is updated and verified.
-- External API calls are minimized without changing business functionality.
+Current screen is becoming crowded.
+
+Many columns have overlapping meanings.
+
+Need simplification.
+
+---
+
+# 6. Lifecycle vs Action Analysis
+
+Current columns
+
+- Status
+- Lifecycle
+- Action
+
+Example
+
+Status:
+
+```
+FAIL
+```
+
+Lifecycle:
+
+```
+OK
+```
+
+Tooltip:
+
+```
+Valid Release Commit
+No issues detected
+```
+
+Action:
+
+```
+Missing Release Commit
+Cherry Pick Required
+```
+
+This is confusing.
+
+Lifecycle says OK.
+
+Action says failure.
+
+Both cannot represent different meanings.
+
+---
+
+## Required
+
+Developer must redesign this section.
+
+Goal:
+
+One clear status.
+
+One clear meaning.
+
+User should immediately understand:
+
+- What happened
+- Why
+- What should be done
+
+Acceptance Criteria
+
+Remove duplicate concepts.
+
+Keep only one meaningful business state.
+
+Examples:
+
+- Valid Release Commit
+- Cherry Pick Required
+- Direct Release Commit
+- Reverted Commit
+- Invalid Story
+- Missing Story Mapping
+
+Avoid showing contradictory information.
+
+---
+
+# 7. Direct Release Commit Badge
+
+Current badge color:
+
+Orange.
+
+Users perceive it as warning/error.
+
+Actual meaning:
+
+Direct Release Commit
+
+It is informational.
+
+Acceptance Criteria
+
+Review badge colors.
+
+Choose proper semantic colors.
+
+Examples:
+
+Information
+
+Blue
+
+Neutral
+
+Gray
+
+Success
+
+Green
+
+Warning
+
+Amber
+
+Error
+
+Red
+
+Direct Release Commit must NOT look like an error.
+
+---
+
+# 8. Override Button UI
+
+Current button consumes unnecessary space.
+
+Acceptance Criteria
+
+Reduce button size.
+
+Improve alignment.
+
+Keep responsive.
+
+Do not affect functionality.
+
+---
+
+# 9. Master Branch Commit Validation
+
+Current validation still needs review.
+
+Developer must verify:
+
+Merge commits
+
+Squash commits
+
+Rebase commits
+
+Cherry-picked commits
+
+Fast-forward merges
+
+Merge commits must not create duplicate violations.
+
+Acceptance Criteria
+
+Review complete commit detection logic.
+
+Ignore merge-only commits wherever applicable.
+
+Avoid duplicate commit entries.
+
+Avoid duplicate violations.
+
+---
+
+# 10. Tooltip Improvements
+
+Current tooltip is too technical.
+
+Contains:
+
+Detection Method
+
+Validation Rule
+
+Suggested Action
+
+Need simplified language.
+
+Acceptance Criteria
+
+Business users should understand the tooltip without Git knowledge.
+
+Example
+
+Instead of:
+
+```
+Detection Method:
+SHA Match
+```
+
+Use:
+
+```
+This commit exists in the release branch.
+```
+
+Instead of:
+
+```
+Validation Rule:
+Commit exists on release branch.
+```
+
+Use:
+
+```
+No action is required.
+```
+
+Simple language preferred.
+
+---
+
+# 11. Overall UX Review
+
+Developer must perform a full UX review of the Review Commits page.
+
+Goals:
+
+- Better readability
+- Less visual clutter
+- Better typography
+- Better spacing
+- Consistent colors
+- Proper icons
+- Better table alignment
+
+No business logic changes.
+
+Only UX improvements.
+
+---
+
+# 12. Preserve Existing Functionality
+
+Mandatory.
+
+Do NOT break:
+
+- Story validation
+- Component loading
+- Kubernetes integration
+- Previous branch detection
+- Production resolution
+- Commit analysis
+- Override workflow
+- Background jobs
+- Report generation
+
+Only enhance UI and fix identified issues.
+
+---
+
+# Deliverables
+
+Developer must provide:
+
+- Updated frontend implementation
+- Updated backend (only if required)
+- Refactored Review Commit UI
+- Improved Generate Report UX
+- Fixed Previous Branch display mapping
+- Validation report explaining:
+  - Previous branch mapping
+  - Git comparison logic
+  - Merge commit handling
+  - Tooltip redesign
+  - Lifecycle redesign
+
+
+---
+
+# 10. Ignore Merge Commits During Master Branch Analysis
+
+## Requirement
+
+While performing commit analysis between:
+
+- Master Branch
+- Current Release Branch
+
+the system is currently considering normal merge commits as regular code commits.
+
+This creates unnecessary violations and duplicate analysis because merge commits generally do not introduce new business changes—they only merge existing commit history.
+
+## Required Behavior
+
+During master-to-release branch commit analysis:
+
+- Identify Git merge commits.
+- Exclude merge commits from compliance evaluation.
+- Do NOT create review comments for merge commits.
+- Do NOT classify merge commits as:
+  - Missing Release Commit
+  - Cherry Pick Required
+  - Direct Release Commit
+  - Violation
+- Ignore merge commits completely unless they contain actual business code changes that cannot be represented by the underlying individual commits.
+
+The compliance engine should analyze only the actual development commits.
+
+## Acceptance Criteria
+
+1. Merge commits must be detected using Git metadata instead of commit message text wherever possible.
+2. Ignore standard Git merge commits during compliance analysis.
+3. Merge commits must not be inserted into the Review Comments table.
+4. Merge commits must not create false violations.
+5. Merge commits must not affect compliance percentages or dashboard statistics.
+6. If a merge commit only combines commits already analyzed individually, it must be skipped completely.
+7. Add debug logging indicating:
+   - Merge commit detected
+   - Commit SHA
+   - Merge commit skipped from compliance analysis
+8. Existing release branch comparison logic must remain unchanged.
+9. Existing cherry-pick detection must continue to work correctly.
+10. Existing direct release detection must continue to work correctly.
+11. Existing revert detection must continue to work correctly.
+12. Existing story validation logic must not be impacted.
+13. Validate the implementation using:
+    - Regular commits
+    - Merge commits
+    - Squash merges
+    - Rebase merges
+    - Cherry-picked commits
+    to ensure no regressions are introduced.
