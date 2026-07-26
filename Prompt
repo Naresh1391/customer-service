@@ -1,454 +1,161 @@
-Phase 11 – Release Readiness UI/UX Enhancements & Deployment Readiness Improvements
+Phase 11 – Release Readiness (Deployment Section) UI/UX & Backend Re-Architecture
 
 Objective
 
-This phase focuses on improving the Release Readiness page from a UI/UX perspective without changing any existing business functionality. The primary goal is to make the Release Readiness dashboard easier to use, improve filtering capabilities, reduce user effort, and present information in a much more intuitive manner.
+Completely redesign and stabilize the Release Readiness → Deployment section.
 
-Important
+The objective is to:
 
-* This is an enhancement phase only.
-* Existing functionality must not break.
-* Existing backend logic should be reused wherever possible.
-* Do not introduce unnecessary external API calls if the required information is already available in the database.
+* simplify the UI,
+* remove redundant information,
+* improve usability,
+* reduce screen clutter,
+* correctly reuse Settings page Kubernetes connections,
+* validate deployments accurately,
+* verify deployment freshness using Git SHA,
+* and ensure all frontend/backend APIs work correctly.
 
-⸻
-
-1. Story Status Section Improvements
-
-Current State
-
-The Story Status page is working correctly.
-
-The Pending Only toggle is useful.
-
-However, users need better filtering capabilities when working with large releases.
+This is a mandatory implementation. Existing working functionality must not regress.
 
 ⸻
-
-Requirement 1.1 – Team Filter
-
-Add a Team filter in the Story Status section.
-
-The filter should allow users to view stories belonging to a specific team.
 
 Acceptance Criteria
 
-1. Add Team filter beside existing filters.
-2. Populate values dynamically from Story data.
-3. Selecting a team filters only that team’s stories.
-4. Clearing filter shows all stories.
-5. Existing Pending Only functionality must continue working.
+1. Remove Redundant Connection Status
+
+Current Problem
+
+Release Readiness currently shows:
+
+* GitHub Connection
+* iTrack Connection
+* Kubernetes PROD Connection
+
+These are already displayed in Generate Report.
+
+This duplication wastes screen space.
+
+Required Changes
+
+* Remove the entire top Connection Status panel from Release Readiness.
+* Do NOT remove it from Generate Report.
+* Generate Report remains the only page that displays GitHub/iTrack/Production connection validation.
 
 ⸻
 
-Requirement 1.2 – Reporter Filter
+2. Complete UI Layout Redesign
 
-Add Reporter filter.
+Current layout occupies almost half of the screen before users can even see deployment information.
 
-Acceptance Criteria
+Current sections include:
 
-* Dropdown populated dynamically.
-* Works together with Team filter.
-* Supports combined filtering.
+* Team
+* Fix Version
+* Statistics
+* Story Count
+* Branch Count
+* Deployment Config
+* Connection Status
+* Filters
+
+This consumes excessive vertical space.
+
+Required
+
+Act as a senior UI/UX architect.
+
+Redesign this page so that:
+
+* important deployment information appears immediately
+* filters consume minimal space
+* statistics are compact
+* spacing is reduced
+* unnecessary headers are removed
+* controls align consistently with other tabs
+* screen utilization is significantly improved
+
+Target:
+
+* configuration area should consume approximately 35–40% of the visible screen height
+* remaining area should prioritize deployment readiness information
+
+Do not simply reduce margins.
+
+Reorganize the layout intelligently.
 
 ⸻
 
-Requirement 1.3 – Assignee Filter
+3. Remove Deployment Cookie Inputs
 
-Add Assignee filter.
+Current deployment page still asks users for:
 
-Acceptance Criteria
+* Kubernetes Cookie
+* Environment
+* Test Cookie
 
-* Dynamic values.
-* Can be combined with:
-    * Pending Only
-    * Team
-    * Reporter
+These are already managed from Settings.
+
+This creates duplicate configuration.
+
+Required
+
+Remove completely:
+
+* Environment dropdown
+* Kubernetes Cookie input
+* Test Cookie input
+* Production Cookie input
+* Any runtime cookie entry
+
+Users should manage cookies ONLY from:
+
+Settings → Connections
+
+Deployment page becomes completely read-only regarding authentication.
 
 ⸻
 
-Requirement 1.4 – Combined Filtering
+4. Reuse Session Settings
 
-All filters should work together.
+Settings page already stores:
+
+* Test Cookie
+* Stage West Cookie
+* Production East Cookie
+* Production West Cookie
+
+Deployment page must automatically reuse these session values.
+
+No duplicate entry should exist.
+
+⸻
+
+5. Deployment Connection Status
+
+Instead of the removed cookie controls, display a compact deployment readiness status.
 
 Example:
 
-* Pending Only
-* Team = Wireless-4
-* Reporter = John
-* Assignee = David
+* ✅ Test Cookie Ready
+* ✅ Stage West Ready
+* ✅ Production East Ready
+* ❌ Production West Missing
 
-Only matching stories should be displayed.
+Status should update using the same mechanism already implemented in Generate Report.
 
-⸻
+No duplicate validation logic.
 
-2. Branch Validation Section Improvements
-
-Requirement 2.1 – Rename Section
-
-Current Name
-
-Branch Validation
-
-Rename to
-
-Branch Cut Validation
-
-This better reflects the actual purpose of the page.
+Reuse existing implementation.
 
 ⸻
 
-Requirement 2.2 – Validation Required Toggle
+6. Remove Environment Selector
 
-Similar to Story Status Pending Only switch.
+Current deployment UI still asks users to select environment.
 
-Add a switch:
+This is unnecessary.
 
-Show Validation Required Only
-
-or
-
-Show Invalid Branches Only
-
-(Developer may choose the better wording.)
-
-Acceptance Criteria
-
-* Toggle shows only components requiring branch validation.
-* OFF → show all components.
-* ON → show only pending/invalid branch-cut components.
-
-⸻
-
-3. Team Filter in Branch Cut Validation
-
-Each component may belong to multiple teams.
-
-Example
-
-Wireless-4,
-Billing,
-Activation,
-Inventory
-
-User should be able to filter by one team.
-
-Example
-
-Selecting
-
-Wireless-4
-
-must show all components where Wireless-4 exists in the comma-separated team list.
-
-⸻
-
-Acceptance Criteria
-
-1. Add Team filter.
-2. Support comma-separated values.
-3. Matching should work if selected team exists anywhere in list.
-4. No backend API change required if DB already stores teams.
-5. Filtering should be fast.
-
-⸻
-
-4. Stories & Teams Display Improvements
-
-Currently component information is minimal.
-
-Need richer information.
-
-Each component already has:
-
-* Stories
-* Teams
-
-stored in database.
-
-Show these in UI.
-
-⸻
-
-Acceptance Criteria
-
-Display:
-
-* Story list
-* Team list
-
-Use a clean UI.
-
-Examples:
-
-* Chips
-* Badges
-* Expandable list
-* Tooltip
-* “+3 More”
-
-Developer should choose the best UX.
-
-Avoid clutter.
-
-⸻
-
-5. Previous Branch Detection Source
-
-Current Previous Branch is shown.
-
-Need to indicate how it was resolved.
-
-Examples
-
-* Production Kubernetes
-* Manual Override
-* GitHub Fallback
-
-This information already exists.
-
-Reuse existing DB field.
-
-Do NOT call Kubernetes again.
-
-⸻
-
-Acceptance Criteria
-
-Display a small badge/icon beside Previous Branch.
-
-Examples
-
-Production Kubernetes
-Manual Override
-GitHub Fallback
-
-Tooltip is acceptable.
-
-Reuse existing Resolution Source.
-
-⸻
-
-6. Previous Branch Display
-
-Phase-10 already includes fixing branch formatting.
-
-Ensure same formatted branch appears here also.
-
-No raw Kubernetes branch names should be displayed.
-
-⸻
-
-7. SAST Section
-
-No changes required.
-
-Keep existing implementation.
-
-⸻
-
-8. Deployment Readiness Improvements
-
-Current deployment readiness requires improvements.
-
-⸻
-
-Requirement 8.1 – Kubernetes Cookie Simplification
-
-Current implementation assumes multiple cookies.
-
-Actual behavior
-
-All Test namespaces share one cookie.
-
-Rename settings:
-
-Instead of
-
-Test-3 Cookie
-Test-4 Cookie
-
-Use
-
-Test Kubernetes Cookie
-
-Single cookie.
-
-Applicable for
-
-* Test-1
-* Test-2
-* Test-3
-* Test-4
-
-⸻
-
-Requirement 8.2 – Namespace Selection
-
-Instead of hardcoding environment,
-
-Provide two selections:
-
-Environment
-
-Namespace
-
-⸻
-
-Example
-
-Environment
-
-Test
-
-Namespace
-
-com-att-oc-fmo-test-3
-com-att-oc-fmo-test-4
-
-⸻
-
-Stage
-
-Stage-West
-
-Namespace
-
-com-att-oc-fmo
-
-⸻
-
-Production East
-
-Namespace
-
-com-att-oc-fmo
-
-⸻
-
-Production West
-
-Namespace
-
-com-att-oc-fmo
-
-⸻
-
-Acceptance Criteria
-
-Environment determines:
-
-* Cluster URL
-* Cookie
-* Namespace list
-
-Namespace determines:
-
-Deployment lookup.
-
-⸻
-
-9. Environment Mapping
-
-System should support:
-
-Test
-
-Namespaces
-
-* Test-3
-* Test-4
-
-Common Test Cookie
-
-⸻
-
-Stage
-
-Stage-West
-
-Own Cookie
-
-Namespace
-
-com-att-oc-fmo
-
-⸻
-
-Production
-
-Production-East
-
-Production-West
-
-Separate Cookies.
-
-Same Namespace.
-
-⸻
-
-10. Connection Status Indicator
-
-Similar to Generate Report page.
-
-Show connection indicators.
-
-Examples
-
-✓ Test Kubernetes Connected
-✓ Production East Connected
-✗ Production West Cookie Missing
-
-Should help users understand missing configuration.
-
-⸻
-
-Acceptance Criteria
-
-Connection status should indicate:
-
-* Cookie Available
-* Cookie Missing
-* Connection Tested
-* Connection Failed
-
-No need to navigate to Settings page.
-
-⸻
-
-11. Major & Minor Release Support
-
-Organization uses:
-
-Major Release
-
-* Test-3
-
-Minor Release
-
-* Test-4
-
-Both eventually move through:
-
-Stage-West
-
-↓
-
-Production-East
-
-↓
-
-Production-West
-
-System should naturally support this deployment flow.
-
-No hardcoded assumptions.
-
-⸻
-
-12. Default Deployment Environments
-
-Release Readiness should support validating:
+The application always validates these fixed environments:
 
 * Test-3
 * Test-4
@@ -456,201 +163,369 @@ Release Readiness should support validating:
 * Production-East
 * Production-West
 
-These five environments represent the standard deployment validation path.
+Therefore:
+
+Remove Environment dropdown completely.
+
+No manual environment selection.
 
 ⸻
 
-13. UI/UX Improvements
+7. Fixed Deployment Targets
 
-Developer should redesign the Release Readiness page following modern dashboard principles.
+Deployment validation always evaluates these five environments:
 
-Focus on:
+* Test-3
+* Test-4
+* Stage-West
+* Production-East
+* Production-West
 
-* Better spacing
-* Better typography
-* Consistent headers
-* Better filter alignment
-* Responsive layout
-* Reduced clutter
-* Clear visual grouping
-* Better badges
-* Better chips
-* Better icons
-
-Reuse existing AT&T blue/white branding.
-
-Do not change the application’s overall theme.
+No additional environments should appear.
 
 ⸻
 
-14. Backend Optimisation
+8. Namespace Resolution
 
-Wherever possible:
+Namespaces must NOT be hardcoded.
 
-* Reuse cached database data.
-* Avoid unnecessary Kubernetes API calls.
-* Avoid duplicate queries.
-* Reuse existing Resolution Source values.
-* Use existing Components table wherever data already exists.
+Read namespaces from Team Configuration.
 
-⸻
+Example:
 
-15. Regression Safety
+team-config.yaml
 
-Mandatory.
+contains
 
-Do not break:
+* Test-3 Namespace
+* Test-4 Namespace
+* Stage-West Namespace
+* Production-East Namespace
+* Production-West Namespace
 
-* Story Status
-* Branch Cut Validation
-* Deployment Readiness
-* Kubernetes Integration
-* Team Filters
-* Existing Background Jobs
-* Existing Dashboard Statistics
-* Existing Generate Report flow
-* Existing Component Preview flow
-* Existing Resolution Source logic
+Deployment service must always resolve namespace from Team Configuration.
 
-All enhancements must be backward compatible.
+Never hardcode namespace names.
 
 ⸻
 
-Deliverables
+9. Fix Namespace Bugs
 
-Developer must provide:
+Current implementation appears to use incorrect namespaces.
 
-* Updated Release Readiness UI
-* Enhanced Story Status filters
-* Branch Cut Validation improvements
-* Team-based filtering
-* Previous Branch Resolution badge
-* Deployment Readiness redesign
-* Namespace selection
-* Kubernetes connection indicators
-* Backend optimizations using existing cached data
-* Updated documentation with screenshots (if applicable)
+Examples observed:
 
+* Test-3 namespace incorrect
+* Test-4 namespace incorrect
+* Production namespace mapping inconsistent
 
+Review entire namespace resolution flow.
 
-Requirement 8.3 – Multi-Environment Deployment Readiness Dashboard
+Validate:
 
-Objective
+Frontend
 
-The Deployment Readiness section should provide a clear overview of deployment status across all mandatory deployment environments used during the release process. The goal is to allow users to quickly identify which environments are configured correctly, which Kubernetes connections are available, and the deployment readiness for each environment.
+↓
 
-The UI should be redesigned from a dashboard perspective rather than showing a single environment at a time.
+Backend
 
-⸻
+↓
 
-Standard Deployment Environments
+Namespace resolution
 
-The application must support the following deployment environments:
+↓
 
-Environment	Namespace	Kubernetes Cookie
-Test-3	com-att-oc-fmo-test-3	Test Cookie
-Test-4	com-att-oc-fmo-test-4	Test Cookie
-Stage-West	com-att-oc-fmo	Stage-West Cookie
-Production-East	com-att-oc-fmo	Production-East Cookie
-Production-West	com-att-oc-fmo	Production-West Cookie
+Kubernetes API
 
-These five environments represent the standard release promotion path and should be considered first-class deployment targets throughout the application.
+↓
+
+Deployment retrieval
+
+End-to-end.
 
 ⸻
 
-Requirement 8.4 – Deployment Readiness Dashboard
+10. Force Refresh Button
 
-Instead of requiring the user to repeatedly change environments and rerun validation, redesign this section as a deployment readiness dashboard.
+Deployment page should expose only one primary action.
 
-The dashboard should display all five environments together in a clean, compact layout.
+Button:
 
-Each environment should display:
+Force Refresh Deployment Status
 
-* Environment name
-* Namespace
-* Connection status
-* Cookie availability
-* Last refresh time
-* Deployment readiness summary
-* Number of validated components
-* Number of pending components
-* Number of failed validations (if any)
+Behavior:
 
-The UI should allow users to immediately identify which environment requires attention without navigating through multiple screens.
+* refresh all five environments
+* execute asynchronously
+* update UI automatically
+* no manual refresh per environment
+
+Remove unnecessary buttons.
 
 ⸻
 
-Requirement 8.5 – Kubernetes Connection Status
+11. Validate Backend APIs
 
-Each environment should clearly display its Kubernetes connection status.
+Current deployment data appears inconsistent.
 
-Example statuses include:
+Review entire flow.
 
-* Connected
-* Cookie Available
-* Cookie Missing
-* Connection Test Failed
-* Last Successfully Connected
-* Refresh In Progress
+Verify:
 
-Use clear visual indicators (success, warning, error, loading) consistent with the application’s existing AT&T theme.
+Frontend
 
-⸻
+↓
 
-Requirement 8.6 – Environment Selection Experience
+Controller
 
-The developer may redesign this section using the most appropriate UX pattern.
+↓
 
-Possible implementations include:
+Service
 
-* Dashboard cards
-* Environment tabs
-* Accordion sections
-* Responsive grid
-* Expandable panels
+↓
 
-The exact UI implementation is left to the developer’s UX expertise.
+Kubernetes Client
 
-The primary objective is that users can quickly switch between environments while keeping the interface clean and intuitive.
+↓
 
-⸻
+Namespace
 
-Requirement 8.7 – Intelligent Namespace Resolution
+↓
 
-The system should automatically determine the appropriate Kubernetes cluster and authentication based on the selected environment.
+Deployment
 
-Users should never need to manually understand cluster mappings.
+↓
 
-Internally:
+Pod
 
-* Test-3 and Test-4 use the Test Kubernetes cluster and Test Cookie.
-* Stage-West uses the Stage-West cluster and Stage-West Cookie.
-* Production-East uses the Production-East cluster and Production-East Cookie.
-* Production-West uses the Production-West cluster and Production-West Cookie.
+↓
 
-This mapping should be maintained centrally and reused throughout the application.
+Labels
 
-⸻
+↓
 
-Requirement 8.8 – Reuse Existing Cached Deployment Data
+DTO
 
-Where deployment readiness information has already been collected and stored in the database, reuse that data instead of making additional Kubernetes API calls.
+↓
 
-Only perform a Kubernetes refresh when the user explicitly requests a refresh or when cached data is unavailable.
+UI
 
-This minimizes external API calls and improves overall application performance.
+Confirm every API returns expected data.
+
+Fix any broken mappings.
 
 ⸻
 
-Acceptance Criteria
+12. Verify Deployment Freshness Using Git SHA
 
-1. The Deployment Readiness page must support all five standard deployment environments.
-2. The UI must present deployment readiness in a clean dashboard-style layout.
-3. Users should be able to identify connection status for every environment at a glance.
-4. Namespace and cookie mapping must happen automatically based on the selected environment.
-5. Existing deployment validation logic must remain unchanged.
-6. Existing Kubernetes integration must remain unchanged.
-7. Existing database caching must be reused wherever possible.
-8. Unnecessary Kubernetes API calls must be avoided.
-9. The redesigned UI must follow the overall AT&T blue/white design language and remain responsive across different screen sizes.
-10. No existing deployment readiness functionality should regress as part of this enhancement.
+This is a major enhancement.
+
+Current deployment validation only checks whether deployment exists.
+
+This is insufficient.
+
+Scenario:
+
+* Branch cut completed
+* Test deployment completed
+* Stage deployment completed
+* Another developer commits to Release branch afterwards
+
+Deployment still exists.
+
+But latest code is NOT deployed.
+
+Current implementation incorrectly reports deployment as valid.
+
+⸻
+
+Required Validation
+
+For every deployment:
+
+Read:
+
+Deployment
+
+↓
+
+Pod
+
+↓
+
+Labels
+
+↓
+
+Latest Git SHA deployed
+
+Then compare against:
+
+Latest Git SHA available on Release Branch
+
+If both SHAs match:
+
+Deployment is current.
+
+If SHAs differ:
+
+Deployment is stale.
+
+⸻
+
+13. Deployment Status Messages
+
+Instead of generic status, provide meaningful messages.
+
+Examples:
+
+✅ Environment is up-to-date
+
+⚠ Deployment is behind Release Branch
+
+⚠ Latest Release commit has not been deployed
+
+⚠ Redeployment required
+
+Choose concise, user-friendly wording.
+
+Avoid technical jargon where possible.
+
+⸻
+
+14. Compare Against Latest Release Commit
+
+Deployment validation should compare against:
+
+Latest commit on Release Branch
+
+NOT
+
+Previous production SHA
+
+NOT
+
+Previous deployment SHA
+
+Always compare deployment against current Release Branch head.
+
+⸻
+
+15. Detect Post-Deployment Commits
+
+System must detect this scenario:
+
+1. Release deployed
+2. Deployment completed
+3. New commit pushed to Release Branch
+
+Deployment immediately becomes outdated.
+
+UI should clearly indicate:
+
+Deployment requires redeployment because newer commits exist.
+
+⸻
+
+16. Preserve Existing Working Functionality
+
+Do NOT regress existing features.
+
+Existing deployment validation that already works must continue working.
+
+Only improve validation accuracy.
+
+⸻
+
+17. Improve Deployment UX
+
+Loading experience should feel polished.
+
+Examples:
+
+“Refreshing deployment status…”
+
+“Checking Kubernetes deployments…”
+
+“Comparing deployed Git SHA…”
+
+“Validating deployment readiness…”
+
+Avoid generic spinner without context.
+
+⸻
+
+18. Backend Logging
+
+Add structured INFO logs:
+
+* deployment validation started
+* namespace selected
+* deployment located
+* active deployment identified
+* Git SHA extracted
+* release SHA retrieved
+* SHA comparison completed
+* deployment status calculated
+
+Add DEBUG logs:
+
+* Kubernetes responses
+* label extraction
+* namespace mapping
+* SHA comparison details
+
+Use MDC username consistently.
+
+⸻
+
+19. Error Handling
+
+If namespace cannot be reached:
+
+Display meaningful error.
+
+If deployment missing:
+
+Display “Deployment not found.”
+
+If Git SHA missing:
+
+Display “Unable to determine deployed version.”
+
+Do not expose stack traces.
+
+⸻
+
+20. Performance
+
+Avoid unnecessary Kubernetes calls.
+
+Reuse cached deployment metadata whenever valid.
+
+Only refresh when:
+
+* Force Refresh clicked
+* Cache expired
+* Team/Fix Version changed
+
+⸻
+
+21. Testing Requirements
+
+Before marking complete, validate:
+
+* Settings cookies reused correctly
+* No duplicate cookie inputs
+* Correct namespace mapping
+* Force Refresh works
+* All five environments refresh
+* Git SHA comparison works
+* Deployment freshness detection works
+* Backend APIs return expected data
+* UI updates automatically
+* Existing functionality remains intact
+
+No acceptance criterion should be skipped.
+
+Implementation is considered complete only after all above points have been verified end-to-end.
