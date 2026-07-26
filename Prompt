@@ -1,496 +1,656 @@
-# Phase X - UI/UX & Commit Validation Improvements
-## Mandatory Acceptance Criteria
+Phase 11 – Release Readiness UI/UX Enhancements & Deployment Readiness Improvements
 
-> **Important**
->
-> This phase is an enhancement only.
-> Existing functionality must NOT break.
-> Existing business logic must remain intact unless explicitly mentioned below.
+Objective
 
----
+This phase focuses on improving the Release Readiness page from a UI/UX perspective without changing any existing business functionality. The primary goal is to make the Release Readiness dashboard easier to use, improve filtering capabilities, reduce user effort, and present information in a much more intuitive manner.
 
-# 1. Generate Report - Stories Section UI
+Important
 
-## Requirement
+* This is an enhancement phase only.
+* Existing functionality must not break.
+* Existing backend logic should be reused wherever possible.
+* Do not introduce unnecessary external API calls if the required information is already available in the database.
 
-The **Stories** section UI occupies very little screen width compared to the Components section.
+⸻
 
-Currently:
+1. Story Status Section Improvements
 
-- Stories table looks compressed.
-- Components table utilizes the available width much better.
+Current State
 
-### Acceptance Criteria
+The Story Status page is working correctly.
 
-1. Increase the width of the Stories section.
-2. Follow the same responsive layout used by the Components section.
-3. Keep consistent spacing and margins.
-4. Do not change any functionality.
-5. Only improve the layout.
+The Pending Only toggle is useful.
 
----
+However, users need better filtering capabilities when working with large releases.
 
-# 2. Previous Release Branch Display (Production Kubernetes)
+⸻
 
-Current behavior:
+Requirement 1.1 – Team Filter
 
-Previous branch is fetched correctly from Production Kubernetes.
+Add a Team filter in the Story Status section.
 
-Example value coming from Kubernetes:
-
-```
-release-26-07-rel
-```
-
-Actual Git branch:
-
-```
-release/26.07.rel
-```
-
-The Kubernetes value is correct internally.
-
-However the UI is displaying that value directly.
-
-Users think this branch never exists.
-
-## Required behavior
-
-When displaying Previous Branch:
-
-- Preserve the original production value internally.
-- Maintain Production Branch Name exactly as received.
-- While showing Previous Branch in UI:
-
-Find the matching Git branch from the GitHub branch list.
-
-Display:
-
-```
-release/26.07.rel
-```
-
-instead of
-
-```
-release-26-07-rel
-```
-
-## Acceptance Criteria
-
-- Internal Production branch remains unchanged.
-- Previous Branch displayed must always exist in GitHub.
-- User must never see invalid/non-existing branch names.
-- Existing production resolution logic must remain unchanged.
-- Resolution Source logic must remain unchanged.
-
----
-
-# 3. Validate Previous Branch Comparison Logic
-
-Need complete verification.
-
-Developer must review backend logs.
-
-Verify:
-
-- Previous branch comparison
-- Git compare APIs
-- Branch mapping logic
-- Kubernetes branch parsing
-- GitHub comparison APIs
+The filter should allow users to view stories belonging to a specific team.
 
 Acceptance Criteria
 
-If current implementation is already correct:
+1. Add Team filter beside existing filters.
+2. Populate values dynamically from Story data.
+3. Selecting a team filters only that team’s stories.
+4. Clearing filter shows all stories.
+5. Existing Pending Only functionality must continue working.
 
-- Keep it unchanged.
+⸻
 
-If any issue exists:
+Requirement 1.2 – Reporter Filter
 
-- Fix it.
+Add Reporter filter.
 
-No regressions allowed.
+Acceptance Criteria
 
----
+* Dropdown populated dynamically.
+* Works together with Team filter.
+* Supports combined filtering.
 
-# 4. Generate Report Progress UX
+⸻
 
-Current behavior
+Requirement 1.3 – Assignee Filter
 
-User clicks:
+Add Assignee filter.
 
-Generate Report
+Acceptance Criteria
 
-Spinner keeps rotating.
+* Dynamic values.
+* Can be combined with:
+    * Pending Only
+    * Team
+    * Reporter
 
-User has no idea that processing is asynchronous.
+⸻
 
-## Required
+Requirement 1.4 – Combined Filtering
 
-Replace generic spinner message with a better UX message.
+All filters should work together.
 
 Example:
 
-```
-Report generation is running in the background.
+* Pending Only
+* Team = Wireless-4
+* Reporter = John
+* Assignee = David
 
-You can continue using the application.
+Only matching stories should be displayed.
 
-Results will automatically appear in the Review Commits section once processing completes.
-```
+⸻
+
+2. Branch Validation Section Improvements
+
+Requirement 2.1 – Rename Section
+
+Current Name
+
+Branch Validation
+
+Rename to
+
+Branch Cut Validation
+
+This better reflects the actual purpose of the page.
+
+⸻
+
+Requirement 2.2 – Validation Required Toggle
+
+Similar to Story Status Pending Only switch.
+
+Add a switch:
+
+Show Validation Required Only
+
+or
+
+Show Invalid Branches Only
+
+(Developer may choose the better wording.)
 
 Acceptance Criteria
 
-- No blocking UI
-- Better user guidance
-- Friendly message
-- Async behavior clearly communicated
+* Toggle shows only components requiring branch validation.
+* OFF → show all components.
+* ON → show only pending/invalid branch-cut components.
 
----
+⸻
 
-# 5. Review Commits Screen UX Improvements
+3. Team Filter in Branch Cut Validation
 
-Current screen is becoming crowded.
-
-Many columns have overlapping meanings.
-
-Need simplification.
-
----
-
-# 6. Lifecycle vs Action Analysis
-
-Current columns
-
-- Status
-- Lifecycle
-- Action
+Each component may belong to multiple teams.
 
 Example
 
-Status:
-
-```
-FAIL
-```
-
-Lifecycle:
-
-```
-OK
-```
-
-Tooltip:
-
-```
-Valid Release Commit
-No issues detected
-```
-
-Action:
-
-```
-Missing Release Commit
-Cherry Pick Required
-```
-
-This is confusing.
-
-Lifecycle says OK.
-
-Action says failure.
-
-Both cannot represent different meanings.
-
----
-
-## Required
-
-Developer must redesign this section.
-
-Goal:
-
-One clear status.
-
-One clear meaning.
-
-User should immediately understand:
-
-- What happened
-- Why
-- What should be done
-
-Acceptance Criteria
-
-Remove duplicate concepts.
-
-Keep only one meaningful business state.
-
-Examples:
-
-- Valid Release Commit
-- Cherry Pick Required
-- Direct Release Commit
-- Reverted Commit
-- Invalid Story
-- Missing Story Mapping
-
-Avoid showing contradictory information.
-
----
-
-# 7. Direct Release Commit Badge
-
-Current badge color:
-
-Orange.
-
-Users perceive it as warning/error.
-
-Actual meaning:
-
-Direct Release Commit
-
-It is informational.
-
-Acceptance Criteria
-
-Review badge colors.
-
-Choose proper semantic colors.
-
-Examples:
-
-Information
-
-Blue
-
-Neutral
-
-Gray
-
-Success
-
-Green
-
-Warning
-
-Amber
-
-Error
-
-Red
-
-Direct Release Commit must NOT look like an error.
-
----
-
-# 8. Override Button UI
-
-Current button consumes unnecessary space.
-
-Acceptance Criteria
-
-Reduce button size.
-
-Improve alignment.
-
-Keep responsive.
-
-Do not affect functionality.
-
----
-
-# 9. Master Branch Commit Validation
-
-Current validation still needs review.
-
-Developer must verify:
-
-Merge commits
-
-Squash commits
-
-Rebase commits
-
-Cherry-picked commits
-
-Fast-forward merges
-
-Merge commits must not create duplicate violations.
-
-Acceptance Criteria
-
-Review complete commit detection logic.
-
-Ignore merge-only commits wherever applicable.
-
-Avoid duplicate commit entries.
-
-Avoid duplicate violations.
-
----
-
-# 10. Tooltip Improvements
-
-Current tooltip is too technical.
-
-Contains:
-
-Detection Method
-
-Validation Rule
-
-Suggested Action
-
-Need simplified language.
-
-Acceptance Criteria
-
-Business users should understand the tooltip without Git knowledge.
+Wireless-4,
+Billing,
+Activation,
+Inventory
+
+User should be able to filter by one team.
 
 Example
 
-Instead of:
+Selecting
 
-```
-Detection Method:
-SHA Match
-```
+Wireless-4
 
-Use:
+must show all components where Wireless-4 exists in the comma-separated team list.
 
-```
-This commit exists in the release branch.
-```
+⸻
 
-Instead of:
+Acceptance Criteria
 
-```
-Validation Rule:
-Commit exists on release branch.
-```
+1. Add Team filter.
+2. Support comma-separated values.
+3. Matching should work if selected team exists anywhere in list.
+4. No backend API change required if DB already stores teams.
+5. Filtering should be fast.
 
-Use:
+⸻
 
-```
-No action is required.
-```
+4. Stories & Teams Display Improvements
 
-Simple language preferred.
+Currently component information is minimal.
 
----
+Need richer information.
 
-# 11. Overall UX Review
+Each component already has:
 
-Developer must perform a full UX review of the Review Commits page.
+* Stories
+* Teams
 
-Goals:
+stored in database.
 
-- Better readability
-- Less visual clutter
-- Better typography
-- Better spacing
-- Consistent colors
-- Proper icons
-- Better table alignment
+Show these in UI.
 
-No business logic changes.
+⸻
 
-Only UX improvements.
+Acceptance Criteria
 
----
+Display:
 
-# 12. Preserve Existing Functionality
+* Story list
+* Team list
+
+Use a clean UI.
+
+Examples:
+
+* Chips
+* Badges
+* Expandable list
+* Tooltip
+* “+3 More”
+
+Developer should choose the best UX.
+
+Avoid clutter.
+
+⸻
+
+5. Previous Branch Detection Source
+
+Current Previous Branch is shown.
+
+Need to indicate how it was resolved.
+
+Examples
+
+* Production Kubernetes
+* Manual Override
+* GitHub Fallback
+
+This information already exists.
+
+Reuse existing DB field.
+
+Do NOT call Kubernetes again.
+
+⸻
+
+Acceptance Criteria
+
+Display a small badge/icon beside Previous Branch.
+
+Examples
+
+Production Kubernetes
+Manual Override
+GitHub Fallback
+
+Tooltip is acceptable.
+
+Reuse existing Resolution Source.
+
+⸻
+
+6. Previous Branch Display
+
+Phase-10 already includes fixing branch formatting.
+
+Ensure same formatted branch appears here also.
+
+No raw Kubernetes branch names should be displayed.
+
+⸻
+
+7. SAST Section
+
+No changes required.
+
+Keep existing implementation.
+
+⸻
+
+8. Deployment Readiness Improvements
+
+Current deployment readiness requires improvements.
+
+⸻
+
+Requirement 8.1 – Kubernetes Cookie Simplification
+
+Current implementation assumes multiple cookies.
+
+Actual behavior
+
+All Test namespaces share one cookie.
+
+Rename settings:
+
+Instead of
+
+Test-3 Cookie
+Test-4 Cookie
+
+Use
+
+Test Kubernetes Cookie
+
+Single cookie.
+
+Applicable for
+
+* Test-1
+* Test-2
+* Test-3
+* Test-4
+
+⸻
+
+Requirement 8.2 – Namespace Selection
+
+Instead of hardcoding environment,
+
+Provide two selections:
+
+Environment
+
+Namespace
+
+⸻
+
+Example
+
+Environment
+
+Test
+
+Namespace
+
+com-att-oc-fmo-test-3
+com-att-oc-fmo-test-4
+
+⸻
+
+Stage
+
+Stage-West
+
+Namespace
+
+com-att-oc-fmo
+
+⸻
+
+Production East
+
+Namespace
+
+com-att-oc-fmo
+
+⸻
+
+Production West
+
+Namespace
+
+com-att-oc-fmo
+
+⸻
+
+Acceptance Criteria
+
+Environment determines:
+
+* Cluster URL
+* Cookie
+* Namespace list
+
+Namespace determines:
+
+Deployment lookup.
+
+⸻
+
+9. Environment Mapping
+
+System should support:
+
+Test
+
+Namespaces
+
+* Test-3
+* Test-4
+
+Common Test Cookie
+
+⸻
+
+Stage
+
+Stage-West
+
+Own Cookie
+
+Namespace
+
+com-att-oc-fmo
+
+⸻
+
+Production
+
+Production-East
+
+Production-West
+
+Separate Cookies.
+
+Same Namespace.
+
+⸻
+
+10. Connection Status Indicator
+
+Similar to Generate Report page.
+
+Show connection indicators.
+
+Examples
+
+✓ Test Kubernetes Connected
+✓ Production East Connected
+✗ Production West Cookie Missing
+
+Should help users understand missing configuration.
+
+⸻
+
+Acceptance Criteria
+
+Connection status should indicate:
+
+* Cookie Available
+* Cookie Missing
+* Connection Tested
+* Connection Failed
+
+No need to navigate to Settings page.
+
+⸻
+
+11. Major & Minor Release Support
+
+Organization uses:
+
+Major Release
+
+* Test-3
+
+Minor Release
+
+* Test-4
+
+Both eventually move through:
+
+Stage-West
+
+↓
+
+Production-East
+
+↓
+
+Production-West
+
+System should naturally support this deployment flow.
+
+No hardcoded assumptions.
+
+⸻
+
+12. Default Deployment Environments
+
+Release Readiness should support validating:
+
+* Test-3
+* Test-4
+* Stage-West
+* Production-East
+* Production-West
+
+These five environments represent the standard deployment validation path.
+
+⸻
+
+13. UI/UX Improvements
+
+Developer should redesign the Release Readiness page following modern dashboard principles.
+
+Focus on:
+
+* Better spacing
+* Better typography
+* Consistent headers
+* Better filter alignment
+* Responsive layout
+* Reduced clutter
+* Clear visual grouping
+* Better badges
+* Better chips
+* Better icons
+
+Reuse existing AT&T blue/white branding.
+
+Do not change the application’s overall theme.
+
+⸻
+
+14. Backend Optimisation
+
+Wherever possible:
+
+* Reuse cached database data.
+* Avoid unnecessary Kubernetes API calls.
+* Avoid duplicate queries.
+* Reuse existing Resolution Source values.
+* Use existing Components table wherever data already exists.
+
+⸻
+
+15. Regression Safety
 
 Mandatory.
 
-Do NOT break:
+Do not break:
 
-- Story validation
-- Component loading
-- Kubernetes integration
-- Previous branch detection
-- Production resolution
-- Commit analysis
-- Override workflow
-- Background jobs
-- Report generation
+* Story Status
+* Branch Cut Validation
+* Deployment Readiness
+* Kubernetes Integration
+* Team Filters
+* Existing Background Jobs
+* Existing Dashboard Statistics
+* Existing Generate Report flow
+* Existing Component Preview flow
+* Existing Resolution Source logic
 
-Only enhance UI and fix identified issues.
+All enhancements must be backward compatible.
 
----
+⸻
 
-# Deliverables
+Deliverables
 
 Developer must provide:
 
-- Updated frontend implementation
-- Updated backend (only if required)
-- Refactored Review Commit UI
-- Improved Generate Report UX
-- Fixed Previous Branch display mapping
-- Validation report explaining:
-  - Previous branch mapping
-  - Git comparison logic
-  - Merge commit handling
-  - Tooltip redesign
-  - Lifecycle redesign
+* Updated Release Readiness UI
+* Enhanced Story Status filters
+* Branch Cut Validation improvements
+* Team-based filtering
+* Previous Branch Resolution badge
+* Deployment Readiness redesign
+* Namespace selection
+* Kubernetes connection indicators
+* Backend optimizations using existing cached data
+* Updated documentation with screenshots (if applicable)
 
 
----
 
-# 10. Ignore Merge Commits During Master Branch Analysis
+Requirement 8.3 – Multi-Environment Deployment Readiness Dashboard
 
-## Requirement
+Objective
 
-While performing commit analysis between:
+The Deployment Readiness section should provide a clear overview of deployment status across all mandatory deployment environments used during the release process. The goal is to allow users to quickly identify which environments are configured correctly, which Kubernetes connections are available, and the deployment readiness for each environment.
 
-- Master Branch
-- Current Release Branch
+The UI should be redesigned from a dashboard perspective rather than showing a single environment at a time.
 
-the system is currently considering normal merge commits as regular code commits.
+⸻
 
-This creates unnecessary violations and duplicate analysis because merge commits generally do not introduce new business changes—they only merge existing commit history.
+Standard Deployment Environments
 
-## Required Behavior
+The application must support the following deployment environments:
 
-During master-to-release branch commit analysis:
+Environment	Namespace	Kubernetes Cookie
+Test-3	com-att-oc-fmo-test-3	Test Cookie
+Test-4	com-att-oc-fmo-test-4	Test Cookie
+Stage-West	com-att-oc-fmo	Stage-West Cookie
+Production-East	com-att-oc-fmo	Production-East Cookie
+Production-West	com-att-oc-fmo	Production-West Cookie
 
-- Identify Git merge commits.
-- Exclude merge commits from compliance evaluation.
-- Do NOT create review comments for merge commits.
-- Do NOT classify merge commits as:
-  - Missing Release Commit
-  - Cherry Pick Required
-  - Direct Release Commit
-  - Violation
-- Ignore merge commits completely unless they contain actual business code changes that cannot be represented by the underlying individual commits.
+These five environments represent the standard release promotion path and should be considered first-class deployment targets throughout the application.
 
-The compliance engine should analyze only the actual development commits.
+⸻
 
-## Acceptance Criteria
+Requirement 8.4 – Deployment Readiness Dashboard
 
-1. Merge commits must be detected using Git metadata instead of commit message text wherever possible.
-2. Ignore standard Git merge commits during compliance analysis.
-3. Merge commits must not be inserted into the Review Comments table.
-4. Merge commits must not create false violations.
-5. Merge commits must not affect compliance percentages or dashboard statistics.
-6. If a merge commit only combines commits already analyzed individually, it must be skipped completely.
-7. Add debug logging indicating:
-   - Merge commit detected
-   - Commit SHA
-   - Merge commit skipped from compliance analysis
-8. Existing release branch comparison logic must remain unchanged.
-9. Existing cherry-pick detection must continue to work correctly.
-10. Existing direct release detection must continue to work correctly.
-11. Existing revert detection must continue to work correctly.
-12. Existing story validation logic must not be impacted.
-13. Validate the implementation using:
-    - Regular commits
-    - Merge commits
-    - Squash merges
-    - Rebase merges
-    - Cherry-picked commits
-    to ensure no regressions are introduced.
+Instead of requiring the user to repeatedly change environments and rerun validation, redesign this section as a deployment readiness dashboard.
+
+The dashboard should display all five environments together in a clean, compact layout.
+
+Each environment should display:
+
+* Environment name
+* Namespace
+* Connection status
+* Cookie availability
+* Last refresh time
+* Deployment readiness summary
+* Number of validated components
+* Number of pending components
+* Number of failed validations (if any)
+
+The UI should allow users to immediately identify which environment requires attention without navigating through multiple screens.
+
+⸻
+
+Requirement 8.5 – Kubernetes Connection Status
+
+Each environment should clearly display its Kubernetes connection status.
+
+Example statuses include:
+
+* Connected
+* Cookie Available
+* Cookie Missing
+* Connection Test Failed
+* Last Successfully Connected
+* Refresh In Progress
+
+Use clear visual indicators (success, warning, error, loading) consistent with the application’s existing AT&T theme.
+
+⸻
+
+Requirement 8.6 – Environment Selection Experience
+
+The developer may redesign this section using the most appropriate UX pattern.
+
+Possible implementations include:
+
+* Dashboard cards
+* Environment tabs
+* Accordion sections
+* Responsive grid
+* Expandable panels
+
+The exact UI implementation is left to the developer’s UX expertise.
+
+The primary objective is that users can quickly switch between environments while keeping the interface clean and intuitive.
+
+⸻
+
+Requirement 8.7 – Intelligent Namespace Resolution
+
+The system should automatically determine the appropriate Kubernetes cluster and authentication based on the selected environment.
+
+Users should never need to manually understand cluster mappings.
+
+Internally:
+
+* Test-3 and Test-4 use the Test Kubernetes cluster and Test Cookie.
+* Stage-West uses the Stage-West cluster and Stage-West Cookie.
+* Production-East uses the Production-East cluster and Production-East Cookie.
+* Production-West uses the Production-West cluster and Production-West Cookie.
+
+This mapping should be maintained centrally and reused throughout the application.
+
+⸻
+
+Requirement 8.8 – Reuse Existing Cached Deployment Data
+
+Where deployment readiness information has already been collected and stored in the database, reuse that data instead of making additional Kubernetes API calls.
+
+Only perform a Kubernetes refresh when the user explicitly requests a refresh or when cached data is unavailable.
+
+This minimizes external API calls and improves overall application performance.
+
+⸻
+
+Acceptance Criteria
+
+1. The Deployment Readiness page must support all five standard deployment environments.
+2. The UI must present deployment readiness in a clean dashboard-style layout.
+3. Users should be able to identify connection status for every environment at a glance.
+4. Namespace and cookie mapping must happen automatically based on the selected environment.
+5. Existing deployment validation logic must remain unchanged.
+6. Existing Kubernetes integration must remain unchanged.
+7. Existing database caching must be reused wherever possible.
+8. Unnecessary Kubernetes API calls must be avoided.
+9. The redesigned UI must follow the overall AT&T blue/white design language and remain responsive across different screen sizes.
+10. No existing deployment readiness functionality should regress as part of this enhancement.
