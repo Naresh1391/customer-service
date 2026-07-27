@@ -1,452 +1,475 @@
-# Kubernetes Cookie Session Management & Connection Validation Enhancements
+# Deployment Readiness - Kubernetes Deployment Validation Enhancement
 
-## Feature Summary
+## Feature
 
-This enhancement focuses on making Kubernetes cookie management reliable, secure, and consistent across the application. The implementation should ensure that cookies are only persisted after explicit user action, invalid cookies are automatically removed, and all connection status indicators accurately reflect the real backend connectivity status.
+Enhance the **Release Readiness → Deployment** section to accurately determine whether each component deployed in a Kubernetes namespace is synchronized with the expected release branch.
 
----
-
-# Enhancement 1: Kubernetes Cookie Session Management
-
-## Objective
-
-Ensure Kubernetes cookies are maintained only at the current user session level and are never persisted unless the user explicitly saves them.
+This enhancement applies **only to the Deployment section** of the Release Readiness page.
 
 ---
 
-## Functional Requirements
+# Objective
 
-### FR-1: Test Connection should NOT persist cookies
+Provide an accurate deployment readiness analysis by comparing:
 
-**Current Behavior**
-- Test Connection validates the cookie.
-- Cookie may be getting stored before Save is clicked.
+- Current Kubernetes deployed commit
+- Latest release branch commit in GitHub
+- Number of commits behind the deployment
+- Branch consistency
 
-**Expected Behavior**
-- Clicking **Test Connection** must:
-  - Read the entered cookie.
-  - Call backend validation API.
-  - Display validation result.
-  - Never store/update session cookie.
-  - Never overwrite existing session cookie.
-  - Never update application-wide Kubernetes context.
+The analysis should help determine whether a deployment is required before production promotion.
 
 ---
 
-### FR-2: Save Kubernetes Cookie
+# Existing Behaviour
 
-When user clicks:
+Current implementation already performs:
 
-**Save Kubernetes Cookie**
+- Environment selection
+- Namespace selection
+- Kubernetes connectivity
+- Running pod lookup
+- Label extraction
+- Branch label extraction
+- Git Commit label extraction
 
-System shall:
-
-1. Validate entered cookie.
-2. Only if validation succeeds:
-   - Store cookie in current HTTP/User Session.
-   - Make it available throughout the application.
-3. If validation fails:
-   - Do NOT save cookie.
-   - Display appropriate validation error.
+However, the validation logic is incomplete and does not fully compare the deployed state with the latest release branch.
 
 ---
 
-### FR-3: Session Scope
+# Functional Flow
 
-Saved Kubernetes cookie must:
+## Step 1 - User Action
 
-- Exist only during current user session.
-- Not be stored in:
-  - Local Storage
-  - Session Storage (Browser)
-  - Database
-  - Configuration Files
-  - Application Cache
+User selects:
 
-Only backend server session should own the cookie.
+- Environment (Test)
+- Namespace (Example: `com-att-oc-fmo-test3`)
+
+User clicks:
+
+**Force Refresh**
 
 ---
 
-### FR-4: Shared Session Access
+## Step 2 - UI Request
 
-Once successfully saved:
+UI shall invoke the backend by sending:
 
-Following modules should consume the same session cookie.
+- Environment = Test
+- Namespace = Selected Namespace
+- Fix Version = Currently selected Fix Version
+- Project Key = OC
 
-- Generate Report
-- Release Readiness
+> **Important**
+>
+> The backend should treat **Environment** and **Namespace** independently.
+>
+> Environment remains **Test**, while Namespace uniquely identifies the deployment target (e.g., Test3, Test4).
+
+---
+
+# Backend Processing
+
+## Step 1 - Fetch Components
+
+Using:
+
+- Fix Version
+- Project Key
+
+Retrieve all mapped components from the Components table.
+
+---
+
+## Step 2 - Filter Components
+
+Before performing Kubernetes validation, exclude the following:
+
+### Exclude
+
+- Components marked as **System Excluded**
+- Components marked as **User Excluded**
+- Library components
+
+These components are not expected to have Kubernetes deployments.
+
+Only remaining deployable components should participate in deployment readiness validation.
+
+---
+
+## Step 3 - Determine Expected Release Branch
+
+Reuse the existing release branch resolution logic.
+
+Using:
+
+- Fix Version
+- Release Calendar
+- Existing date range mapping
+
+Determine the expected release branch.
+
+Example:
+
+```
+release/26.07.28
+```
+
+No new branch resolution logic should be introduced.
+
+Existing implementation should be reused.
+
+---
+
+## Step 4 - Kubernetes Deployment Inspection
+
+Reuse existing Kubernetes implementation to retrieve:
+
+- Running Pods
+- Deployment Labels
+- Branch Label
+- Git Commit ID Label
+
+No changes are expected in the Kubernetes integration unless defects are identified.
+
+---
+
+## Step 5 - GitHub Branch Analysis
+
+For every deployable component:
+
+Retrieve commit history for the resolved release branch.
+
+Example:
+
+```
+release/26.07.28
+```
+
+---
+
+# Commit Selection Rules
+
+The GitHub API returns both:
+
+- Merge commits
+- Regular commits
+
+For deployment comparison:
+
+## Latest Release Commit
+
+Traverse the commit history from newest to oldest.
+
+Ignore:
+
+- Merge commits
+
+Select:
+
+- First non-merge commit
+
+This becomes the expected deployment commit.
+
+---
+
+# Deployment Comparison
+
+Compare:
+
+**Kubernetes Commit ID**
+
+vs
+
+**Latest Non-Merge Commit on Release Branch**
+
+---
+
+## Scenario 1
+
+Commit IDs match
+
+Deployment Status:
+
+```
+Deployment Up To Date
+```
+
+Commits Behind:
+
+```
+0
+```
+
+---
+
+## Scenario 2
+
+Commit IDs do not match
+
+Traverse GitHub history until Kubernetes Commit ID is located.
+
+Ignore merge commits while counting.
+
+Count only actual source commits.
+
+Example:
+
+```
+Release Branch
+
+53 -> Merge Commit
+
+52 -> Feature Commit
+
+51 -> Bug Fix Commit
+
+50 -> Kubernetes Commit
+```
+
+Merge commit (53) should not be counted.
+
+Result:
+
+```
+Deployment is 2 commits behind Release Branch.
+```
+
+---
+
+## Scenario 3
+
+Kubernetes Commit ID not found
+
+Possible reasons:
+
+- Wrong branch deployed
+- Old deployment
+- Invalid labels
+- Deployment from another branch
+
+Status should indicate:
+
+```
+Unable to determine deployment ancestry.
+Deployment validation failed.
+```
+
+---
+
+# Deployment Readiness Message
+
+Examples:
+
+### Up To Date
+
+```
+Deployment is synchronized with the latest release branch.
+```
+
+---
+
+### Behind
+
+```
+Deployment is 2 commits behind the latest release branch.
+Redeployment is recommended.
+```
+
+---
+
+### Invalid
+
+```
+Unable to validate deployment.
+Kubernetes commit is not present in the selected release branch.
+```
+
+---
+
+# Database Changes
+
+## Deployment Readiness Table
+
+Persist deployment analysis for every component.
+
+Required fields:
+
+| Column | Purpose |
+|---------|----------|
+| Team Key | Team identifier |
+| Project Key | Project (OC) |
+| Fix Version | Release |
+| Environment | Test / Prod |
+| Namespace | Kubernetes namespace |
+| Component Name | Component |
+| Release Branch | Expected release branch |
+| Kubernetes Branch | Branch label from deployment |
+| Kubernetes Commit ID | Commit deployed in Kubernetes |
+| Latest Release Commit ID | Latest non-merge commit from GitHub |
+| Commits Behind | Integer |
+| Deployment Status | Up To Date / Behind / Validation Failed |
+| Validation Message | User-friendly deployment message |
+| Last Validated At | Timestamp |
+| Created By | Audit |
+| Created Date | Audit |
+| Updated By | Audit |
+| Updated Date | Audit |
+
+---
+
+# Primary Key Recommendation
+
+Use composite uniqueness:
+
+```
+Team Key
++ Fix Version
++ Environment
++ Namespace
++ Component Name
+```
+
+This uniquely represents a deployment validation record.
+
+---
+
+# Data Persistence Rules
+
+Persist only:
+
+- Kubernetes Commit ID
+- Latest Release Commit ID
+- Commits Behind
 - Deployment Status
-- Kubernetes Validation
-- Any future Kubernetes APIs
+- Validation Message
 
-No module should request cookie independently.
+Do **not** persist the complete Git commit history.
 
----
-
-# Enhancement 2: Automatic Invalid Cookie Cleanup
-
-## Objective
-
-System should automatically clean up invalid cookies.
+Git commit history should exist only in-memory during validation.
 
 ---
 
-## Functional Requirements
+# UI Requirements
 
-Whenever backend attempts Kubernetes communication:
+Display:
 
-If any of below occurs:
-
-- Invalid Cookie
-- Unauthorized (401)
-- Forbidden (403)
-- Cookie Expired
-- Invalid Session
-- Connection Refused
-- Authentication Failure
-- Any backend validation failure
-- API does not return successful connected response
-
-System must:
-
-1. Remove cookie from current session.
-2. Clear Kubernetes session object.
-3. Reset connection status.
-4. Force user to provide cookie again.
-
-This prevents stale/expired cookies from being reused.
+- Component
+- Release Branch
+- Kubernetes Branch
+- Kubernetes Commit ID
+- Latest Release Commit ID
+- Commits Behind
+- Deployment Status
+- Validation Message
+- Last Validated Time
 
 ---
 
-## Backend Rules
+# Backend Validation Rules
 
-Every Kubernetes API should perform:
+The backend shall validate:
 
-```
-Validate Session Cookie
+- Namespace exists
+- Release branch resolved successfully
+- Component exists
+- Kubernetes labels available
+- GitHub branch exists
+- GitHub commit history retrieved successfully
+- Kubernetes commit exists within release branch history
 
-↓
-
-If Invalid
-
-↓
-
-Remove Session Cookie
-
-↓
-
-Return Authentication Failure
-
-↓
-
-Frontend prompts for new cookie
-```
+Any validation failure shall generate an appropriate deployment status and user-friendly message.
 
 ---
 
-# Enhancement 3: Generate Report Connection Status
+# Error Handling
 
-## Current Issue
+Gracefully handle:
 
-Generate Report page displays green connection status even after:
+- Kubernetes unavailable
+- Namespace not found
+- Missing deployment labels
+- Missing GitHub branch
+- GitHub API failures
+- Empty commit history
+- Invalid Kubernetes commit
+- Rate limiting from GitHub APIs
 
-- Cookie expired
-- Cookie removed
-- Force Refresh clicked
-
-This indicates UI is relying on stale state instead of backend validation.
-
----
-
-## Expected Behaviour
-
-Whenever page loads:
-
-Generate Report should:
-
-1. Read cookie from session.
-2. Invoke backend Test Connection API.
-3. Update UI only from API response.
+The validation process should continue for remaining components wherever possible.
 
 ---
 
-### Force Refresh Behaviour
-
-When user clicks Force Refresh:
-
-System must:
-
-1. Ignore cached status.
-2. Call backend validation API.
-3. Wait for response.
-4. Update UI.
-
-If API says:
-
-Connected
-
-→ Green
-
-If API says:
-
-Disconnected
-
-→ Red
-
-If API says:
-
-Unauthorized
-
-Then
-
-- Remove cookie
-- Reset session
-- Update UI to disconnected
-- Ask user to configure Kubernetes cookie again
-
-No cached connection state should ever be reused.
-
----
-
-# Enhancement 4: Backend Validation Logic
-
-Review backend implementation for:
-
-- Session handling
-- Cookie lifecycle
-- Validation API
-- Test Connection API
-- Connection cache
-- Session cleanup
-
-Verify that:
-
-Every validation request actually reaches Kubernetes.
-
-No stale response should be returned.
-
-No cached "Connected" status should be reused.
-
----
-
-## Acceptance Criteria
+# Acceptance Criteria
 
 ### AC-1
 
-Test Connection never stores cookie.
-
----
+Force Refresh triggers a fresh deployment validation for the selected namespace.
 
 ### AC-2
 
-Cookie is stored only after Save Kubernetes Cookie.
-
----
+Backend receives Environment, Namespace, Fix Version, and Project Key from the UI.
 
 ### AC-3
 
-Saved cookie is available across application during current session.
-
----
+Only deployable components participate in deployment validation.
 
 ### AC-4
 
-Closing session/browser invalidates stored cookie.
-
----
+System Excluded, User Excluded, and Library components are ignored.
 
 ### AC-5
 
-Invalid cookie is immediately removed from session.
-
----
+Release branch is resolved using the existing release calendar logic.
 
 ### AC-6
 
-Any authentication failure clears session cookie.
-
----
+Existing Kubernetes integration is reused to obtain branch and deployed commit details.
 
 ### AC-7
 
-Force Refresh always calls backend.
-
----
+Latest non-merge commit from the release branch is identified as the expected deployment commit.
 
 ### AC-8
 
-Generate Report never shows cached green status.
-
----
+Merge commits are ignored while calculating deployment lag.
 
 ### AC-9
 
-Connection status always matches backend validation response.
-
----
+The system accurately calculates the number of source commits the deployment is behind.
 
 ### AC-10
 
-Unauthorized responses automatically redirect user to reconfigure Kubernetes cookie.
-
----
-
-# Enhancement 5: Release Readiness Deployment Connections
-
-## Current Issue
-
-Deployment section is not showing Test-3 and Test-4 as connected even though valid cookies exist.
-
-Expected auto-connect behaviour is missing.
-
----
-
-## Required Investigation
-
-Review connection logic for:
-
-- Test-1
-- Test-2
-- Test-3
-- Test-4
-- Production
-
-Compare implementation.
-
-Identify why Test-3/Test-4 validation is skipped or failing.
-
-Ensure all environments follow identical validation workflow.
-
----
-
-## Expected Behaviour
-
-When Release Readiness page loads:
-
-System shall automatically validate:
-
-- Test-1
-- Test-2
-- Test-3
-- Test-4
-- Production
-
-using their respective session cookies.
-
----
-
-## Expected UI
-
-Connected
-
-Green indicator
-
-Disconnected
-
-Red indicator
-
-Unauthorized
-
-Remove session cookie
-
-Require user reconfiguration
-
-Loading
-
-Spinner until validation completes
-
----
-
-## Acceptance Criteria
+If Kubernetes and GitHub commits match, deployment is marked **Up To Date**.
 
 ### AC-11
 
-Test-3 auto validation works.
-
----
+If commits differ, deployment is marked **Behind**, and the exact number of commits behind is displayed.
 
 ### AC-12
 
-Test-4 auto validation works.
-
----
+If the Kubernetes commit cannot be found in the release branch history, deployment validation fails with an appropriate message.
 
 ### AC-13
 
-All deployment environments follow identical validation workflow.
-
----
+Deployment readiness records are persisted with Kubernetes commit ID, latest release commit ID, commits behind, deployment status, and validation message.
 
 ### AC-14
 
-No deployment environment should display stale connected status.
-
----
+Complete GitHub commit history is never persisted in the database.
 
 ### AC-15
 
-Each environment independently validates its own cookie.
+Audit fields (`Created By`, `Created Date`, `Updated By`, `Updated Date`) are maintained consistently.
 
----
+### AC-16
 
-# Backend Verification Checklist
+Composite uniqueness is enforced using Team Key, Fix Version, Environment, Namespace, and Component Name.
 
-The implementation AI should review the following:
+### AC-17
 
-- Session cookie lifecycle
-- Save API
-- Test Connection API
-- Kubernetes authentication service
-- Session cleanup logic
-- Connection status caching
-- Force Refresh implementation
-- Generate Report connection loader
-- Release Readiness deployment loader
-- Test-3/Test-4 validation workflow
-- Global session provider
-- Authentication interceptors
-- Error handling middleware
+The UI displays deployment status and validation messages that accurately reflect the backend analysis.
 
----
+### AC-18
 
-# Frontend Verification Checklist
-
-Review the following:
-
-- Settings page state management
-- Test Connection action
-- Save Kubernetes Cookie action
-- Session refresh logic
-- Force Refresh handler
-- Generate Report status component
-- Deployment status component
-- Connection badge rendering
-- Loading indicators
-- Unauthorized handling
-- State reset after cookie removal
-
----
-
-# Non-Functional Requirements
-
-- No stale connection status shall be displayed.
-- No Kubernetes cookie shall be persisted outside the active backend session.
-- Connection status shall always be backend-driven.
-- Session cleanup shall occur automatically upon authentication failure.
-- All Kubernetes environments shall behave consistently.
-- Backend must remain the single source of truth for connection state.
-
----
-
-# Definition of Done
-
-- ✅ Test Connection performs validation without persisting cookies.
-- ✅ Save stores cookies only in the current backend session.
-- ✅ Session cookies are accessible application-wide.
-- ✅ Invalid/expired cookies are automatically removed.
-- ✅ Generate Report always reflects live backend connection status.
-- ✅ Force Refresh performs a fresh backend validation.
-- ✅ Connected status is never cached incorrectly.
-- ✅ Release Readiness correctly validates and displays Test-1, Test-2, Test-3, Test-4, and Production environments.
-- ✅ Backend and frontend implementations are reviewed for stale session, caching, and validation discrepancies.
-- ✅ Comprehensive regression testing confirms consistent Kubernetes connectivity behavior across all application modules.
+Backend continues processing other components even if validation fails for an individual component.
