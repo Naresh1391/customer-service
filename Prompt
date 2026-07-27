@@ -1,475 +1,921 @@
-# Deployment Readiness - Kubernetes Deployment Validation Enhancement
+# Release Readiness — Deployment Section Enhancements
+## Developer-Ready Acceptance Criteria Document
 
-## Feature
-
-Enhance the **Release Readiness → Deployment** section to accurately determine whether each component deployed in a Kubernetes namespace is synchronized with the expected release branch.
-
-This enhancement applies **only to the Deployment section** of the Release Readiness page.
-
----
-
-# Objective
-
-Provide an accurate deployment readiness analysis by comparing:
-
-- Current Kubernetes deployed commit
-- Latest release branch commit in GitHub
-- Number of commits behind the deployment
-- Branch consistency
-
-The analysis should help determine whether a deployment is required before production promotion.
+**Module:** Release Readiness → Deployment Section  
+**Audience:** Devin AI (Claude Opus 4.6 Thinking)  
+**Prepared By:** Senior Solution Architect  
+**Status:** Implementation Ready  
 
 ---
 
-# Existing Behaviour
+## ⚠️ Critical Implementation Rules
 
-Current implementation already performs:
+Before making any change:
 
-- Environment selection
-- Namespace selection
-- Kubernetes connectivity
-- Running pod lookup
-- Label extraction
-- Branch label extraction
-- Git Commit label extraction
-
-However, the validation logic is incomplete and does not fully compare the deployed state with the latest release branch.
+1. **Read and understand** the existing implementation fully before modifying anything.
+2. **Reuse existing services** — branch resolution, Kubernetes integration, GitHub service.
+3. **Do NOT duplicate** any existing logic.
+4. **Do NOT break** any other module — especially Review Commits, Branch Cut Validation, Generate Report.
+5. **Merge commit exclusion rules differ per section** — read Section 5 carefully.
+6. **All changes are scoped** to the Deployment Section UNLESS explicitly stated otherwise.
 
 ---
 
-# Functional Flow
+## Table of Contents
 
-## Step 1 - User Action
-
-User selects:
-
-- Environment (Test)
-- Namespace (Example: `com-att-oc-fmo-test3`)
-
-User clicks:
-
-**Force Refresh**
-
----
-
-## Step 2 - UI Request
-
-UI shall invoke the backend by sending:
-
-- Environment = Test
-- Namespace = Selected Namespace
-- Fix Version = Currently selected Fix Version
-- Project Key = OC
-
-> **Important**
->
-> The backend should treat **Environment** and **Namespace** independently.
->
-> Environment remains **Test**, while Namespace uniquely identifies the deployment target (e.g., Test3, Test4).
+1. Component Column — Display Fix
+2. Release Branch Resolution — Fix
+3. Kubernetes Branch Name — Display Normalization
+4. Commit ID Display — Full SHA Required
+5. Latest Release Commit ID — Merge Commit Inclusion (Deployment Only)
+6. Commits Behind Calculation — Merge Commit Exclusion
+7. Deployment Status — Single Message Format
+8. Scrum Teams & Stories — Display in Table
+9. Scrum Team Filter — Dynamic Filter
+10. Dropdown Filter — Data-Driven Values (Branch Cut Validation + Deployment)
+11. UI — Font Size & Spacing (Release Readiness Global)
+12. Page Header — Team / Fix Version Inline Layout
 
 ---
 
-# Backend Processing
-
-## Step 1 - Fetch Components
-
-Using:
-
-- Fix Version
-- Project Key
-
-Retrieve all mapped components from the Components table.
-
 ---
 
-## Step 2 - Filter Components
+# 1. Component Column — Display Fix
 
-Before performing Kubernetes validation, exclude the following:
+## Background
 
-### Exclude
+The current Component column in the Deployment table displays:
+- Microservice name
+- Namespace name
+- Blue/Green deployment badge
 
-- Components marked as **System Excluded**
-- Components marked as **User Excluded**
-- Library components
+All three items are stacked, causing each row to consume excessive vertical space and making the table harder to scan.
 
-These components are not expected to have Kubernetes deployments.
+## Problem Statement
 
-Only remaining deployable components should participate in deployment readiness validation.
+The component column is showing too much information vertically. The namespace is redundant at the component row level since the namespace is already selected globally. The Blue/Green badge needs to remain but should be repositioned.
 
----
+## Functional Requirements
 
-## Step 3 - Determine Expected Release Branch
+| # | Requirement |
+|---|---|
+| FR-1.1 | Display only the **microservice name** inside the Component column. |
+| FR-1.2 | Remove the namespace name from the Component column entirely. |
+| FR-1.3 | Display the **Blue/Green deployment badge** inline, immediately to the right of the microservice name, on the same line. |
+| FR-1.4 | Badge styling must remain consistent with existing Blue/Green indicator styling. |
+| FR-1.5 | No other column, row, or section should be affected. |
 
-Reuse the existing release branch resolution logic.
-
-Using:
-
-- Fix Version
-- Release Calendar
-- Existing date range mapping
-
-Determine the expected release branch.
-
-Example:
+## Acceptance Criteria
 
 ```
-release/26.07.28
+AC-1.1
+GIVEN the Deployment table is loaded
+WHEN a user views the Component column
+THEN only the microservice name is displayed
+AND the namespace name is NOT shown in that column
+
+AC-1.2
+GIVEN the Deployment table is loaded
+WHEN a user views the Component column
+THEN the Blue or Green deployment badge appears inline
+immediately to the right of the microservice name
+on the same single line
+
+AC-1.3
+GIVEN the Blue/Green badge is displayed inline
+WHEN the user views the row
+THEN row height is compact and not expanded by stacked elements
+
+AC-1.4
+GIVEN the change is applied
+WHEN other modules are reviewed
+THEN no other table, column, or section is affected
 ```
 
-No new branch resolution logic should be introduced.
+## Edge Cases
 
-Existing implementation should be reused.
+- If Blue/Green value is missing or null → show microservice name only, no badge rendered
+- If microservice name is very long → truncate with ellipsis, show full name in tooltip
 
 ---
 
-## Step 4 - Kubernetes Deployment Inspection
+---
 
-Reuse existing Kubernetes implementation to retrieve:
+# 2. Release Branch Resolution — Fix
 
-- Running Pods
-- Deployment Labels
-- Branch Label
-- Git Commit ID Label
+## Background
 
-No changes are expected in the Kubernetes integration unless defects are identified.
+Fix Version format used in this application:
+
+```
+26.7.4 (July 26 – August 1, 2026)
+```
+
+Breakdown:
+- `26` → Year 2026
+- `7` → Month July
+- `4` → Fourth release of that month
+- `(July 26 – August 1, 2026)` → The valid date range for this release
+
+The release branch must fall **within this date range (inclusive of both boundary dates)**.  
+Among all qualifying branches, the one with the **highest release number** must be selected.
+
+## Problem Statement
+
+The release branch shown in the Deployment Section is incorrect. The existing release branch resolution logic (used in other sections via Release Calendar) is either not being called, or is being called incorrectly in this section.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-2.1 | **Reuse the existing release branch resolution service** — do NOT create a new implementation. |
+| FR-2.2 | The release branch must fall within the date range declared in the Fix Version. |
+| FR-2.3 | Both boundary dates of the range are **inclusive** (e.g., July 26 and August 1 are both valid). |
+| FR-2.4 | Among all qualifying branches within the date range, select the one with the **highest release sequence number**. |
+| FR-2.5 | The resolved release branch must be used throughout the Deployment Section for all components. |
+| FR-2.6 | Resolution must be triggered on Force Refresh. |
+| FR-2.7 | Log the resolved branch at INFO level, including the fix version and date range used. |
+
+## Business Rules
+
+```
+Fix Version:  26.7.4 (July 26 – August 1, 2026)
+
+Date range:   2026-07-26  →  2026-08-01 (inclusive)
+
+Qualifying release branches within range:
+  release/26.07.26.rel  ✅
+  release/26.07.28.rel  ✅  ← Highest — SELECTED
+  release/26.08.01.rel  ✅
+
+Outside range:
+  release/26.07.25.rel  ❌  (before range)
+  release/26.08.02.rel  ❌  (after range)
+```
+
+## Acceptance Criteria
+
+```
+AC-2.1
+GIVEN Fix Version is "26.7.4 (July 26 – August 1, 2026)"
+WHEN the Deployment Section performs a Force Refresh
+THEN the existing release branch resolution service is invoked
+AND the resolved branch falls within July 26 – August 1, 2026 (inclusive)
+
+AC-2.2
+GIVEN multiple qualifying branches exist within the date range
+WHEN the resolution service selects the branch
+THEN the branch with the highest release sequence number is selected
+
+AC-2.3
+GIVEN the release branch is resolved
+WHEN displayed in the Deployment table
+THEN the correct branch is shown for all components
+
+AC-2.4
+GIVEN a branch outside the date range exists
+WHEN the resolution runs
+THEN that branch is NOT selected regardless of its release number
+
+AC-2.5
+GIVEN no qualifying branch is found within the range
+WHEN the resolution completes
+THEN an appropriate error/warning message is displayed
+AND the component status is marked as "Unable to Validate"
+
+AC-2.6
+GIVEN the existing resolution service is used
+WHEN the change is deployed
+THEN no other module using the same service is affected
+```
+
+## Edge Cases
+
+- Fix Version has no date range annotation → log warning, show "Unable to Validate"
+- Date range spans two months → both months' branches are valid candidates
+- Only one branch exists within range → select it regardless of sequence number
 
 ---
 
-## Step 5 - GitHub Branch Analysis
+---
 
-For every deployable component:
+# 3. Kubernetes Branch Name — Display Normalization
 
-Retrieve commit history for the resolved release branch.
+## Background
 
-Example:
+Kubernetes labels return branch names in a hyphenated format:
 
 ```
-release/26.07.28
+release-26-07-28-release
+```
+
+The actual release branch naming convention used everywhere else in the application is:
+
+```
+release/26.07.28.rel
+```
+
+## Problem Statement
+
+The raw Kubernetes label value is being displayed directly in the UI without transformation, making it inconsistent with all other branch name references across the application.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-3.1 | Transform the Kubernetes raw branch label to standard branch format before displaying. |
+| FR-3.2 | Transformation must happen at the **display/mapping layer only** — do NOT alter the raw stored value. |
+| FR-3.3 | The raw Kubernetes value must still be persisted as-is in the database. |
+| FR-3.4 | Transformation applies only within the Deployment Section UI display. |
+
+## Transformation Rule
+
+```
+Raw Kubernetes Label:    release-26-07-28-release
+                              ↓ Transform
+Display Value:           release/26.07.28.rel
+
+Rule:
+  - Replace leading "release-" with "release/"
+  - Replace hyphens between date parts with dots
+  - Replace trailing "-release" with ".rel"
+
+Pattern:
+  release-{YY}-{MM}-{DD}-release  →  release/{YY}.{MM}.{DD}.rel
+```
+
+## Acceptance Criteria
+
+```
+AC-3.1
+GIVEN Kubernetes returns branch label "release-26-07-28-release"
+WHEN the Deployment table renders the K8s Branch column
+THEN the displayed value is "release/26.07.28.rel"
+
+AC-3.2
+GIVEN the raw K8s label is transformed for display
+WHEN the raw value is retrieved from the database
+THEN it remains stored as "release-26-07-28-release" (untransformed)
+
+AC-3.3
+GIVEN an unexpected or non-standard K8s branch format is returned
+WHEN the transformation fails to match the pattern
+THEN the raw value is displayed as-is
+AND a console/log warning is emitted
+
+AC-3.4
+GIVEN the transformation is applied
+WHEN other modules read the K8s branch value from DB
+THEN no other module is affected by this display-only change
+```
+
+## Edge Cases
+
+- Null or empty K8s branch label → show `—` (em-dash) in UI
+- Branch label does not match expected pattern → display raw value, log warning
+- Multiple segments or non-standard suffixes → display raw value, log warning
+
+---
+
+---
+
+# 4. Commit ID Display — Full SHA Required
+
+## Background
+
+Currently, both the **Kubernetes Commit ID** and the **Latest Release Commit ID** are displayed as short (7-character) SHA values in the Deployment table.
+
+## Problem Statement
+
+Short commit SHAs are not uniquely identifiable in large repositories and make cross-referencing with GitHub difficult. Full SHA must be shown.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-4.1 | Display the **full 40-character SHA** for the Kubernetes Commit ID column. |
+| FR-4.2 | Display the **full 40-character SHA** for the Latest Release Commit ID column. |
+| FR-4.3 | The full SHA must be stored in the database — verify storage is not truncated. |
+| FR-4.4 | If the stored SHA is already truncated (short), the backend must re-fetch the full SHA from the source. |
+| FR-4.5 | Both commit ID columns must render the full SHA in the UI. |
+| FR-4.6 | For readability, the UI may display the full SHA in a **monospace font** with horizontal scroll or truncation-with-tooltip. |
+
+## Acceptance Criteria
+
+```
+AC-4.1
+GIVEN the Deployment table is rendered
+WHEN the Kubernetes Commit ID column is displayed
+THEN the full 40-character SHA is shown (not a 7-character short SHA)
+
+AC-4.2
+GIVEN the Deployment table is rendered
+WHEN the Latest Release Commit ID column is displayed
+THEN the full 40-character SHA is shown (not a 7-character short SHA)
+
+AC-4.3
+GIVEN the SHA values are stored in the database
+WHEN the record is inspected
+THEN the full 40-character SHA is persisted in both commit ID columns
+
+AC-4.4
+GIVEN a full SHA is displayed in the UI
+WHEN the SHA is too long for the column width
+THEN the SHA is rendered in a monospace font
+AND a tooltip shows the full value on hover
+
+AC-4.5
+GIVEN the full SHA display is implemented
+WHEN other sections (Review Commits, Branch Cut Validation) render commit IDs
+THEN those sections are NOT affected by this change
 ```
 
 ---
 
-# Commit Selection Rules
-
-The GitHub API returns both:
-
-- Merge commits
-- Regular commits
-
-For deployment comparison:
-
-## Latest Release Commit
-
-Traverse the commit history from newest to oldest.
-
-Ignore:
-
-- Merge commits
-
-Select:
-
-- First non-merge commit
-
-This becomes the expected deployment commit.
-
 ---
 
-# Deployment Comparison
+# 5. Latest Release Commit ID — Merge Commit Inclusion (Deployment Section Only)
 
-Compare:
+## Background
 
-**Kubernetes Commit ID**
+The application currently has a global rule to **exclude merge commits** during commit analysis. This rule is correct for Review Commits analysis. However, in the Deployment Section, the **Latest Release Commit ID** represents the absolute latest commit on the release branch — which may itself be a merge commit.
 
-vs
+Kubernetes records the exact SHA at time of deployment, which can be a merge commit SHA. If the application excludes merge commits when fetching the latest release commit, there will be a mismatch.
 
-**Latest Non-Merge Commit on Release Branch**
+## Problem Statement
 
----
+The Latest Release Commit shown in the Deployment table is incorrect because the fetch logic is skipping the most recent commit if it is a merge commit. This causes a discrepancy between what Kubernetes deployed and what the application reports as the latest.
 
-## Scenario 1
+## ⚠️ Critical Isolation Rule
 
-Commit IDs match
+> **This change MUST NOT affect any other section.**  
+> Review Commits analysis must continue to exclude merge commits.  
+> Branch Cut Validation must continue to exclude merge commits.  
+> Only the Latest Release Commit fetch within the Deployment Section is changed.
 
-Deployment Status:
+## Functional Requirements
 
-```
-Deployment Up To Date
-```
+| # | Requirement |
+|---|---|
+| FR-5.1 | When fetching the Latest Release Commit ID for the Deployment Section, retrieve the **absolute latest commit** regardless of whether it is a merge commit or a regular commit. |
+| FR-5.2 | This behavior must be implemented as a **separate fetch path or parameter** — do NOT modify the shared commit fetch service in a way that affects other callers. |
+| FR-5.3 | The merge commit inclusion flag must be scoped to the Deployment Section's fetch call only. |
+| FR-5.4 | Review Commits, Branch Cut Validation, and Commits Behind calculation must continue using the existing merge-commit-excluded logic. |
+| FR-5.5 | Add a clear code comment at the fetch call site explaining why merge commits are included here. |
 
-Commits Behind:
-
-```
-0
-```
-
----
-
-## Scenario 2
-
-Commit IDs do not match
-
-Traverse GitHub history until Kubernetes Commit ID is located.
-
-Ignore merge commits while counting.
-
-Count only actual source commits.
-
-Example:
+## Acceptance Criteria
 
 ```
-Release Branch
+AC-5.1
+GIVEN the latest commit on the release branch is a merge commit
+WHEN the Deployment Section fetches the Latest Release Commit ID
+THEN the merge commit SHA is returned and displayed as the Latest Release Commit ID
 
-53 -> Merge Commit
+AC-5.2
+GIVEN the latest commit on the release branch is a regular commit
+WHEN the Deployment Section fetches the Latest Release Commit ID
+THEN the regular commit SHA is returned and displayed correctly
 
-52 -> Feature Commit
+AC-5.3
+GIVEN the Deployment Section fetch now includes merge commits
+WHEN the Review Commits section fetches commits
+THEN merge commits are still excluded from Review Commits analysis
 
-51 -> Bug Fix Commit
+AC-5.4
+GIVEN the Deployment Section fetch now includes merge commits
+WHEN Branch Cut Validation runs
+THEN merge commits are still excluded from that analysis
 
-50 -> Kubernetes Commit
-```
+AC-5.5
+GIVEN the fetch implementation is changed
+WHEN a code review is performed
+THEN a clear comment exists at the fetch call site indicating:
+  "Merge commits included intentionally — Deployment Section requires absolute latest commit"
 
-Merge commit (53) should not be counted.
-
-Result:
-
-```
-Deployment is 2 commits behind Release Branch.
+AC-5.6
+GIVEN the Kubernetes commit SHA matches the latest merge commit on the release branch
+WHEN the Deployment table renders
+THEN both Kubernetes Commit ID and Latest Release Commit ID show identical SHAs
+AND the status shows "Valid Deployment"
 ```
 
 ---
 
-## Scenario 3
+---
 
-Kubernetes Commit ID not found
+# 6. Commits Behind Calculation — Merge Commit Exclusion
 
-Possible reasons:
+## Background
 
-- Wrong branch deployed
-- Old deployment
-- Invalid labels
-- Deployment from another branch
+The "Commits Behind" value indicates how many non-deployed commits exist on the release branch after the Kubernetes deployment SHA. This count must only reflect meaningful code commits — merge commits are administrative and do not represent actual code changes.
 
-Status should indicate:
+## Problem Statement
+
+The current commits-behind calculation may not be excluding merge commits, leading to inflated or inaccurate behind-counts.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-6.1 | When calculating how many commits the Kubernetes deployment is behind the latest release branch, **exclude all merge commits** from the count. |
+| FR-6.2 | Identify the Kubernetes deployed SHA on the release branch commit list. |
+| FR-6.3 | Count only **non-merge commits** that appear after the deployed SHA. |
+| FR-6.4 | Store the resulting count in the `commits_behind` column. |
+
+## Calculation Logic
 
 ```
-Unable to determine deployment ancestry.
-Deployment validation failed.
+Release branch commit list (newest → oldest):
+
+  SHA-A  [Merge Commit]     ← EXCLUDED from count
+  SHA-B  [Regular Commit]   ← COUNT (1)
+  SHA-C  [Regular Commit]   ← COUNT (2)
+  SHA-D  [Merge Commit]     ← EXCLUDED from count
+  SHA-E  [Regular Commit]   ← KUBERNETES DEPLOYED HERE
+
+  Commits Behind = 2
+```
+
+## Acceptance Criteria
+
+```
+AC-6.1
+GIVEN the release branch has the following commits after the K8s deployed SHA:
+  - 1 merge commit
+  - 2 regular commits
+WHEN the commits behind count is calculated
+THEN the result is 2 (merge commit excluded)
+
+AC-6.2
+GIVEN all commits after the K8s SHA are merge commits only
+WHEN the commits behind count is calculated
+THEN the result is 0
+AND the status shows "Valid Deployment"
+
+AC-6.3
+GIVEN the K8s SHA is not found in the release branch commit history
+WHEN the calculation runs
+THEN commits_behind is set to null or -1
+AND the deployment status shows "Unable to Validate"
+
+AC-6.4
+GIVEN the K8s SHA matches the latest non-merge commit
+WHEN the calculation runs
+THEN commits_behind = 0
+AND status shows "Valid Deployment"
 ```
 
 ---
 
-# Deployment Readiness Message
+---
 
-Examples:
+# 7. Deployment Status — Single Message Format
 
-### Up To Date
+## Background
+
+Currently, the Deployment Section shows multiple status indicators per component row. The UI must be simplified to show a single, clear, human-readable status message.
+
+## Problem Statement
+
+Multiple status badges or flags clutter each row. Users need one clear statement that tells them the deployment state.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-7.1 | Replace all multiple status indicators with a **single status message** per component row. |
+| FR-7.2 | Status message must be determined by priority order (see Business Rules below). |
+| FR-7.3 | Status must be stored in `deployment_status` and `validation_message` columns. |
+
+## Business Rules — Status Priority Order
+
+Evaluate conditions in this exact order. Use the **first matching condition**.
 
 ```
-Deployment is synchronized with the latest release branch.
+Priority 1 — Unable to Validate
+  Condition:  K8s commit not found on release branch
+              OR release branch could not be resolved
+              OR GitHub fetch failed
+  Message:    "Unable to Validate"
+  Style:      Grey / Neutral
+
+Priority 2 — Older Branch
+  Condition:  K8s branch does not match resolved release branch
+              (branch cut not done or component on previous release)
+  Message:    "Older Branch"
+  Style:      Orange / Warning
+
+Priority 3 — X Commits Behind
+  Condition:  commits_behind > 0
+  Message:    "{N} commit(s) behind release branch. Redeployment recommended."
+  Style:      Amber / Warning
+
+Priority 4 — Valid Deployment
+  Condition:  K8s branch matches release branch
+              AND commits_behind = 0
+  Message:    "Valid Deployment"
+  Style:      Green / Success
+```
+
+## Acceptance Criteria
+
+```
+AC-7.1
+GIVEN the K8s branch matches the release branch AND commits_behind = 0
+WHEN the status is rendered
+THEN only "Valid Deployment" is shown in green
+
+AC-7.2
+GIVEN the K8s branch does NOT match the resolved release branch
+WHEN the status is rendered
+THEN only "Older Branch" is shown in orange
+
+AC-7.3
+GIVEN the K8s branch matches AND commits_behind = 3
+WHEN the status is rendered
+THEN only "3 commit(s) behind release branch. Redeployment recommended." is shown in amber
+
+AC-7.4
+GIVEN the release branch could not be resolved
+WHEN the status is rendered
+THEN only "Unable to Validate" is shown in grey
+
+AC-7.5
+GIVEN any component row
+WHEN the status column is rendered
+THEN exactly ONE status message is visible — no multiple badges or combined indicators
+
+AC-7.6
+GIVEN an "Older Branch" condition
+WHEN the K8s branch is also behind
+THEN "Older Branch" takes priority (Priority 2 wins over Priority 3)
 ```
 
 ---
 
-### Behind
+---
+
+# 8. Scrum Teams & Stories — Display in Table
+
+## Background
+
+The database already stores, per component, the list of associated Scrum Teams and Stories. This data must be surfaced in the Deployment table using the same compact display pattern used in the Branch Cut Validation section.
+
+## Problem Statement
+
+The Deployment table currently does not display scrum teams or stories per component, forcing users to cross-reference with other sections.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-8.1 | Add a **Scrum Teams** column to the Deployment table. |
+| FR-8.2 | Add a **Stories** column to the Deployment table. |
+| FR-8.3 | Display **1–2 items inline**, followed by a **`+N` badge** for remaining items. |
+| FR-8.4 | Hovering the `+N` badge opens a **tooltip** listing all remaining items. |
+| FR-8.5 | Fetch this data from the existing database records — do NOT call iTrack again. |
+| FR-8.6 | The display behavior must match the exact pattern used in Branch Cut Validation. |
+
+## Display Pattern
 
 ```
-Deployment is 2 commits behind the latest release branch.
-Redeployment is recommended.
+Scrum Teams column (example — 4 teams):
+  Team Alpha  Team Beta  +2 ▼
+                              └─ tooltip: Team Gamma, Team Delta
+
+Stories column (example — 6 stories):
+  SPT-1001  SPT-1002  +4 ▼
+                          └─ tooltip: SPT-1003, SPT-1004, SPT-1005, SPT-1006
+```
+
+## Acceptance Criteria
+
+```
+AC-8.1
+GIVEN a component has 1 scrum team
+WHEN the Deployment table renders
+THEN the single team name is shown inline with no +N badge
+
+AC-8.2
+GIVEN a component has 2 scrum teams
+WHEN the Deployment table renders
+THEN both team names are shown inline with no +N badge
+
+AC-8.3
+GIVEN a component has 4 scrum teams
+WHEN the Deployment table renders
+THEN 2 team names are shown inline and "+2" badge is shown
+AND hovering the "+2" badge shows a tooltip with the remaining 2 team names
+
+AC-8.4
+GIVEN a component has 6 stories
+WHEN the Deployment table renders
+THEN 2 story IDs are shown inline and "+4" badge is shown
+AND hovering "+4" reveals the remaining 4 story IDs in a tooltip
+
+AC-8.5
+GIVEN a component has no associated scrum teams
+WHEN the Deployment table renders
+THEN the Scrum Teams column shows "—" (em-dash)
+
+AC-8.6
+GIVEN a component has no associated stories
+WHEN the Deployment table renders
+THEN the Stories column shows "—" (em-dash)
+
+AC-8.7
+GIVEN the data is fetched
+WHEN the backend processes the request
+THEN scrum teams and stories are loaded from the existing DB records
+AND NO new iTrack API call is made
 ```
 
 ---
 
-### Invalid
+---
+
+# 9. Scrum Team Filter — Dynamic Filter (Deployment Section)
+
+## Background
+
+The Branch Cut Validation section has a working Scrum Team filter. The same filter behavior must be added to the Deployment Section.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-9.1 | Add a **Scrum Team filter** to the Deployment Section, matching the behavior of Branch Cut Validation. |
+| FR-9.2 | The filter dropdown must only contain **scrum teams present in the currently displayed table data**. |
+| FR-9.3 | When a scrum team is selected, the table must filter to show only rows that include that team. |
+| FR-9.4 | The filter resets when Fix Version or Environment/Namespace changes. |
+| FR-9.5 | Filter interacts with other active filters (e.g., "Show Invalid Only" toggle) — see Section 10. |
+
+## Acceptance Criteria
 
 ```
-Unable to validate deployment.
-Kubernetes commit is not present in the selected release branch.
+AC-9.1
+GIVEN the Deployment table is loaded with data
+WHEN the user opens the Scrum Team filter dropdown
+THEN the dropdown contains only teams present in the currently visible table rows
+
+AC-9.2
+GIVEN the user selects "Team Alpha" from the filter
+WHEN the filter is applied
+THEN only rows containing "Team Alpha" in their Scrum Teams list are shown
+
+AC-9.3
+GIVEN the user selects "All Teams" or clears the filter
+WHEN the filter is cleared
+THEN all rows are shown again
+
+AC-9.4
+GIVEN a "Show Invalid Only" toggle is active
+WHEN the Scrum Team filter dropdown is opened
+THEN the dropdown only shows teams present in the filtered (invalid only) rows
+
+AC-9.5
+GIVEN a different Fix Version or Namespace is selected
+WHEN new data loads
+THEN the Scrum Team filter resets to "All Teams"
 ```
 
 ---
 
-# Database Changes
-
-## Deployment Readiness Table
-
-Persist deployment analysis for every component.
-
-Required fields:
-
-| Column | Purpose |
-|---------|----------|
-| Team Key | Team identifier |
-| Project Key | Project (OC) |
-| Fix Version | Release |
-| Environment | Test / Prod |
-| Namespace | Kubernetes namespace |
-| Component Name | Component |
-| Release Branch | Expected release branch |
-| Kubernetes Branch | Branch label from deployment |
-| Kubernetes Commit ID | Commit deployed in Kubernetes |
-| Latest Release Commit ID | Latest non-merge commit from GitHub |
-| Commits Behind | Integer |
-| Deployment Status | Up To Date / Behind / Validation Failed |
-| Validation Message | User-friendly deployment message |
-| Last Validated At | Timestamp |
-| Created By | Audit |
-| Created Date | Audit |
-| Updated By | Audit |
-| Updated Date | Audit |
-
 ---
 
-# Primary Key Recommendation
+# 10. Dropdown Filter — Data-Driven Values (Branch Cut Validation + Deployment)
 
-Use composite uniqueness:
+## Background
+
+Currently, filter dropdowns (such as Scrum Team filter) show all possible values regardless of what data is currently displayed in the table. This causes confusion — users see filter options for teams that have no records in the current filtered view.
+
+**This change applies to BOTH:**
+- Branch Cut Validation section
+- Deployment Section
+
+## Problem Statement
+
+When a user applies a filter (e.g., "Pending Only"), the table shows a reduced set of rows. But the Scrum Team dropdown still shows all teams including those with no pending items — these are irrelevant options and create a confusing UX.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-10.1 | All filter dropdowns must derive their option list from the **currently displayed table rows only**. |
+| FR-10.2 | When a primary filter changes the displayed data, all dependent dropdowns must **recalculate their options**. |
+| FR-10.3 | If a previously selected dropdown value no longer exists in the new option set, **reset that dropdown to "All"**. |
+| FR-10.4 | This rule applies to: Scrum Team filter in Branch Cut Validation, Scrum Team filter in Deployment Section. |
+| FR-10.5 | The computation of dropdown options must happen on the **frontend from rendered data** — not from a new backend call. |
+
+## Acceptance Criteria
 
 ```
-Team Key
-+ Fix Version
-+ Environment
-+ Namespace
-+ Component Name
+AC-10.1
+GIVEN the Deployment table shows 10 rows (teams A, B, C, D present)
+WHEN the user applies "Show Invalid Only" and only 4 rows remain (teams A, B only)
+THEN the Scrum Team dropdown recalculates and shows only Team A and Team B
+AND Team C and Team D are removed from the dropdown options
+
+AC-10.2
+GIVEN the user has "Team C" selected in the Scrum Team filter
+WHEN a new primary filter is applied that removes all Team C rows
+THEN the Scrum Team dropdown resets to "All Teams" automatically
+
+AC-10.3
+GIVEN the Branch Cut Validation section has the same dropdown behavior
+WHEN a primary filter changes visible rows
+THEN the Scrum Team dropdown in Branch Cut Validation also recalculates correctly
+
+AC-10.4
+GIVEN all rows are visible (no filters active)
+WHEN the Scrum Team dropdown is opened
+THEN all teams from all rows are listed
+
+AC-10.5
+GIVEN the dropdown recalculation is implemented
+WHEN a new backend fetch runs
+THEN the dropdown options recalculate from the new result set
+
+AC-10.6
+GIVEN the change is applied
+WHEN the Branch Cut Validation or Deployment section is tested
+THEN no unnecessary backend calls are made to recalculate dropdown options
 ```
 
-This uniquely represents a deployment validation record.
+---
 
 ---
 
-# Data Persistence Rules
+# 11. UI — Font Size & Spacing (Release Readiness Global)
 
-Persist only:
+## Background
 
-- Kubernetes Commit ID
-- Latest Release Commit ID
-- Commits Behind
-- Deployment Status
-- Validation Message
+The Release Readiness page currently renders at a compressed scale. Font sizes are too small to read comfortably and the overall layout feels dense.
 
-Do **not** persist the complete Git commit history.
+**Scope:** This enhancement applies globally across the entire Release Readiness page (all tabs/sections).
 
-Git commit history should exist only in-memory during validation.
+## Functional Requirements
 
----
+| # | Requirement |
+|---|---|
+| FR-11.1 | Increase base font size to a minimum of **14px** for table body content. |
+| FR-11.2 | Increase table header font size to **15px**, semi-bold. |
+| FR-11.3 | Increase row padding to at minimum **10px top/bottom** per cell for better vertical breathing room. |
+| FR-11.4 | Increase horizontal cell padding to minimum **12px left/right**. |
+| FR-11.5 | Section headings (tab labels, section titles) must render at minimum **16px**. |
+| FR-11.6 | Changes must remain consistent with AT&T Blue & White branding. |
+| FR-11.7 | Changes must NOT break layout on standard 1080p or 1440p displays. |
+| FR-11.8 | Apply to all sub-sections: Story Status, Branch Cut Validation, Deployment. |
 
-# UI Requirements
+## Acceptance Criteria
 
-Display:
+```
+AC-11.1
+GIVEN the Release Readiness page is opened
+WHEN a user views the table body text
+THEN the font size is at least 14px and readable without zooming
 
-- Component
-- Release Branch
-- Kubernetes Branch
-- Kubernetes Commit ID
-- Latest Release Commit ID
-- Commits Behind
-- Deployment Status
-- Validation Message
-- Last Validated Time
+AC-11.2
+GIVEN the Release Readiness page is opened
+WHEN a user views table headers
+THEN headers render at 15px semi-bold weight
 
----
+AC-11.3
+GIVEN the Release Readiness page is opened
+WHEN a user views any table row
+THEN each cell has at least 10px padding top and bottom
+AND at least 12px padding left and right
 
-# Backend Validation Rules
+AC-11.4
+GIVEN the spacing changes are applied
+WHEN the page renders at 1080p
+THEN no content is cut off or horizontally overflowing outside visible area
 
-The backend shall validate:
+AC-11.5
+GIVEN the spacing changes are applied
+WHEN the page renders at 1440p
+THEN layout remains consistent and no excessive white space appears
 
-- Namespace exists
-- Release branch resolved successfully
-- Component exists
-- Kubernetes labels available
-- GitHub branch exists
-- GitHub commit history retrieved successfully
-- Kubernetes commit exists within release branch history
-
-Any validation failure shall generate an appropriate deployment status and user-friendly message.
-
----
-
-# Error Handling
-
-Gracefully handle:
-
-- Kubernetes unavailable
-- Namespace not found
-- Missing deployment labels
-- Missing GitHub branch
-- GitHub API failures
-- Empty commit history
-- Invalid Kubernetes commit
-- Rate limiting from GitHub APIs
-
-The validation process should continue for remaining components wherever possible.
+AC-11.6
+GIVEN changes are applied to Release Readiness
+WHEN other pages (Generate Report, Settings, Components) are viewed
+THEN those pages are unaffected by this change
+```
 
 ---
 
-# Acceptance Criteria
+---
 
-### AC-1
+# 12. Page Header — Team / Fix Version Inline Layout
 
-Force Refresh triggers a fresh deployment validation for the selected namespace.
+## Background
 
-### AC-2
+The Release Readiness page currently shows the Team Name and Fix Version selection in a section that consumes significant vertical space before any content is shown, reducing the usable table area on the screen.
 
-Backend receives Environment, Namespace, Fix Version, and Project Key from the UI.
+The page heading already shows:
 
-### AC-3
+```
+Release Readiness — Comprehensive Release Validation Dashboard
+```
 
-Only deployable components participate in deployment validation.
+## Problem Statement
 
-### AC-4
+The team and fix version selectors are placed in a block that pushes all content down, reducing visible table rows. This space can be recovered by moving those selectors inline with the existing heading.
 
-System Excluded, User Excluded, and Library components are ignored.
+## Functional Requirements
 
-### AC-5
+| # | Requirement |
+|---|---|
+| FR-12.1 | Move the **Team Name selector** and **Fix Version selector** inline, to the right of the page heading text. |
+| FR-12.2 | The heading text and selectors must appear on the **same horizontal row**. |
+| FR-12.3 | The selectors must maintain full functionality (value selection, change triggers, validation). |
+| FR-12.4 | The layout change must reclaim visible vertical space — at minimum **~10% more visible screen area** for table content. |
+| FR-12.5 | The layout must remain responsive and not overflow at standard screen widths. |
+| FR-12.6 | If both selectors are too wide to fit inline at smaller resolutions, they may **wrap below the heading** gracefully. |
 
-Release branch is resolved using the existing release calendar logic.
+## Acceptance Criteria
 
-### AC-6
+```
+AC-12.1
+GIVEN the Release Readiness page is loaded
+WHEN the page header is rendered
+THEN the heading "Release Readiness — Comprehensive Release Validation Dashboard"
+AND the Team Name selector
+AND the Fix Version selector
+are all visible on the same horizontal line
 
-Existing Kubernetes integration is reused to obtain branch and deployed commit details.
+AC-12.2
+GIVEN the selectors are rendered inline with the heading
+WHEN a user selects a different Team Name
+THEN the Fix Version dropdown updates correctly as before
 
-### AC-7
+AC-12.3
+GIVEN the selectors are rendered inline with the heading
+WHEN a user selects a different Fix Version
+THEN the page data refreshes correctly as before
 
-Latest non-merge commit from the release branch is identified as the expected deployment commit.
+AC-12.4
+GIVEN the inline layout is applied
+WHEN the vertical space freed is measured
+THEN at least ~10% more vertical space is available for table content
 
-### AC-8
+AC-12.5
+GIVEN a narrow display (e.g., 1280px width)
+WHEN the page header renders
+THEN selectors do not overflow the viewport and wrap gracefully if needed
 
-Merge commits are ignored while calculating deployment lag.
+AC-12.6
+GIVEN the layout change is applied
+WHEN other pages are loaded
+THEN no other page layout is affected
+```
 
-### AC-9
+---
 
-The system accurately calculates the number of source commits the deployment is behind.
+---
 
-### AC-10
+# Summary — All Changes at a Glance
 
-If Kubernetes and GitHub commits match, deployment is marked **Up To Date**.
+| # | Change | Scope | Type |
+|---|---|---|---|
+| 1 | Component column — name only + inline badge | Deployment Section | Frontend |
+| 2 | Release branch resolution — fix to use correct logic | Deployment Section | Backend |
+| 3 | K8s branch display normalization | Deployment Section | Frontend |
+| 4 | Full 40-char SHA for both commit ID columns | Deployment Section | Frontend + Backend |
+| 5 | Latest Release Commit — include merge commits | Deployment Section ONLY | Backend |
+| 6 | Commits Behind — exclude merge commits from count | Deployment Section | Backend |
+| 7 | Single status message replacing multiple indicators | Deployment Section | Frontend + Backend |
+| 8 | Scrum Teams + Stories columns with +N tooltip | Deployment Section | Frontend + Backend |
+| 9 | Scrum Team filter (matching Branch Cut Validation) | Deployment Section | Frontend |
+| 10 | Data-driven dropdowns — both BCV + Deployment | Branch Cut Validation + Deployment | Frontend |
+| 11 | Font size + spacing improvements | Release Readiness (all tabs) | Frontend |
+| 12 | Inline Team/Fix Version with page heading | Release Readiness header | Frontend |
 
-### AC-11
+---
 
-If commits differ, deployment is marked **Behind**, and the exact number of commits behind is displayed.
+# Definition of Done
 
-### AC-12
+All items below must be true before this feature is considered complete:
 
-If the Kubernetes commit cannot be found in the release branch history, deployment validation fails with an appropriate message.
+- [ ] All 12 enhancements implemented and tested
+- [ ] Component column shows microservice name + inline Blue/Green badge only
+- [ ] Release branch resolution uses existing service and returns correct branch
+- [ ] K8s branch name displays in `release/YY.MM.DD.rel` format
+- [ ] Both commit ID columns display full 40-character SHA
+- [ ] Latest Release Commit includes merge commits (Deployment Section only)
+- [ ] Review Commits and Branch Cut Validation still exclude merge commits (no regression)
+- [ ] Commits Behind count excludes merge commits
+- [ ] Single status message rendered per component row
+- [ ] Scrum Teams and Stories columns display with +N tooltip
+- [ ] Scrum Team filter functional in Deployment Section
+- [ ] Dropdown options are data-driven in both BCV and Deployment
+- [ ] Font size ≥ 14px, row padding ≥ 10px across Release Readiness
+- [ ] Team / Fix Version selectors rendered inline with page heading
+- [ ] No regression in Generate Report, Review Commits, Settings, Branch Cut Validation
+- [ ] All edge cases handled and tested
+- [ ] Structured logging in place for backend changes
+- [ ] Code reviewed for duplicate implementation — none introduced
 
-### AC-13
+---
 
-Deployment readiness records are persisted with Kubernetes commit ID, latest release commit ID, commits behind, deployment status, and validation message.
-
-### AC-14
-
-Complete GitHub commit history is never persisted in the database.
-
-### AC-15
-
-Audit fields (`Created By`, `Created Date`, `Updated By`, `Updated Date`) are maintained consistently.
-
-### AC-16
-
-Composite uniqueness is enforced using Team Key, Fix Version, Environment, Namespace, and Component Name.
-
-### AC-17
-
-The UI displays deployment status and validation messages that accurately reflect the backend analysis.
-
-### AC-18
-
-Backend continues processing other components even if validation fails for an individual component.
+*Document Version: 1.0 — Ready for Devin / Claude Opus 4.6 Thinking Implementation*
