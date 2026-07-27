@@ -1,391 +1,452 @@
-# Phase 11.1 – Minor Enhancements (Generate Report, Release Readiness & Settings)
+# Kubernetes Cookie Session Management & Connection Validation Enhancements
+
+## Feature Summary
+
+This enhancement focuses on making Kubernetes cookie management reliable, secure, and consistent across the application. The implementation should ensure that cookies are only persisted after explicit user action, invalid cookies are automatically removed, and all connection status indicators accurately reflect the real backend connectivity status.
+
+---
+
+# Enhancement 1: Kubernetes Cookie Session Management
 
 ## Objective
 
-This phase focuses on minor usability improvements, exclusion handling enhancements, tooltip improvements, deployment readiness behavior refinements, and settings cleanup.
-
-These changes are incremental improvements and **must not modify any existing working business logic**.
+Ensure Kubernetes cookies are maintained only at the current user session level and are never persisted unless the user explicitly saves them.
 
 ---
 
-# Acceptance Criteria
+## Functional Requirements
 
-## 1. Introduce User Exclusion Alongside System Exclusion
+### FR-1: Test Connection should NOT persist cookies
 
-### Current Behavior
+**Current Behavior**
+- Test Connection validates the cookie.
+- Cookie may be getting stored before Save is clicked.
 
-Components can currently be excluded only through the predefined iTrack exclusion configuration.
-
-These exclusions are automatically ignored during report generation.
-
-### Required Enhancement
-
-Introduce two different exclusion types:
-
-- System Excluded (configured through iTrack/team configuration)
-- User Excluded (selected manually by the user from the Component Preview screen)
-
-Both exclusion types must be stored independently.
-
-Example:
-
-- exclude (System)
-- userExclude (User)
-
-Do not merge both into one field.
+**Expected Behavior**
+- Clicking **Test Connection** must:
+  - Read the entered cookie.
+  - Call backend validation API.
+  - Display validation result.
+  - Never store/update session cookie.
+  - Never overwrite existing session cookie.
+  - Never update application-wide Kubernetes context.
 
 ---
 
-## 2. Component Preview – User Exclude Option
+### FR-2: Save Kubernetes Cookie
 
-While selecting components before Generate Report:
+When user clicks:
 
-Users should be able to manually exclude any component.
+**Save Kubernetes Cookie**
 
-This exclusion should be stored as:
+System shall:
 
-- userExclude = true
-
-System exclusions remain untouched.
-
----
-
-## 3. Generate Report Must Respect User Exclusions
-
-During Generate Report:
-
-Current logic already skips:
-
-- System Excluded components
-
-Enhance the logic to also skip:
-
-- User Excluded components
-
-Both exclusion types must be ignored during:
-
-- Commit Analysis
-- Story Mapping
-- Compliance Analysis
-- Violation Detection
-- Report Generation
-
-No external calls should be performed for excluded components.
+1. Validate entered cookie.
+2. Only if validation succeeds:
+   - Store cookie in current HTTP/User Session.
+   - Make it available throughout the application.
+3. If validation fails:
+   - Do NOT save cookie.
+   - Display appropriate validation error.
 
 ---
 
-# Release Readiness Enhancements
+### FR-3: Session Scope
 
-## 4. Branch Cut Validation - Hide System Exclusions
+Saved Kubernetes cookie must:
 
-Current behavior shows all components.
+- Exist only during current user session.
+- Not be stored in:
+  - Local Storage
+  - Session Storage (Browser)
+  - Database
+  - Configuration Files
+  - Application Cache
 
-Required:
-
-Do NOT display components excluded through iTrack/System configuration.
-
-Those components are intentionally excluded.
-
-Therefore they should not participate in Branch Cut Validation.
-
----
-
-## 5. Branch Cut Validation - Show User Exclusions
-
-Unlike system exclusions,
-
-User Excluded components should still appear in Branch Cut Validation.
-
-Reason:
-
-Users excluded them manually.
-
-Branch Cut validation should still indicate their status.
-
-These components should remain visible but clearly marked as User Excluded.
+Only backend server session should own the cookie.
 
 ---
 
-## 6. Team Tooltip Enhancement
+### FR-4: Shared Session Access
 
-Current UI shows:
+Once successfully saved:
 
-Team A
+Following modules should consume the same session cookie.
 
-Team B
+- Generate Report
+- Release Readiness
+- Deployment Status
+- Kubernetes Validation
+- Any future Kubernetes APIs
 
-+2
-
-This is good.
-
-Enhancement:
-
-Hovering over:
-
-- Team A
-- Team B
-- +2
-
-should display the complete list of teams.
-
-Example tooltip:
-
-Wireless-4
-
-Ordering
-
-Activation
-
-Fulfillment
-
-Support
-
-Display full comma-separated (or line-separated) team list.
+No module should request cookie independently.
 
 ---
 
-## 7. Stories Tooltip Enhancement
+# Enhancement 2: Automatic Invalid Cookie Cleanup
 
-Current UI truncates stories.
+## Objective
 
-Maintain existing UI.
-
-Enhancement:
-
-Hover over:
-
-- Story
-- +3
-
-Display complete list of stories.
-
-Tooltip should include every mapped story.
+System should automatically clean up invalid cookies.
 
 ---
 
-# Deployment Readiness Improvements
+## Functional Requirements
 
-## 8. Force Refresh Should Work Only For Selected Environment
+Whenever backend attempts Kubernetes communication:
 
-Current implementation:
+If any of below occurs:
 
-Force Refresh All Environments
+- Invalid Cookie
+- Unauthorized (401)
+- Forbidden (403)
+- Cookie Expired
+- Invalid Session
+- Connection Refused
+- Authentication Failure
+- Any backend validation failure
+- API does not return successful connected response
 
-refreshes every environment.
+System must:
 
-This is not required.
+1. Remove cookie from current session.
+2. Clear Kubernetes session object.
+3. Reset connection status.
+4. Force user to provide cookie again.
 
-Required:
-
-Only refresh the currently selected environment.
-
-Example:
-
-Selected:
-
-Test-3
-
-Refresh should call ONLY:
-
-Test-3
-
-NOT:
-
-- Test-4
-- Stage-West
-- Production-East
-- Production-West
+This prevents stale/expired cookies from being reused.
 
 ---
 
-## 9. Hide Refresh Button Until Environment Selected
+## Backend Rules
 
-Current behavior:
+Every Kubernetes API should perform:
 
-Refresh button always visible.
-
-Required:
-
-If no environment selected:
-
-Hide:
-
-Force Refresh Deployment Readiness
-
-After selecting an environment:
-
-Display:
-
-Force Refresh Deployment Readiness
-
----
-
-## 10. Invalid Only Switch
-
-Current behavior appears regardless of selection.
-
-Required:
-
-Invalid Only switch should become visible only after an environment is selected.
-
-No environment
+```
+Validate Session Cookie
 
 ↓
 
-No switch.
-
-Environment selected
+If Invalid
 
 ↓
 
-Switch visible.
-
----
-
-## 11. Deployment Validation Scope
-
-Every deployment validation must execute only for:
-
-Selected Environment
-
-Never invoke APIs for all environments unless an explicit "Refresh All" feature is introduced in the future.
-
----
-
-## 12. Backend API Optimization
-
-Ensure deployment backend receives:
-
-Selected Environment
+Remove Session Cookie
 
 ↓
 
-Namespace
+Return Authentication Failure
 
 ↓
 
-Deployment Validation
-
-Only.
-
-No unnecessary Kubernetes calls.
+Frontend prompts for new cookie
+```
 
 ---
 
-# Settings Page Enhancement
+# Enhancement 3: Generate Report Connection Status
 
-## 13. Replace Test-3/Test-4 Cookies
+## Current Issue
 
-Current Settings page contains:
+Generate Report page displays green connection status even after:
 
-- Test-3 Cookie
-- Test-4 Cookie
+- Cookie expired
+- Cookie removed
+- Force Refresh clicked
 
-This is incorrect.
+This indicates UI is relying on stale state instead of backend validation.
 
-Actual infrastructure uses:
+---
 
-One Test Cookie
+## Expected Behaviour
 
-shared across all Test namespaces.
+Whenever page loads:
 
-Replace:
+Generate Report should:
 
-- Test-3 Cookie
-- Test-4 Cookie
+1. Read cookie from session.
+2. Invoke backend Test Connection API.
+3. Update UI only from API response.
 
-with:
+---
 
-Test Kubernetes Cookie
+### Force Refresh Behaviour
 
-This single cookie must be reused for:
+When user clicks Force Refresh:
 
-- Test-1 (future)
-- Test-2 (future)
+System must:
+
+1. Ignore cached status.
+2. Call backend validation API.
+3. Wait for response.
+4. Update UI.
+
+If API says:
+
+Connected
+
+→ Green
+
+If API says:
+
+Disconnected
+
+→ Red
+
+If API says:
+
+Unauthorized
+
+Then
+
+- Remove cookie
+- Reset session
+- Update UI to disconnected
+- Ask user to configure Kubernetes cookie again
+
+No cached connection state should ever be reused.
+
+---
+
+# Enhancement 4: Backend Validation Logic
+
+Review backend implementation for:
+
+- Session handling
+- Cookie lifecycle
+- Validation API
+- Test Connection API
+- Connection cache
+- Session cleanup
+
+Verify that:
+
+Every validation request actually reaches Kubernetes.
+
+No stale response should be returned.
+
+No cached "Connected" status should be reused.
+
+---
+
+## Acceptance Criteria
+
+### AC-1
+
+Test Connection never stores cookie.
+
+---
+
+### AC-2
+
+Cookie is stored only after Save Kubernetes Cookie.
+
+---
+
+### AC-3
+
+Saved cookie is available across application during current session.
+
+---
+
+### AC-4
+
+Closing session/browser invalidates stored cookie.
+
+---
+
+### AC-5
+
+Invalid cookie is immediately removed from session.
+
+---
+
+### AC-6
+
+Any authentication failure clears session cookie.
+
+---
+
+### AC-7
+
+Force Refresh always calls backend.
+
+---
+
+### AC-8
+
+Generate Report never shows cached green status.
+
+---
+
+### AC-9
+
+Connection status always matches backend validation response.
+
+---
+
+### AC-10
+
+Unauthorized responses automatically redirect user to reconfigure Kubernetes cookie.
+
+---
+
+# Enhancement 5: Release Readiness Deployment Connections
+
+## Current Issue
+
+Deployment section is not showing Test-3 and Test-4 as connected even though valid cookies exist.
+
+Expected auto-connect behaviour is missing.
+
+---
+
+## Required Investigation
+
+Review connection logic for:
+
+- Test-1
+- Test-2
 - Test-3
 - Test-4
+- Production
+
+Compare implementation.
+
+Identify why Test-3/Test-4 validation is skipped or failing.
+
+Ensure all environments follow identical validation workflow.
 
 ---
 
-## 14. Backend Cookie Mapping
+## Expected Behaviour
 
-Backend should also maintain:
+When Release Readiness page loads:
 
-Test Cookie
+System shall automatically validate:
 
-instead of
+- Test-1
+- Test-2
+- Test-3
+- Test-4
+- Production
 
-Test-3 Cookie
-
-Test-4 Cookie
-
-All Test namespace authentication should reuse the same cookie.
-
----
-
-## 15. Preserve Existing Deployment Logic
-
-Existing deployment status logic should remain unchanged.
-
-Only improve:
-
-- Environment selection
-- Refresh behavior
-- Cookie reuse
-- UI visibility
-
-No existing deployment validation should break.
+using their respective session cookies.
 
 ---
 
-# General Requirements
+## Expected UI
 
-## 16. Backward Compatibility
+Connected
 
-All current working functionality must continue to work.
+Green indicator
 
-Do not modify existing report generation behavior other than adding User Exclusion support.
+Disconnected
 
----
+Red indicator
 
-## 17. UI Consistency
+Unauthorized
 
-Maintain the same design language already introduced across the application.
+Remove session cookie
 
-Do not introduce new styles.
+Require user reconfiguration
 
-Reuse:
+Loading
 
-- Existing badges
-- Existing tooltip components
-- Existing switches
-- Existing status indicators
+Spinner until validation completes
 
 ---
 
-## 18. Testing Checklist
+## Acceptance Criteria
 
-Before completing this phase, verify:
+### AC-11
 
-- System Excluded components hidden from Branch Cut Validation
-- User Excluded components visible in Branch Cut Validation
-- Generate Report ignores User Excluded components
-- Generate Report ignores System Excluded components
-- Team tooltip displays complete team list
-- Story tooltip displays complete story list
-- Force Refresh only refreshes selected environment
-- Refresh button hidden until environment selected
-- Invalid Only switch visible only after environment selection
-- Settings page contains only one Test Kubernetes Cookie
-- Backend reuses Test Cookie across all Test namespaces
-- Existing functionality remains unaffected
+Test-3 auto validation works.
 
 ---
 
-# Deferred Item (Do Not Implement in This Phase)
+### AC-12
 
-The Review Commits lifecycle/status redesign discussed during validation is intentionally deferred.
+Test-4 auto validation works.
 
-Do **NOT** modify the Review Commits section in this phase.
+---
 
-That redesign will be addressed separately after business rule validation.
+### AC-13
+
+All deployment environments follow identical validation workflow.
+
+---
+
+### AC-14
+
+No deployment environment should display stale connected status.
+
+---
+
+### AC-15
+
+Each environment independently validates its own cookie.
+
+---
+
+# Backend Verification Checklist
+
+The implementation AI should review the following:
+
+- Session cookie lifecycle
+- Save API
+- Test Connection API
+- Kubernetes authentication service
+- Session cleanup logic
+- Connection status caching
+- Force Refresh implementation
+- Generate Report connection loader
+- Release Readiness deployment loader
+- Test-3/Test-4 validation workflow
+- Global session provider
+- Authentication interceptors
+- Error handling middleware
+
+---
+
+# Frontend Verification Checklist
+
+Review the following:
+
+- Settings page state management
+- Test Connection action
+- Save Kubernetes Cookie action
+- Session refresh logic
+- Force Refresh handler
+- Generate Report status component
+- Deployment status component
+- Connection badge rendering
+- Loading indicators
+- Unauthorized handling
+- State reset after cookie removal
+
+---
+
+# Non-Functional Requirements
+
+- No stale connection status shall be displayed.
+- No Kubernetes cookie shall be persisted outside the active backend session.
+- Connection status shall always be backend-driven.
+- Session cleanup shall occur automatically upon authentication failure.
+- All Kubernetes environments shall behave consistently.
+- Backend must remain the single source of truth for connection state.
+
+---
+
+# Definition of Done
+
+- ✅ Test Connection performs validation without persisting cookies.
+- ✅ Save stores cookies only in the current backend session.
+- ✅ Session cookies are accessible application-wide.
+- ✅ Invalid/expired cookies are automatically removed.
+- ✅ Generate Report always reflects live backend connection status.
+- ✅ Force Refresh performs a fresh backend validation.
+- ✅ Connected status is never cached incorrectly.
+- ✅ Release Readiness correctly validates and displays Test-1, Test-2, Test-3, Test-4, and Production environments.
+- ✅ Backend and frontend implementations are reviewed for stale session, caching, and validation discrepancies.
+- ✅ Comprehensive regression testing confirms consistent Kubernetes connectivity behavior across all application modules.
