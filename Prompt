@@ -1,921 +1,952 @@
-# Release Readiness — Deployment Section Enhancements
+# Release Readiness Tool — Enhancement Bundle 2
 ## Developer-Ready Acceptance Criteria Document
 
-**Module:** Release Readiness → Deployment Section  
-**Audience:** Devin AI (Claude Opus 4.6 Thinking)  
-**Prepared By:** Senior Solution Architect  
-**Status:** Implementation Ready  
+**Module Scope:** H2 Backup · Generate Report · Release Readiness · Deployment Section · Global UI
+**Audience:** Devin AI (Claude Opus 4.6 Thinking)
+**Prepared By:** Senior Solution Architect
+**Status:** Implementation Ready
 
 ---
 
 ## ⚠️ Critical Implementation Rules
 
-Before making any change:
-
-1. **Read and understand** the existing implementation fully before modifying anything.
-2. **Reuse existing services** — branch resolution, Kubernetes integration, GitHub service.
-3. **Do NOT duplicate** any existing logic.
-4. **Do NOT break** any other module — especially Review Commits, Branch Cut Validation, Generate Report.
-5. **Merge commit exclusion rules differ per section** — read Section 5 carefully.
-6. **All changes are scoped** to the Deployment Section UNLESS explicitly stated otherwise.
+1. Read and fully understand existing code before changing anything.
+2. Reuse existing services — async patterns, ExecutorService, job ID flow, GitHub service, K8s integration.
+3. Do NOT duplicate any logic. The Generate Report async pattern must be reused in Deployment Section.
+4. Do NOT break any currently working functionality.
+5. Filters in UI must NEVER affect backend validation logic — validation always runs on complete unfiltered data.
+6. Branch format normalization (hyphen vs slash) is critical — read Section 7 carefully before touching any branch comparison code.
 
 ---
 
 ## Table of Contents
 
-1. Component Column — Display Fix
-2. Release Branch Resolution — Fix
-3. Kubernetes Branch Name — Display Normalization
-4. Commit ID Display — Full SHA Required
-5. Latest Release Commit ID — Merge Commit Inclusion (Deployment Only)
-6. Commits Behind Calculation — Merge Commit Exclusion
-7. Deployment Status — Single Message Format
-8. Scrum Teams & Stories — Display in Table
-9. Scrum Team Filter — Dynamic Filter
-10. Dropdown Filter — Data-Driven Values (Branch Cut Validation + Deployment)
-11. UI — Font Size & Spacing (Release Readiness Global)
-12. Page Header — Team / Fix Version Inline Layout
+1. H2 DB Backup — Single File Retention Strategy
+2. Generate Report — Component Section Smart Filters & Switches
+3. Release Readiness — Header Layout Fix & Restore Description Text
+4. Release Readiness — Deployment Tab Environment Selector Cleanup
+5. Global Font Size Increase — Complete UI
+6. Deployment Section — Teams & Stories Loading Fix (DB-First Flow)
+7. Deployment Section — Branch Comparison Normalization + Status Column Simplification
+8. Deployment Section — Scrum Team Filter (Mandatory)
+9. Deployment Section — Async Performance (ExecutorService + Job ID + DB-Cached Reload)
 
 ---
 
 ---
 
-# 1. Component Column — Display Fix
+# 1. H2 DB Backup — Single File Retention Strategy
 
 ## Background
 
-The current Component column in the Deployment table displays:
-- Microservice name
-- Namespace name
-- Blue/Green deployment badge
-
-All three items are stacked, causing each row to consume excessive vertical space and making the table harder to scan.
+The application uses an H2 in-memory database and performs a scheduled backup every 15 minutes to prevent data loss on application crash or restart. Each scheduled run creates a new backup file with a timestamp or incremental name, causing the backup folder to accumulate an unbounded number of files over time.
 
 ## Problem Statement
 
-The component column is showing too much information vertically. The namespace is redundant at the component row level since the namespace is already selected globally. The Blue/Green badge needs to remain but should be repositioned.
+The backup folder grows continuously. After a few hours, dozens of backup files exist, consuming disk space unnecessarily. Only the most recent complete backup is ever needed for restore.
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-1.1 | Display only the **microservice name** inside the Component column. |
-| FR-1.2 | Remove the namespace name from the Component column entirely. |
-| FR-1.3 | Display the **Blue/Green deployment badge** inline, immediately to the right of the microservice name, on the same line. |
-| FR-1.4 | Badge styling must remain consistent with existing Blue/Green indicator styling. |
-| FR-1.5 | No other column, row, or section should be affected. |
+| FR-1.1 | The backup scheduler must write the new backup to a **temporary file** first. |
+| FR-1.2 | Only after the new backup file is **fully and successfully written** must the previous backup file be deleted. |
+| FR-1.3 | At any point in time, the backup folder must contain **at most 2 backup files** — the current backup and briefly the temp file during the swap window. |
+| FR-1.4 | If the new backup write **fails**, the previous backup must **NOT be deleted**. The old backup must be preserved as the last known good backup. |
+| FR-1.5 | The backup file must be named consistently — a **fixed filename** (e.g., `release-tracker-backup.mv.db`) — not a timestamped name. |
+| FR-1.6 | Log the backup lifecycle at INFO level: backup start, backup complete, old file deleted. |
+| FR-1.7 | Log any failure at ERROR level with the exception detail. |
+| FR-1.8 | The backup interval (15 minutes) must remain configurable via application properties. |
+
+## Backup Swap Algorithm
+
+```
+Step 1:  Write new backup to → backup-temp.mv.db
+Step 2:  Verify temp file exists AND size > 0
+Step 3:  If verification passes:
+             Delete → release-tracker-backup.mv.db  (previous)
+             Rename → backup-temp.mv.db  to  release-tracker-backup.mv.db
+Step 4:  If verification fails:
+             Delete backup-temp.mv.db (cleanup)
+             Log ERROR
+             Retain previous release-tracker-backup.mv.db unchanged
+```
 
 ## Acceptance Criteria
 
 ```
 AC-1.1
-GIVEN the Deployment table is loaded
-WHEN a user views the Component column
-THEN only the microservice name is displayed
-AND the namespace name is NOT shown in that column
+GIVEN the backup scheduler fires
+WHEN the backup starts
+THEN the new backup is written to a temporary file first
+AND the existing backup file is NOT touched during write
 
 AC-1.2
-GIVEN the Deployment table is loaded
-WHEN a user views the Component column
-THEN the Blue or Green deployment badge appears inline
-immediately to the right of the microservice name
-on the same single line
+GIVEN the new backup completes successfully
+WHEN the temp file is verified (exists, size > 0)
+THEN the old backup file is deleted
+AND the temp file is renamed to the fixed backup filename
+AND the backup folder contains exactly 1 backup file
 
 AC-1.3
-GIVEN the Blue/Green badge is displayed inline
-WHEN the user views the row
-THEN row height is compact and not expanded by stacked elements
+GIVEN the new backup write fails midway
+WHEN the scheduler handles the error
+THEN the temp file is cleaned up
+AND the previous backup file is retained unchanged
+AND an ERROR is logged with the exception detail
 
 AC-1.4
-GIVEN the change is applied
-WHEN other modules are reviewed
-THEN no other table, column, or section is affected
+GIVEN multiple backup cycles have run (e.g., 10 cycles over 2.5 hours)
+WHEN the backup folder is inspected
+THEN it contains at most 2 files (current backup + temp during active swap window)
+AND no timestamped accumulation of files exists
+
+AC-1.5
+GIVEN the application crashes after a successful backup
+WHEN the application restarts
+THEN it restores from the single backup file successfully
+
+AC-1.6
+GIVEN each backup cycle
+WHEN the lifecycle completes
+THEN INFO logs exist for: backup start, backup success, old file deleted
+
+AC-1.7
+GIVEN the backup interval property is set to a different value
+WHEN the application starts
+THEN the backup runs at the configured interval
 ```
 
 ## Edge Cases
 
-- If Blue/Green value is missing or null → show microservice name only, no badge rendered
-- If microservice name is very long → truncate with ellipsis, show full name in tooltip
+- Backup folder does not exist on first run → create it automatically, log INFO
+- No previous backup exists (first ever backup) → skip delete step, write directly
+- Disk full during backup write → log ERROR, do not delete old backup
+- Rename operation fails after delete → log CRITICAL, operator intervention required
 
 ---
 
 ---
 
-# 2. Release Branch Resolution — Fix
+# 2. Generate Report — Component Section Smart Filters & Switches
 
 ## Background
 
-Fix Version format used in this application:
-
-```
-26.7.4 (July 26 – August 1, 2026)
-```
-
-Breakdown:
-- `26` → Year 2026
-- `7` → Month July
-- `4` → Fourth release of that month
-- `(July 26 – August 1, 2026)` → The valid date range for this release
-
-The release branch must fall **within this date range (inclusive of both boundary dates)**.  
-Among all qualifying branches, the one with the **highest release number** must be selected.
+The Generate Report page includes a Component Section that can display 100–200+ components after team and story selection. Users currently must scroll through the entire list to identify problematic components. There is no way to quickly isolate components by status, filter out valid ones, or bulk-exclude a group.
 
 ## Problem Statement
 
-The release branch shown in the Deployment Section is incorrect. The existing release branch resolution logic (used in other sections via Release Calendar) is either not being called, or is being called incorrectly in this section.
+With 100+ components, the component list is unnavigable. Users cannot efficiently identify issues, act on groups of components, or exclude components in bulk. Validation logic before Generate Report must still run on the complete unfiltered dataset.
+
+## ⚠️ Critical Rule
+
+> **Filters are display-only. They NEVER affect the pre-report validation logic.**
+> Validation always runs on the complete set of components, regardless of what the user has filtered in or out on screen.
+> Existing validation behavior must not change.
 
 ## Functional Requirements
 
+### Filter Bar Requirements
+
 | # | Requirement |
 |---|---|
-| FR-2.1 | **Reuse the existing release branch resolution service** — do NOT create a new implementation. |
-| FR-2.2 | The release branch must fall within the date range declared in the Fix Version. |
-| FR-2.3 | Both boundary dates of the range are **inclusive** (e.g., July 26 and August 1 are both valid). |
-| FR-2.4 | Among all qualifying branches within the date range, select the one with the **highest release sequence number**. |
-| FR-2.5 | The resolved release branch must be used throughout the Deployment Section for all components. |
-| FR-2.6 | Resolution must be triggered on Force Refresh. |
-| FR-2.7 | Log the resolved branch at INFO level, including the fix version and date range used. |
+| FR-2.1 | Add a **Filter Bar** above the component list in the Component Section. |
+| FR-2.2 | The filter bar must include the filter options described below. |
+| FR-2.3 | Filters operate on the **currently rendered component list** only — frontend filtering, no new backend calls. |
+| FR-2.4 | Multiple filters may be active simultaneously (AND logic — component must match all active filters to be shown). |
+| FR-2.5 | A **"Reset All Filters"** button must clear all active filters and restore the full list. |
+| FR-2.6 | A **component count** must be shown: `Showing X of Y components`. |
+| FR-2.7 | Pre-report validation must continue to evaluate ALL Y components regardless of the active filter. |
 
-## Business Rules
+### Filter Options
 
-```
-Fix Version:  26.7.4 (July 26 – August 1, 2026)
+#### Toggle Switches (Quick Filters)
 
-Date range:   2026-07-26  →  2026-08-01 (inclusive)
+| Switch Label | Shows |
+|---|---|
+| ✅ Valid Only | Components where Prod K8s matches release branch AND branch cut is complete |
+| ❌ Errors Only | Components with at least one error-level validation message |
+| ⚠️ Warnings Only | Components with at least one warning-level validation message |
+| 🌿 No Branch Formed | Components where no release branch exists matching the current fix version |
+| 🔀 Branch Cut Incomplete | Components where branch cut is not yet completed for the fix version |
+| 🚫 User Excluded | Components currently marked as User Excluded |
+| 📦 Library Components | Components classified as Library type |
 
-Qualifying release branches within range:
-  release/26.07.26.rel  ✅
-  release/26.07.28.rel  ✅  ← Highest — SELECTED
-  release/26.08.01.rel  ✅
+#### Dropdown Filters
 
-Outside range:
-  release/26.07.25.rel  ❌  (before range)
-  release/26.08.02.rel  ❌  (after range)
-```
+| Filter | Description |
+|---|---|
+| Branch Status | All / Has Branch / No Branch / Branch Cut Done / Branch Cut Incomplete |
+| Kubernetes Status | All / Deployed & Valid / Deployed & Stale / Not Deployed / Unknown |
+| Component Type | All / Service / Library / System Excluded / User Excluded |
+| Scrum Team | All / [dynamic list from visible components] |
+
+### Bulk Exclude Feature
+
+| # | Requirement |
+|---|---|
+| FR-2.8 | A **checkbox column** must appear on the left of each component row. |
+| FR-2.9 | A **Select All (Filtered)** checkbox must select all currently visible (filtered) components. |
+| FR-2.10 | A **"Exclude Selected"** button must mark all selected components as User Excluded in one action. |
+| FR-2.11 | Excluded components must update their visual state immediately (greyed out / excluded badge). |
+| FR-2.12 | A **"Undo Exclusion"** action must be available per component or for the last bulk action. |
 
 ## Acceptance Criteria
 
 ```
 AC-2.1
-GIVEN Fix Version is "26.7.4 (July 26 – August 1, 2026)"
-WHEN the Deployment Section performs a Force Refresh
-THEN the existing release branch resolution service is invoked
-AND the resolved branch falls within July 26 – August 1, 2026 (inclusive)
+GIVEN 150 components are loaded
+WHEN the user activates the "Errors Only" switch
+THEN only components with error-level messages are shown
+AND the count reads "Showing X of 150 components"
 
 AC-2.2
-GIVEN multiple qualifying branches exist within the date range
-WHEN the resolution service selects the branch
-THEN the branch with the highest release sequence number is selected
+GIVEN the "Errors Only" switch is active
+WHEN the user also activates "No Branch Formed"
+THEN only components matching BOTH conditions are shown (AND logic)
 
 AC-2.3
-GIVEN the release branch is resolved
-WHEN displayed in the Deployment table
-THEN the correct branch is shown for all components
+GIVEN filters are active showing 20 of 150 components
+WHEN the user clicks "Generate Report"
+THEN validation runs against all 150 components
+AND the filter state does NOT affect which components are included in the report
 
 AC-2.4
-GIVEN a branch outside the date range exists
-WHEN the resolution runs
-THEN that branch is NOT selected regardless of its release number
+GIVEN filters are active
+WHEN the user clicks "Reset All Filters"
+THEN all 150 components are shown
+AND all switches and dropdowns return to default state
 
 AC-2.5
-GIVEN no qualifying branch is found within the range
-WHEN the resolution completes
-THEN an appropriate error/warning message is displayed
-AND the component status is marked as "Unable to Validate"
+GIVEN 20 components are visible after filtering
+WHEN the user clicks "Select All (Filtered)" and then "Exclude Selected"
+THEN all 20 visible components are marked as User Excluded
+AND their visual state updates immediately
 
 AC-2.6
-GIVEN the existing resolution service is used
-WHEN the change is deployed
-THEN no other module using the same service is affected
+GIVEN the Scrum Team dropdown is open
+WHEN the team list is rendered
+THEN only teams present in the currently visible (filtered) component rows appear
+
+AC-2.7
+GIVEN the "Valid Only" switch is activated
+WHEN the filter runs
+THEN only components where Prod K8s matches release branch AND branch cut is complete are shown
+
+AC-2.8
+GIVEN filters are active and showing a subset
+WHEN the component count is viewed
+THEN it accurately reads "Showing X of Y components"
+
+AC-2.9
+GIVEN a user excludes components via bulk action
+WHEN the page is refreshed or report is reopened
+THEN the exclusion state is persisted in the database
+
+AC-2.10
+GIVEN any filter combination is active
+WHEN pre-report validation runs
+THEN validation output reflects ALL components and is not scoped to the filtered subset
 ```
 
 ## Edge Cases
 
-- Fix Version has no date range annotation → log warning, show "Unable to Validate"
-- Date range spans two months → both months' branches are valid candidates
-- Only one branch exists within range → select it regardless of sequence number
+- All components match a filter → count reads "Showing Y of Y components", no visual change
+- No components match a filter → show empty state: "No components match the selected filters. Reset filters to view all."
+- Bulk exclude applied to filtered set → undo only reverses the last bulk action, not previous individual exclusions
 
 ---
 
 ---
 
-# 3. Kubernetes Branch Name — Display Normalization
+# 3. Release Readiness — Header Layout Fix & Restore Description Text
 
 ## Background
 
-Kubernetes labels return branch names in a hyphenated format:
-
-```
-release-26-07-28-release
-```
-
-The actual release branch naming convention used everywhere else in the application is:
-
-```
-release/26.07.28.rel
-```
+A previous UI change moved the Team and Fix Version selectors inline with the page heading. This caused the descriptive context text that previously appeared below the heading to be lost. Additionally, the inline selectors appear visually small and inconsistent with the rest of the AT&T design language.
 
 ## Problem Statement
 
-The raw Kubernetes label value is being displayed directly in the UI without transformation, making it inconsistent with all other branch name references across the application.
+1. The descriptive subtitle/context text below "Release Readiness" heading is missing.
+2. The Team and Fix Version filter selectors look small and visually unpolished.
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-3.1 | Transform the Kubernetes raw branch label to standard branch format before displaying. |
-| FR-3.2 | Transformation must happen at the **display/mapping layer only** — do NOT alter the raw stored value. |
-| FR-3.3 | The raw Kubernetes value must still be persisted as-is in the database. |
-| FR-3.4 | Transformation applies only within the Deployment Section UI display. |
-
-## Transformation Rule
-
-```
-Raw Kubernetes Label:    release-26-07-28-release
-                              ↓ Transform
-Display Value:           release/26.07.28.rel
-
-Rule:
-  - Replace leading "release-" with "release/"
-  - Replace hyphens between date parts with dots
-  - Replace trailing "-release" with ".rel"
-
-Pattern:
-  release-{YY}-{MM}-{DD}-release  →  release/{YY}.{MM}.{DD}.rel
-```
+| FR-3.1 | Restore the descriptive context text below the "Release Readiness" heading. |
+| FR-3.2 | The context text should read (restore original wording if available in code/git history, otherwise use): `"Comprehensive release validation dashboard providing story status, branch cut analysis, and deployment readiness across all environments."` |
+| FR-3.3 | The Team selector and Fix Version selector must be visually enlarged — minimum height 38px, font size 14px inside the dropdown. |
+| FR-3.4 | Selector labels ("Team", "Fix Version") must be clearly visible, bold, 13px minimum. |
+| FR-3.5 | The selectors must remain on the same horizontal row as the heading or in a clearly styled sub-header row — not stacked awkwardly. |
+| FR-3.6 | The overall header zone (heading + description + selectors) must feel structured and intentional, not compressed. |
+| FR-3.7 | AT&T Blue & White branding must be maintained. |
 
 ## Acceptance Criteria
 
 ```
 AC-3.1
-GIVEN Kubernetes returns branch label "release-26-07-28-release"
-WHEN the Deployment table renders the K8s Branch column
-THEN the displayed value is "release/26.07.28.rel"
+GIVEN the Release Readiness page is opened
+WHEN the header section renders
+THEN the heading "Release Readiness" is visible
+AND a descriptive subtitle is visible below or beside the heading
 
 AC-3.2
-GIVEN the raw K8s label is transformed for display
-WHEN the raw value is retrieved from the database
-THEN it remains stored as "release-26-07-28-release" (untransformed)
+GIVEN the page header renders
+WHEN the Team and Fix Version selectors are displayed
+THEN both selectors have a minimum height of 38px
+AND the text inside the selectors is at least 14px
 
 AC-3.3
-GIVEN an unexpected or non-standard K8s branch format is returned
-WHEN the transformation fails to match the pattern
-THEN the raw value is displayed as-is
-AND a console/log warning is emitted
+GIVEN the page header renders
+WHEN the selector labels are viewed
+THEN labels are bold, clearly legible, minimum 13px
 
 AC-3.4
-GIVEN the transformation is applied
-WHEN other modules read the K8s branch value from DB
-THEN no other module is affected by this display-only change
+GIVEN the layout change is applied
+WHEN the page is viewed at 1080p and 1440p
+THEN the header zone does not overflow or appear compressed
+
+AC-3.5
+GIVEN the descriptive text is restored
+WHEN other pages are viewed
+THEN no other page is affected by this change
 ```
 
-## Edge Cases
-
-- Null or empty K8s branch label → show `—` (em-dash) in UI
-- Branch label does not match expected pattern → display raw value, log warning
-- Multiple segments or non-standard suffixes → display raw value, log warning
-
 ---
 
 ---
 
-# 4. Commit ID Display — Full SHA Required
+# 4. Release Readiness — Deployment Tab Environment Selector Cleanup
 
 ## Background
 
-Currently, both the **Kubernetes Commit ID** and the **Latest Release Commit ID** are displayed as short (7-character) SHA values in the Deployment table.
+The Deployment tab shows an environment selector row (Test3, Test4, Stage-West, Production-East, Production-West) as tab-style buttons. Above or beside the environment labels, there are green or gray status dot indicators currently being shown. These dots are redundant because each environment button already shows full status information in the content section below.
 
-## Problem Statement
-
-Short commit SHAs are not uniquely identifiable in large repositories and make cross-referencing with GitHub difficult. Full SHA must be shown.
+Additionally, the text inside the environment tab buttons is too small to read comfortably.
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-4.1 | Display the **full 40-character SHA** for the Kubernetes Commit ID column. |
-| FR-4.2 | Display the **full 40-character SHA** for the Latest Release Commit ID column. |
-| FR-4.3 | The full SHA must be stored in the database — verify storage is not truncated. |
-| FR-4.4 | If the stored SHA is already truncated (short), the backend must re-fetch the full SHA from the source. |
-| FR-4.5 | Both commit ID columns must render the full SHA in the UI. |
-| FR-4.6 | For readability, the UI may display the full SHA in a **monospace font** with horizontal scroll or truncation-with-tooltip. |
+| FR-4.1 | Remove the green/gray status dot indicators from the environment selector buttons at the top of the Deployment tab. |
+| FR-4.2 | The environment tab button labels (Test3, Test4, Stage-West, Production-East, Production-West) must have their font size increased to minimum **15px**. |
+| FR-4.3 | The active/selected environment tab must remain clearly distinguished (AT&T blue highlight or bold). |
+| FR-4.4 | The status detail shown in the content below each environment must remain unchanged. |
+| FR-4.5 | No other functionality of the environment selector must change. |
 
 ## Acceptance Criteria
 
 ```
 AC-4.1
-GIVEN the Deployment table is rendered
-WHEN the Kubernetes Commit ID column is displayed
-THEN the full 40-character SHA is shown (not a 7-character short SHA)
+GIVEN the Deployment tab is rendered
+WHEN the environment selector row is displayed
+THEN no green or gray status dots appear alongside the environment labels
 
 AC-4.2
-GIVEN the Deployment table is rendered
-WHEN the Latest Release Commit ID column is displayed
-THEN the full 40-character SHA is shown (not a 7-character short SHA)
+GIVEN the environment selector is rendered
+WHEN the user views the tab labels
+THEN each label (Test3, Test4, Stage-West, etc.) renders at minimum 15px font size
 
 AC-4.3
-GIVEN the SHA values are stored in the database
-WHEN the record is inspected
-THEN the full 40-character SHA is persisted in both commit ID columns
+GIVEN the user selects an environment tab
+WHEN the active state is displayed
+THEN the active tab is visually distinct (blue background or bold or underline)
+AND no dots are shown
 
 AC-4.4
-GIVEN a full SHA is displayed in the UI
-WHEN the SHA is too long for the column width
-THEN the SHA is rendered in a monospace font
-AND a tooltip shows the full value on hover
+GIVEN the dots are removed from the top selector
+WHEN the user views the content section below
+THEN all status details in the content area remain intact and unchanged
 
 AC-4.5
-GIVEN the full SHA display is implemented
-WHEN other sections (Review Commits, Branch Cut Validation) render commit IDs
-THEN those sections are NOT affected by this change
+GIVEN the change is applied
+WHEN other tabs (Story Status, Branch Cut Validation) are viewed
+THEN those tabs are unaffected
 ```
 
 ---
 
 ---
 
-# 5. Latest Release Commit ID — Merge Commit Inclusion (Deployment Section Only)
+# 5. Global Font Size Increase — Complete UI
 
 ## Background
 
-The application currently has a global rule to **exclude merge commits** during commit analysis. This rule is correct for Review Commits analysis. However, in the Deployment Section, the **Latest Release Commit ID** represents the absolute latest commit on the release branch — which may itself be a merge commit.
-
-Kubernetes records the exact SHA at time of deployment, which can be a merge commit SHA. If the application excludes merge commits when fetching the latest release commit, there will be a mismatch.
-
-## Problem Statement
-
-The Latest Release Commit shown in the Deployment table is incorrect because the fetch logic is skipping the most recent commit if it is a merge commit. This causes a discrepancy between what Kubernetes deployed and what the application reports as the latest.
-
-## ⚠️ Critical Isolation Rule
-
-> **This change MUST NOT affect any other section.**  
-> Review Commits analysis must continue to exclude merge commits.  
-> Branch Cut Validation must continue to exclude merge commits.  
-> Only the Latest Release Commit fetch within the Deployment Section is changed.
+The previous enhancement increased font sizes for Release Readiness. However, the overall application still renders text that is too small across all pages. This is a global pass to bring all UI text up to a comfortable reading size.
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-5.1 | When fetching the Latest Release Commit ID for the Deployment Section, retrieve the **absolute latest commit** regardless of whether it is a merge commit or a regular commit. |
-| FR-5.2 | This behavior must be implemented as a **separate fetch path or parameter** — do NOT modify the shared commit fetch service in a way that affects other callers. |
-| FR-5.3 | The merge commit inclusion flag must be scoped to the Deployment Section's fetch call only. |
-| FR-5.4 | Review Commits, Branch Cut Validation, and Commits Behind calculation must continue using the existing merge-commit-excluded logic. |
-| FR-5.5 | Add a clear code comment at the fetch call site explaining why merge commits are included here. |
+| FR-5.1 | **Base body font size:** minimum **14px** across all pages. |
+| FR-5.2 | **Table body cells:** minimum **14px**. |
+| FR-5.3 | **Table headers:** minimum **15px**, semi-bold (600 weight). |
+| FR-5.4 | **Section headings / page titles:** minimum **18px**, bold. |
+| FR-5.5 | **Sub-headings / tab labels:** minimum **15px**, medium weight (500). |
+| FR-5.6 | **Form labels / field labels:** minimum **13px**. |
+| FR-5.7 | **Button text:** minimum **14px**. |
+| FR-5.8 | **Badge / tag text (e.g., +N chips, status badges):** minimum **12px**. |
+| FR-5.9 | **Tooltip text:** minimum **13px**. |
+| FR-5.10 | **Navigation / sidebar items:** minimum **14px**. |
+| FR-5.11 | Changes must apply across: Generate Report, Release Readiness, Review Commits, Components, Settings, and all other pages. |
+| FR-5.12 | Changes must be implemented via CSS variables or a shared stylesheet — not scattered inline styles. |
+| FR-5.13 | Line height must be at least **1.5x** the font size for body text to ensure readability. |
 
 ## Acceptance Criteria
 
 ```
 AC-5.1
-GIVEN the latest commit on the release branch is a merge commit
-WHEN the Deployment Section fetches the Latest Release Commit ID
-THEN the merge commit SHA is returned and displayed as the Latest Release Commit ID
+GIVEN any page in the application is opened
+WHEN body text is rendered
+THEN minimum font size is 14px with line-height at least 1.5x
 
 AC-5.2
-GIVEN the latest commit on the release branch is a regular commit
-WHEN the Deployment Section fetches the Latest Release Commit ID
-THEN the regular commit SHA is returned and displayed correctly
+GIVEN any table across any page
+WHEN the table is rendered
+THEN body cell text is 14px minimum
+AND header text is 15px semi-bold minimum
 
 AC-5.3
-GIVEN the Deployment Section fetch now includes merge commits
-WHEN the Review Commits section fetches commits
-THEN merge commits are still excluded from Review Commits analysis
+GIVEN any page heading
+WHEN the heading is rendered
+THEN font size is at least 18px bold
 
 AC-5.4
-GIVEN the Deployment Section fetch now includes merge commits
-WHEN Branch Cut Validation runs
-THEN merge commits are still excluded from that analysis
+GIVEN any button across the application
+WHEN the button is rendered
+THEN button text is at least 14px
 
 AC-5.5
-GIVEN the fetch implementation is changed
-WHEN a code review is performed
-THEN a clear comment exists at the fetch call site indicating:
-  "Merge commits included intentionally — Deployment Section requires absolute latest commit"
+GIVEN a CSS variable approach is used
+WHEN a developer reviews the stylesheet
+THEN font sizes are defined as variables in a single location
+AND no hardcoded small sizes exist scattered across component files
 
 AC-5.6
-GIVEN the Kubernetes commit SHA matches the latest merge commit on the release branch
-WHEN the Deployment table renders
-THEN both Kubernetes Commit ID and Latest Release Commit ID show identical SHAs
-AND the status shows "Valid Deployment"
+GIVEN the font size changes are applied
+WHEN all pages are tested at 1080p
+THEN no layout breaks, no horizontal overflow, no text collision
 ```
 
 ---
 
 ---
 
-# 6. Commits Behind Calculation — Merge Commit Exclusion
+# 6. Deployment Section — Teams & Stories Loading Fix (DB-First Flow)
 
 ## Background
 
-The "Commits Behind" value indicates how many non-deployed commits exist on the release branch after the Kubernetes deployment SHA. This count must only reflect meaningful code commits — merge commits are administrative and do not represent actual code changes.
+When Force Refresh is triggered in the Deployment Section, the backend currently does not load the associated Scrum Teams and Stories for each component. The Teams and Stories columns appear empty in the Deployment table. This is a data flow issue — the backend is not fetching this information from the Components DB table before proceeding with Kubernetes analysis.
 
 ## Problem Statement
 
-The current commits-behind calculation may not be excluding merge commits, leading to inflated or inaccurate behind-counts.
+Teams and Stories are empty because the backend Deployment flow does not query the Component DB records that already contain this information. The fix is to establish a DB-first data load step before any Kubernetes or GitHub analysis begins.
+
+## Correct Backend Flow (Force Refresh)
+
+```
+Step 1 — Load Components from DB
+  Query Component DB table using:
+    - Fix Version
+    - Team Key
+  Retrieve for each component:
+    - Component Name
+    - Component Type
+    - Associated Scrum Teams
+    - Associated Stories
+    - Exclusion Status (System / User / None)
+
+Step 2 — Filter Components
+  Exclude:
+    - Library components
+    - System Excluded components
+    - User Excluded components
+  Only deployable components proceed
+
+Step 3 — Resolve Release Branch
+  Reuse existing release calendar resolution service
+  No new implementation
+
+Step 4 — Kubernetes Analysis (per component)
+  For each deployable component:
+    - Fetch running pods from selected Namespace
+    - Extract Deployment Labels:
+        - K8s Branch Label
+        - K8s Commit SHA (full)
+
+Step 5 — GitHub Analysis (per component)
+  Fetch release branch commit history ONCE (cache for this request)
+  For each component:
+    - Find K8s commit SHA on release branch
+    - Identify absolute latest commit (including merge commits) → Latest Release Commit ID
+    - Count non-merge commits after K8s SHA → Commits Behind
+
+Step 6 — Persist Results
+  Save to Deployment Readiness table per component:
+    - All fields including Scrum Teams and Stories
+
+Step 7 — Return to UI
+  Return full result set including Teams and Stories per component
+```
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-6.1 | When calculating how many commits the Kubernetes deployment is behind the latest release branch, **exclude all merge commits** from the count. |
-| FR-6.2 | Identify the Kubernetes deployed SHA on the release branch commit list. |
-| FR-6.3 | Count only **non-merge commits** that appear after the deployed SHA. |
-| FR-6.4 | Store the resulting count in the `commits_behind` column. |
-
-## Calculation Logic
-
-```
-Release branch commit list (newest → oldest):
-
-  SHA-A  [Merge Commit]     ← EXCLUDED from count
-  SHA-B  [Regular Commit]   ← COUNT (1)
-  SHA-C  [Regular Commit]   ← COUNT (2)
-  SHA-D  [Merge Commit]     ← EXCLUDED from count
-  SHA-E  [Regular Commit]   ← KUBERNETES DEPLOYED HERE
-
-  Commits Behind = 2
-```
+| FR-6.1 | Step 1 must always execute first — before any K8s or GitHub call. |
+| FR-6.2 | Teams and Stories must be loaded from the Component DB record — NOT from iTrack API. |
+| FR-6.3 | The Teams and Stories data must be passed through to the Deployment Readiness result and returned to the UI. |
+| FR-6.4 | If a component has no teams or stories in DB → return empty list, display `—` in UI. |
+| FR-6.5 | If DB has no component records for the given Fix Version → log WARN and show appropriate UI message. |
 
 ## Acceptance Criteria
 
 ```
 AC-6.1
-GIVEN the release branch has the following commits after the K8s deployed SHA:
-  - 1 merge commit
-  - 2 regular commits
-WHEN the commits behind count is calculated
-THEN the result is 2 (merge commit excluded)
+GIVEN Force Refresh is triggered with a valid Fix Version and Namespace
+WHEN the backend processes the request
+THEN Step 1 (DB component load) executes first
+AND Scrum Teams and Stories are loaded from DB before any K8s call
 
 AC-6.2
-GIVEN all commits after the K8s SHA are merge commits only
-WHEN the commits behind count is calculated
-THEN the result is 0
-AND the status shows "Valid Deployment"
+GIVEN components exist in DB with associated teams and stories
+WHEN the Deployment table renders
+THEN the Scrum Teams column shows the team names for each component
+AND the Stories column shows the story IDs for each component
 
 AC-6.3
-GIVEN the K8s SHA is not found in the release branch commit history
-WHEN the calculation runs
-THEN commits_behind is set to null or -1
-AND the deployment status shows "Unable to Validate"
+GIVEN a component in DB has no associated teams
+WHEN the Deployment table renders for that component
+THEN the Scrum Teams column shows "—"
 
 AC-6.4
-GIVEN the K8s SHA matches the latest non-merge commit
-WHEN the calculation runs
-THEN commits_behind = 0
-AND status shows "Valid Deployment"
+GIVEN a component in DB has no associated stories
+WHEN the Deployment table renders for that component
+THEN the Stories column shows "—"
+
+AC-6.5
+GIVEN the Teams and Stories come from DB
+WHEN the backend is processing
+THEN NO new iTrack API call is made during Force Refresh
+
+AC-6.6
+GIVEN the data flow is corrected
+WHEN the Deployment table is fully rendered
+THEN all columns (component, teams, stories, K8s branch, commits, status) are populated correctly
 ```
 
 ---
 
 ---
 
-# 7. Deployment Status — Single Message Format
+# 7. Deployment Section — Branch Comparison Normalization + Status Column Simplification
 
 ## Background
 
-Currently, the Deployment Section shows multiple status indicators per component row. The UI must be simplified to show a single, clear, human-readable status message.
+### Problem A — Wrong "Older Branch" Status Due to Format Mismatch
 
-## Problem Statement
+The K8s branch label uses **hyphen-separated** format:
+```
+release-26-07-28-rel
+```
 
-Multiple status badges or flags clutter each row. Users need one clear statement that tells them the deployment state.
+The application's release branch uses **slash and dot** format:
+```
+release/26.07.28.rel
+```
+
+Both represent the **same branch**. The current comparison does a raw string equality check and incorrectly reports "Older Branch" when both branches are actually the same.
+
+### Problem B — Two Columns Where One Is Sufficient
+
+The Deployment table shows both a "Commits Behind" column and a "Status" column. The "Commits Behind" count is redundant because the status message can include it. This wastes column space.
 
 ## Functional Requirements
 
+### Branch Normalization
+
 | # | Requirement |
 |---|---|
-| FR-7.1 | Replace all multiple status indicators with a **single status message** per component row. |
-| FR-7.2 | Status message must be determined by priority order (see Business Rules below). |
-| FR-7.3 | Status must be stored in `deployment_status` and `validation_message` columns. |
+| FR-7.1 | Before any branch comparison, **normalize both branch values to a canonical format**. |
+| FR-7.2 | Canonical format: `release/YY.MM.DD.rel` (lowercase, slash separator, dot-separated date parts, `.rel` suffix). |
+| FR-7.3 | Normalization must handle the K8s hyphenated format: `release-YY-MM-DD-rel` → `release/YY.MM.DD.rel`. |
+| FR-7.4 | Normalization must handle slash/dot format if not already canonical. |
+| FR-7.5 | Normalization must be applied at comparison time — the raw stored values in DB remain unchanged. |
+| FR-7.6 | The normalization logic must be a shared utility method reusable across the codebase. |
+| FR-7.7 | Log both raw and normalized values at DEBUG level during comparison. |
 
-## Business Rules — Status Priority Order
+### Normalization Rules
 
-Evaluate conditions in this exact order. Use the **first matching condition**.
+```
+Input Formats → Canonical Output
+
+release-26-07-28-rel        →   release/26.07.28.rel
+release-26-07-28-release    →   release/26.07.28.rel
+release/26.07.28.rel        →   release/26.07.28.rel  (already canonical)
+release/26.07.28.release    →   release/26.07.28.rel
+
+Algorithm:
+  1. Lowercase the entire string
+  2. Extract: YY, MM, DD, suffix
+     - Pattern A (hyphens): release-{YY}-{MM}-{DD}-{rel|release}
+     - Pattern B (slashes): release/{YY}.{MM}.{DD}.{rel|release}
+  3. Normalize suffix: "release" → "rel"
+  4. Output: release/{YY}.{MM}.{DD}.rel
+```
+
+### Status Column Simplification
+
+| # | Requirement |
+|---|---|
+| FR-7.8 | **Remove the "Commits Behind" column** from the Deployment table entirely. |
+| FR-7.9 | Keep only a single **"Status"** column. |
+| FR-7.10 | The Status column message must convey all information including commit count where relevant. |
+| FR-7.11 | Status logic must use normalized branch values for comparison (see FR-7.1 through FR-7.6). |
+
+### Status Message Logic (Priority Order)
 
 ```
 Priority 1 — Unable to Validate
-  Condition:  K8s commit not found on release branch
-              OR release branch could not be resolved
-              OR GitHub fetch failed
+  Condition:  Release branch could not be resolved
+              OR K8s commit not found on release branch
+              OR GitHub/K8s fetch failed
   Message:    "Unable to Validate"
-  Style:      Grey / Neutral
+  Style:      Grey
 
 Priority 2 — Older Branch
-  Condition:  K8s branch does not match resolved release branch
-              (branch cut not done or component on previous release)
+  Condition:  Normalized K8s branch ≠ Normalized resolved release branch
+              (Comparison MUST use normalized values — NOT raw strings)
   Message:    "Older Branch"
-  Style:      Orange / Warning
+  Style:      Orange
 
 Priority 3 — X Commits Behind
-  Condition:  commits_behind > 0
-  Message:    "{N} commit(s) behind release branch. Redeployment recommended."
-  Style:      Amber / Warning
+  Condition:  Normalized branches match
+              AND commits_behind > 0 (non-merge commit count)
+  Message:    "{N} commit(s) behind. Redeployment recommended."
+  Style:      Amber
 
-Priority 4 — Valid Deployment
-  Condition:  K8s branch matches release branch
+Priority 4 — Valid
+  Condition:  Normalized branches match
               AND commits_behind = 0
-  Message:    "Valid Deployment"
-  Style:      Green / Success
+  Message:    "Valid"
+  Style:      Green
 ```
 
 ## Acceptance Criteria
 
 ```
 AC-7.1
-GIVEN the K8s branch matches the release branch AND commits_behind = 0
-WHEN the status is rendered
-THEN only "Valid Deployment" is shown in green
+GIVEN K8s branch label is "release-26-07-28-rel"
+AND resolved release branch is "release/26.07.28.rel"
+WHEN branch comparison runs
+THEN both values are normalized to "release/26.07.28.rel"
+AND they are considered EQUAL
+AND status is NOT "Older Branch"
 
 AC-7.2
-GIVEN the K8s branch does NOT match the resolved release branch
-WHEN the status is rendered
-THEN only "Older Branch" is shown in orange
+GIVEN K8s branch label is "release-26-07-28-release" (with -release suffix)
+WHEN normalization runs
+THEN the result is "release/26.07.28.rel"
 
 AC-7.3
-GIVEN the K8s branch matches AND commits_behind = 3
-WHEN the status is rendered
-THEN only "3 commit(s) behind release branch. Redeployment recommended." is shown in amber
+GIVEN normalized branches match AND K8s commit SHA = Latest Release commit SHA
+WHEN status is determined
+THEN status message is "Valid" displayed in green
 
 AC-7.4
-GIVEN the release branch could not be resolved
-WHEN the status is rendered
-THEN only "Unable to Validate" is shown in grey
+GIVEN normalized branches match AND commits_behind = 3
+WHEN status is determined
+THEN status message is "3 commit(s) behind. Redeployment recommended." in amber
 
 AC-7.5
-GIVEN any component row
-WHEN the status column is rendered
-THEN exactly ONE status message is visible — no multiple badges or combined indicators
+GIVEN normalized K8s branch does not match normalized release branch
+WHEN status is determined
+THEN status message is "Older Branch" in orange
 
 AC-7.6
-GIVEN an "Older Branch" condition
-WHEN the K8s branch is also behind
-THEN "Older Branch" takes priority (Priority 2 wins over Priority 3)
+GIVEN the Deployment table renders
+WHEN the columns are counted
+THEN there is NO "Commits Behind" column
+AND only a single "Status" column exists
+
+AC-7.7
+GIVEN an unrecognized K8s branch format is encountered
+WHEN normalization runs
+THEN the raw value is used as-is
+AND a WARN is logged with the unrecognized format
+AND status is set to "Unable to Validate"
+
+AC-7.8
+GIVEN the normalization utility is implemented
+WHEN a code review is performed
+THEN normalization exists in a single shared utility method
+AND is NOT duplicated across multiple comparison sites
+
+AC-7.9
+GIVEN the raw K8s branch value is stored in DB
+WHEN normalization is applied
+THEN the DB stored value remains unchanged (normalization is comparison-time only)
 ```
 
 ---
 
 ---
 
-# 8. Scrum Teams & Stories — Display in Table
+# 8. Deployment Section — Scrum Team Filter (Mandatory)
 
 ## Background
 
-The database already stores, per component, the list of associated Scrum Teams and Stories. This data must be surfaced in the Deployment table using the same compact display pattern used in the Branch Cut Validation section.
+The Branch Cut Validation section has a working Scrum Team filter. The Deployment Section must have an identical filter. This was specified in the previous requirements document and was not implemented. This is a **mandatory** feature.
 
 ## Problem Statement
 
-The Deployment table currently does not display scrum teams or stories per component, forcing users to cross-reference with other sections.
+Users cannot filter the Deployment table by Scrum Team. With potentially 100+ components across many teams, this makes it impossible to focus on a specific team's deployment status.
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-8.1 | Add a **Scrum Teams** column to the Deployment table. |
-| FR-8.2 | Add a **Stories** column to the Deployment table. |
-| FR-8.3 | Display **1–2 items inline**, followed by a **`+N` badge** for remaining items. |
-| FR-8.4 | Hovering the `+N` badge opens a **tooltip** listing all remaining items. |
-| FR-8.5 | Fetch this data from the existing database records — do NOT call iTrack again. |
-| FR-8.6 | The display behavior must match the exact pattern used in Branch Cut Validation. |
-
-## Display Pattern
-
-```
-Scrum Teams column (example — 4 teams):
-  Team Alpha  Team Beta  +2 ▼
-                              └─ tooltip: Team Gamma, Team Delta
-
-Stories column (example — 6 stories):
-  SPT-1001  SPT-1002  +4 ▼
-                          └─ tooltip: SPT-1003, SPT-1004, SPT-1005, SPT-1006
-```
+| FR-8.1 | Add a **Scrum Team filter dropdown** to the Deployment Section — identical in behavior to the Branch Cut Validation Scrum Team filter. |
+| FR-8.2 | The dropdown must be populated from the **currently displayed table rows only** (data-driven, same as Section 10 of Bundle 1). |
+| FR-8.3 | Selecting a team filters the table to show only rows containing that team. |
+| FR-8.4 | An "All Teams" option must be present as the default. |
+| FR-8.5 | Filter resets when environment, namespace, fix version, or force refresh changes. |
+| FR-8.6 | Filter must interact correctly with other active filters (AND logic). |
+| FR-8.7 | Filter must be positioned consistently with the Branch Cut Validation filter bar placement. |
 
 ## Acceptance Criteria
 
 ```
 AC-8.1
-GIVEN a component has 1 scrum team
-WHEN the Deployment table renders
-THEN the single team name is shown inline with no +N badge
+GIVEN the Deployment table is loaded with data
+WHEN the user views the filter bar
+THEN a Scrum Team dropdown is visible in the Deployment Section
 
 AC-8.2
-GIVEN a component has 2 scrum teams
-WHEN the Deployment table renders
-THEN both team names are shown inline with no +N badge
+GIVEN the Deployment table shows rows for Team Alpha, Team Beta, Team Gamma
+WHEN the user opens the Scrum Team dropdown
+THEN only Team Alpha, Team Beta, Team Gamma appear as options
+AND no teams absent from the visible rows appear
 
 AC-8.3
-GIVEN a component has 4 scrum teams
-WHEN the Deployment table renders
-THEN 2 team names are shown inline and "+2" badge is shown
-AND hovering the "+2" badge shows a tooltip with the remaining 2 team names
+GIVEN the user selects "Team Beta"
+WHEN the filter is applied
+THEN only rows where Team Beta is in the Scrum Teams list are shown
 
 AC-8.4
-GIVEN a component has 6 stories
-WHEN the Deployment table renders
-THEN 2 story IDs are shown inline and "+4" badge is shown
-AND hovering "+4" reveals the remaining 4 story IDs in a tooltip
+GIVEN the user selects "All Teams"
+WHEN the filter is applied or cleared
+THEN all rows are visible again
 
 AC-8.5
-GIVEN a component has no associated scrum teams
-WHEN the Deployment table renders
-THEN the Scrum Teams column shows "—" (em-dash)
+GIVEN the "Show Invalid Only" toggle is active showing a subset
+WHEN the Scrum Team dropdown is opened
+THEN the dropdown options reflect only teams in the filtered (invalid) rows
 
 AC-8.6
-GIVEN a component has no associated stories
-WHEN the Deployment table renders
-THEN the Stories column shows "—" (em-dash)
+GIVEN a Force Refresh runs
+WHEN new data loads
+THEN the Scrum Team filter resets to "All Teams"
 
 AC-8.7
-GIVEN the data is fetched
-WHEN the backend processes the request
-THEN scrum teams and stories are loaded from the existing DB records
-AND NO new iTrack API call is made
+GIVEN this filter is implemented
+WHEN Branch Cut Validation Scrum Team filter behavior is reviewed
+THEN both filters behave identically
 ```
 
 ---
 
 ---
 
-# 9. Scrum Team Filter — Dynamic Filter (Deployment Section)
+# 9. Deployment Section — Async Performance (ExecutorService + Job ID + DB-Cached Reload)
 
 ## Background
 
-The Branch Cut Validation section has a working Scrum Team filter. The same filter behavior must be added to the Deployment Section.
+The Deployment Section Force Refresh currently executes synchronously, causing the browser to hang while waiting for Kubernetes and GitHub responses. The application already has a well-established async pattern used in Generate Report — this same pattern must be applied to the Deployment Section.
+
+## Problem Statement
+
+1. The Force Refresh hangs the UI while processing 20–100+ components.
+2. There is no async job tracking for Deployment analysis.
+3. When the user navigates away and returns, data is re-fetched instead of loading from DB.
+
+## Target Behavior
+
+```
+User clicks Force Refresh
+    ↓
+Backend starts async job (returns Job ID immediately)
+    ↓
+UI receives Job ID → shows progress/loading state
+    ↓
+Backend processes in parallel (ExecutorService):
+    - Load components from DB
+    - For each deployable component (parallel):
+        - Fetch K8s data
+        - Fetch/reuse GitHub commit history
+        - Calculate status
+    - Persist results to DB
+    ↓
+UI polls for job completion (or uses existing polling mechanism)
+    ↓
+Job complete → UI loads results from DB
+    ↓
+Results displayed in table
+
+User navigates away and returns:
+    ↓
+UI checks for existing DB records for (Team + Fix Version + Namespace)
+    ↓
+If records exist → Load from DB immediately (no re-fetch)
+    ↓
+User can trigger Force Refresh to get fresh data
+```
 
 ## Functional Requirements
 
+### Async Execution
+
 | # | Requirement |
 |---|---|
-| FR-9.1 | Add a **Scrum Team filter** to the Deployment Section, matching the behavior of Branch Cut Validation. |
-| FR-9.2 | The filter dropdown must only contain **scrum teams present in the currently displayed table data**. |
-| FR-9.3 | When a scrum team is selected, the table must filter to show only rows that include that team. |
-| FR-9.4 | The filter resets when Fix Version or Environment/Namespace changes. |
-| FR-9.5 | Filter interacts with other active filters (e.g., "Show Invalid Only" toggle) — see Section 10. |
+| FR-9.1 | **Reuse the existing async job pattern** used in Generate Report — do NOT create a new async framework. |
+| FR-9.2 | Force Refresh must return a **Job ID immediately** without blocking. |
+| FR-9.3 | Backend must process Deployment analysis in **parallel using ExecutorService** — same executor used for Generate Report. |
+| FR-9.4 | Each component's K8s fetch and GitHub analysis must execute in parallel where possible. |
+| FR-9.5 | GitHub release branch commit history must be fetched **once per Force Refresh** and shared across all component analyses (existing performance rule). |
+| FR-9.6 | Results must be **persisted to DB** as each component completes. |
+| FR-9.7 | Job status must be trackable: `IN_PROGRESS`, `COMPLETED`, `FAILED`. |
+| FR-9.8 | UI must use the **existing job polling mechanism** — no new polling implementation. |
+| FR-9.9 | Maximum execution timeout must be configurable. Default: 120 seconds. |
+
+### DB-Cached Reload
+
+| # | Requirement |
+|---|---|
+| FR-9.10 | When the user navigates to the Deployment Section WITHOUT clicking Force Refresh, the UI must **load results from DB** for the selected Team + Fix Version + Namespace. |
+| FR-9.11 | The `Last Validated At` timestamp must be displayed so users know how recent the data is. |
+| FR-9.12 | A "Stale data" warning must appear if results are older than a configurable threshold (default: 60 minutes). |
+| FR-9.13 | Force Refresh always triggers a fresh backend job — never reads from DB cache. |
+| FR-9.14 | This DB-cached reload behavior must mirror the existing Review Commits reload behavior exactly. |
+
+### Error Handling
+
+| # | Requirement |
+|---|---|
+| FR-9.15 | If a single component's K8s or GitHub fetch fails, that component is marked "Unable to Validate" and processing continues for other components — one failure must NOT abort the entire job. |
+| FR-9.16 | If the entire job fails, the Job ID is marked `FAILED`, the UI shows an error, and any previously persisted DB results remain available. |
 
 ## Acceptance Criteria
 
 ```
 AC-9.1
-GIVEN the Deployment table is loaded with data
-WHEN the user opens the Scrum Team filter dropdown
-THEN the dropdown contains only teams present in the currently visible table rows
+GIVEN the user clicks Force Refresh
+WHEN the request hits the backend
+THEN a Job ID is returned within 500ms
+AND the UI transitions to a loading/progress state
+AND the browser does NOT hang
 
 AC-9.2
-GIVEN the user selects "Team Alpha" from the filter
-WHEN the filter is applied
-THEN only rows containing "Team Alpha" in their Scrum Teams list are shown
+GIVEN the async job is running
+WHEN components are processed
+THEN K8s and GitHub fetches for multiple components run in parallel
+AND the total execution time is substantially less than sequential processing
 
 AC-9.3
-GIVEN the user selects "All Teams" or clears the filter
-WHEN the filter is cleared
-THEN all rows are shown again
+GIVEN GitHub commit history is fetched for the release branch
+WHEN multiple components are analyzed
+THEN GitHub is called only ONCE and the result is reused for all components
 
 AC-9.4
-GIVEN a "Show Invalid Only" toggle is active
-WHEN the Scrum Team filter dropdown is opened
-THEN the dropdown only shows teams present in the filtered (invalid only) rows
+GIVEN the async job completes
+WHEN the UI receives the completion signal
+THEN results are loaded from DB and displayed in the table
+AND "Last Validated At" timestamp is visible
 
 AC-9.5
-GIVEN a different Fix Version or Namespace is selected
-WHEN new data loads
-THEN the Scrum Team filter resets to "All Teams"
+GIVEN results are in DB from a previous Force Refresh
+WHEN the user navigates away and returns to the Deployment Section
+THEN previous results load immediately from DB without triggering a new backend job
+
+AC-9.6
+GIVEN previously cached results are 90 minutes old
+WHEN the user views the Deployment Section
+THEN a "Stale data" warning is displayed alongside the Last Validated At timestamp
+
+AC-9.7
+GIVEN 1 component out of 30 has a K8s fetch error
+WHEN the async job processes components
+THEN the 29 other components complete successfully
+AND the failed component shows "Unable to Validate"
+AND the job status is COMPLETED (not FAILED)
+
+AC-9.8
+GIVEN the entire job fails (e.g., K8s cookie expired)
+WHEN the failure is detected
+THEN the job status is set to FAILED
+AND the UI shows a clear error message
+AND any previously persisted DB results for this Fix Version remain accessible
+
+AC-9.9
+GIVEN the async job is running
+WHEN the user clicks Force Refresh again
+THEN the previous job is cancelled or a new job supersedes it
+AND the UI tracks the latest job ID only
+
+AC-9.10
+GIVEN the existing Generate Report async infrastructure is used
+WHEN a code review is performed
+THEN no duplicate async framework, executor, or job tracking table has been created
 ```
 
 ---
 
 ---
 
-# 10. Dropdown Filter — Data-Driven Values (Branch Cut Validation + Deployment)
+# Summary — Enhancement Bundle 2 at a Glance
 
-## Background
-
-Currently, filter dropdowns (such as Scrum Team filter) show all possible values regardless of what data is currently displayed in the table. This causes confusion — users see filter options for teams that have no records in the current filtered view.
-
-**This change applies to BOTH:**
-- Branch Cut Validation section
-- Deployment Section
-
-## Problem Statement
-
-When a user applies a filter (e.g., "Pending Only"), the table shows a reduced set of rows. But the Scrum Team dropdown still shows all teams including those with no pending items — these are irrelevant options and create a confusing UX.
-
-## Functional Requirements
-
-| # | Requirement |
-|---|---|
-| FR-10.1 | All filter dropdowns must derive their option list from the **currently displayed table rows only**. |
-| FR-10.2 | When a primary filter changes the displayed data, all dependent dropdowns must **recalculate their options**. |
-| FR-10.3 | If a previously selected dropdown value no longer exists in the new option set, **reset that dropdown to "All"**. |
-| FR-10.4 | This rule applies to: Scrum Team filter in Branch Cut Validation, Scrum Team filter in Deployment Section. |
-| FR-10.5 | The computation of dropdown options must happen on the **frontend from rendered data** — not from a new backend call. |
-
-## Acceptance Criteria
-
-```
-AC-10.1
-GIVEN the Deployment table shows 10 rows (teams A, B, C, D present)
-WHEN the user applies "Show Invalid Only" and only 4 rows remain (teams A, B only)
-THEN the Scrum Team dropdown recalculates and shows only Team A and Team B
-AND Team C and Team D are removed from the dropdown options
-
-AC-10.2
-GIVEN the user has "Team C" selected in the Scrum Team filter
-WHEN a new primary filter is applied that removes all Team C rows
-THEN the Scrum Team dropdown resets to "All Teams" automatically
-
-AC-10.3
-GIVEN the Branch Cut Validation section has the same dropdown behavior
-WHEN a primary filter changes visible rows
-THEN the Scrum Team dropdown in Branch Cut Validation also recalculates correctly
-
-AC-10.4
-GIVEN all rows are visible (no filters active)
-WHEN the Scrum Team dropdown is opened
-THEN all teams from all rows are listed
-
-AC-10.5
-GIVEN the dropdown recalculation is implemented
-WHEN a new backend fetch runs
-THEN the dropdown options recalculate from the new result set
-
-AC-10.6
-GIVEN the change is applied
-WHEN the Branch Cut Validation or Deployment section is tested
-THEN no unnecessary backend calls are made to recalculate dropdown options
-```
-
----
-
----
-
-# 11. UI — Font Size & Spacing (Release Readiness Global)
-
-## Background
-
-The Release Readiness page currently renders at a compressed scale. Font sizes are too small to read comfortably and the overall layout feels dense.
-
-**Scope:** This enhancement applies globally across the entire Release Readiness page (all tabs/sections).
-
-## Functional Requirements
-
-| # | Requirement |
-|---|---|
-| FR-11.1 | Increase base font size to a minimum of **14px** for table body content. |
-| FR-11.2 | Increase table header font size to **15px**, semi-bold. |
-| FR-11.3 | Increase row padding to at minimum **10px top/bottom** per cell for better vertical breathing room. |
-| FR-11.4 | Increase horizontal cell padding to minimum **12px left/right**. |
-| FR-11.5 | Section headings (tab labels, section titles) must render at minimum **16px**. |
-| FR-11.6 | Changes must remain consistent with AT&T Blue & White branding. |
-| FR-11.7 | Changes must NOT break layout on standard 1080p or 1440p displays. |
-| FR-11.8 | Apply to all sub-sections: Story Status, Branch Cut Validation, Deployment. |
-
-## Acceptance Criteria
-
-```
-AC-11.1
-GIVEN the Release Readiness page is opened
-WHEN a user views the table body text
-THEN the font size is at least 14px and readable without zooming
-
-AC-11.2
-GIVEN the Release Readiness page is opened
-WHEN a user views table headers
-THEN headers render at 15px semi-bold weight
-
-AC-11.3
-GIVEN the Release Readiness page is opened
-WHEN a user views any table row
-THEN each cell has at least 10px padding top and bottom
-AND at least 12px padding left and right
-
-AC-11.4
-GIVEN the spacing changes are applied
-WHEN the page renders at 1080p
-THEN no content is cut off or horizontally overflowing outside visible area
-
-AC-11.5
-GIVEN the spacing changes are applied
-WHEN the page renders at 1440p
-THEN layout remains consistent and no excessive white space appears
-
-AC-11.6
-GIVEN changes are applied to Release Readiness
-WHEN other pages (Generate Report, Settings, Components) are viewed
-THEN those pages are unaffected by this change
-```
-
----
-
----
-
-# 12. Page Header — Team / Fix Version Inline Layout
-
-## Background
-
-The Release Readiness page currently shows the Team Name and Fix Version selection in a section that consumes significant vertical space before any content is shown, reducing the usable table area on the screen.
-
-The page heading already shows:
-
-```
-Release Readiness — Comprehensive Release Validation Dashboard
-```
-
-## Problem Statement
-
-The team and fix version selectors are placed in a block that pushes all content down, reducing visible table rows. This space can be recovered by moving those selectors inline with the existing heading.
-
-## Functional Requirements
-
-| # | Requirement |
-|---|---|
-| FR-12.1 | Move the **Team Name selector** and **Fix Version selector** inline, to the right of the page heading text. |
-| FR-12.2 | The heading text and selectors must appear on the **same horizontal row**. |
-| FR-12.3 | The selectors must maintain full functionality (value selection, change triggers, validation). |
-| FR-12.4 | The layout change must reclaim visible vertical space — at minimum **~10% more visible screen area** for table content. |
-| FR-12.5 | The layout must remain responsive and not overflow at standard screen widths. |
-| FR-12.6 | If both selectors are too wide to fit inline at smaller resolutions, they may **wrap below the heading** gracefully. |
-
-## Acceptance Criteria
-
-```
-AC-12.1
-GIVEN the Release Readiness page is loaded
-WHEN the page header is rendered
-THEN the heading "Release Readiness — Comprehensive Release Validation Dashboard"
-AND the Team Name selector
-AND the Fix Version selector
-are all visible on the same horizontal line
-
-AC-12.2
-GIVEN the selectors are rendered inline with the heading
-WHEN a user selects a different Team Name
-THEN the Fix Version dropdown updates correctly as before
-
-AC-12.3
-GIVEN the selectors are rendered inline with the heading
-WHEN a user selects a different Fix Version
-THEN the page data refreshes correctly as before
-
-AC-12.4
-GIVEN the inline layout is applied
-WHEN the vertical space freed is measured
-THEN at least ~10% more vertical space is available for table content
-
-AC-12.5
-GIVEN a narrow display (e.g., 1280px width)
-WHEN the page header renders
-THEN selectors do not overflow the viewport and wrap gracefully if needed
-
-AC-12.6
-GIVEN the layout change is applied
-WHEN other pages are loaded
-THEN no other page layout is affected
-```
-
----
-
----
-
-# Summary — All Changes at a Glance
-
-| # | Change | Scope | Type |
+| # | Enhancement | Scope | Type |
 |---|---|---|---|
-| 1 | Component column — name only + inline badge | Deployment Section | Frontend |
-| 2 | Release branch resolution — fix to use correct logic | Deployment Section | Backend |
-| 3 | K8s branch display normalization | Deployment Section | Frontend |
-| 4 | Full 40-char SHA for both commit ID columns | Deployment Section | Frontend + Backend |
-| 5 | Latest Release Commit — include merge commits | Deployment Section ONLY | Backend |
-| 6 | Commits Behind — exclude merge commits from count | Deployment Section | Backend |
-| 7 | Single status message replacing multiple indicators | Deployment Section | Frontend + Backend |
-| 8 | Scrum Teams + Stories columns with +N tooltip | Deployment Section | Frontend + Backend |
-| 9 | Scrum Team filter (matching Branch Cut Validation) | Deployment Section | Frontend |
-| 10 | Data-driven dropdowns — both BCV + Deployment | Branch Cut Validation + Deployment | Frontend |
-| 11 | Font size + spacing improvements | Release Readiness (all tabs) | Frontend |
-| 12 | Inline Team/Fix Version with page heading | Release Readiness header | Frontend |
+| 1 | H2 Backup — single file retention, atomic swap | Backend / Scheduler | Backend |
+| 2 | Generate Report — component smart filters + bulk exclude | Generate Report | Frontend + Backend |
+| 3 | Release Readiness header — restore description + bigger selectors | Release Readiness | Frontend |
+| 4 | Deployment tab — remove env status dots + increase tab font | Deployment Section | Frontend |
+| 5 | Global font size increase — all UI pages | All Pages | Frontend / CSS |
+| 6 | Deployment — Teams & Stories loading from DB-first flow | Deployment Section | Backend |
+| 7 | Deployment — Branch normalization + remove Commits Behind column | Deployment Section | Backend + Frontend |
+| 8 | Deployment — Scrum Team filter (mandatory) | Deployment Section | Frontend |
+| 9 | Deployment — Async + Job ID + DB-cached reload | Deployment Section | Backend + Frontend |
 
 ---
 
 # Definition of Done
 
-All items below must be true before this feature is considered complete:
+All items below must be true before this bundle is considered complete:
 
-- [ ] All 12 enhancements implemented and tested
-- [ ] Component column shows microservice name + inline Blue/Green badge only
-- [ ] Release branch resolution uses existing service and returns correct branch
-- [ ] K8s branch name displays in `release/YY.MM.DD.rel` format
-- [ ] Both commit ID columns display full 40-character SHA
-- [ ] Latest Release Commit includes merge commits (Deployment Section only)
-- [ ] Review Commits and Branch Cut Validation still exclude merge commits (no regression)
-- [ ] Commits Behind count excludes merge commits
-- [ ] Single status message rendered per component row
-- [ ] Scrum Teams and Stories columns display with +N tooltip
-- [ ] Scrum Team filter functional in Deployment Section
-- [ ] Dropdown options are data-driven in both BCV and Deployment
-- [ ] Font size ≥ 14px, row padding ≥ 10px across Release Readiness
-- [ ] Team / Fix Version selectors rendered inline with page heading
-- [ ] No regression in Generate Report, Review Commits, Settings, Branch Cut Validation
-- [ ] All edge cases handled and tested
-- [ ] Structured logging in place for backend changes
-- [ ] Code reviewed for duplicate implementation — none introduced
+- [ ] H2 backup uses atomic swap — max 2 files at any time in backup folder
+- [ ] Previous backup only deleted after new backup fully verified
+- [ ] Generate Report component section has filter bar with all specified toggle switches and dropdowns
+- [ ] Bulk exclude with Select All (Filtered) + Undo works correctly
+- [ ] Pre-report validation still runs on ALL components regardless of active filter
+- [ ] Release Readiness header shows restored description text
+- [ ] Team and Fix Version selectors are visually larger and well-styled
+- [ ] Environment selector dots removed from Deployment tab
+- [ ] Environment tab button font size is minimum 15px
+- [ ] All application pages render body text at minimum 14px
+- [ ] Font sizes implemented via CSS variables (not scattered inline)
+- [ ] Deployment Force Refresh loads teams and stories from DB first before any K8s call
+- [ ] Branch comparison uses normalized canonical format for both K8s and release branch values
+- [ ] "Commits Behind" column removed — Status column is the single source of status
+- [ ] Status message is correct in all four scenarios (Valid / Older Branch / X Behind / Unable to Validate)
+- [ ] Scrum Team filter is present and functional in Deployment Section
+- [ ] Deployment Force Refresh is async — returns Job ID immediately, browser does not hang
+- [ ] Results persist to DB and reload from DB on revisit (no re-fetch)
+- [ ] One component failure does not abort the entire job
+- [ ] Existing async infrastructure (Generate Report pattern) is reused — no duplication
+- [ ] Review Commits, Branch Cut Validation, Generate Report have no regressions
+- [ ] All edge cases handled and logged appropriately
+- [ ] Structured logging (INFO/DEBUG/ERROR) in place for all new backend paths
 
 ---
 
-*Document Version: 1.0 — Ready for Devin / Claude Opus 4.6 Thinking Implementation*
+*Document Version: 2.0 — Ready for Devin / Claude Opus 4.6 Thinking Implementation*
