@@ -1,7 +1,7 @@
-# Release Readiness Tool — Enhancement Bundle 2
+# Release Readiness Tool — Enhancement Bundle 3
 ## Developer-Ready Acceptance Criteria Document
 
-**Module Scope:** H2 Backup · Generate Report · Release Readiness · Deployment Section · Global UI
+**Module Scope:** Release Readiness Header · Deployment Section (Per-Environment Independence · Refresh vs Force Refresh · Connection Status · Status Tooltip · Component Filtering)
 **Audience:** Devin AI (Claude Opus 4.6 Thinking)
 **Prepared By:** Senior Solution Architect
 **Status:** Implementation Ready
@@ -10,912 +10,866 @@
 
 ## ⚠️ Critical Implementation Rules
 
-1. Read and fully understand existing code before changing anything.
-2. Reuse existing services — async patterns, ExecutorService, job ID flow, GitHub service, K8s integration.
-3. Do NOT duplicate any logic. The Generate Report async pattern must be reused in Deployment Section.
-4. Do NOT break any currently working functionality.
-5. Filters in UI must NEVER affect backend validation logic — validation always runs on complete unfiltered data.
-6. Branch format normalization (hyphen vs slash) is critical — read Section 7 carefully before touching any branch comparison code.
+1. Read and fully understand the existing Deployment Section implementation before making any changes.
+2. Each environment (Test3, Test4, Stage-West, Production-East, Production-West) must be treated as a **completely independent unit** — no shared state, no shared job, no cross-environment blocking.
+3. **Refresh** = DB + Kubernetes only. **Zero GitHub calls** in Refresh mode. This is non-negotiable.
+4. **Force Refresh** = implementation placeholder for now. Button must exist. Logic is TBD and will be specified separately.
+5. User Excluded components **must be included** in Deployment Refresh — this is intentionally different from Generate Report behavior.
+6. The existing Generate Report async job pattern must be reused for per-environment job tracking.
+7. Do NOT break any existing functionality in Generate Report, Branch Cut Validation, Review Commits, or Settings.
+8. Fix Version must always be passed to the backend in its complete original format — never abbreviated or truncated.
 
 ---
 
 ## Table of Contents
 
-1. H2 DB Backup — Single File Retention Strategy
-2. Generate Report — Component Section Smart Filters & Switches
-3. Release Readiness — Header Layout Fix & Restore Description Text
-4. Release Readiness — Deployment Tab Environment Selector Cleanup
-5. Global Font Size Increase — Complete UI
-6. Deployment Section — Teams & Stories Loading Fix (DB-First Flow)
-7. Deployment Section — Branch Comparison Normalization + Status Column Simplification
-8. Deployment Section — Scrum Team Filter (Mandatory)
-9. Deployment Section — Async Performance (ExecutorService + Job ID + DB-Cached Reload)
+1. Release Readiness Header — Team & Fix Version Dropdown Width Enhancement
+2. Deployment Section — Per-Environment Independence (Architecture)
+3. Per-Environment Job ID & Progress Messaging
+4. Connection Status — Moved Inside Each Environment Panel
+5. Refresh Button & Force Refresh Button — Two Separate Actions Per Environment
+6. Refresh Flow — DB + Kubernetes Only (Zero GitHub Calls)
+7. Force Refresh Button — Placeholder (Logic TBD)
+8. Status Logic + Tooltip Enhancement
+9. Component Filtering Rules for Refresh (User Excluded Inclusion)
+10. Components Table — New Field: `latest_release_commit_id`
 
 ---
 
 ---
 
-# 1. H2 DB Backup — Single File Retention Strategy
+# 1. Release Readiness Header — Team & Fix Version Dropdown Width Enhancement
 
 ## Background
 
-The application uses an H2 in-memory database and performs a scheduled backup every 15 minutes to prevent data loss on application crash or restart. Each scheduled run creates a new backup file with a timestamp or incremental name, causing the backup folder to accumulate an unbounded number of files over time.
+The Team and Fix Version dropdowns in the Release Readiness header appear as small, narrow boxes that are visually inconsistent with the importance of these selectors. The available horizontal space to the right of the "Release Readiness" heading is not being utilized.
 
 ## Problem Statement
 
-The backup folder grows continuously. After a few hours, dozens of backup files exist, consuming disk space unnecessarily. Only the most recent complete backup is ever needed for restore.
+The dropdowns are too narrow and small. They must expand to use the available horizontal space to the right of the heading and be proportionate to the full header width.
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-1.1 | The backup scheduler must write the new backup to a **temporary file** first. |
-| FR-1.2 | Only after the new backup file is **fully and successfully written** must the previous backup file be deleted. |
-| FR-1.3 | At any point in time, the backup folder must contain **at most 2 backup files** — the current backup and briefly the temp file during the swap window. |
-| FR-1.4 | If the new backup write **fails**, the previous backup must **NOT be deleted**. The old backup must be preserved as the last known good backup. |
-| FR-1.5 | The backup file must be named consistently — a **fixed filename** (e.g., `release-tracker-backup.mv.db`) — not a timestamped name. |
-| FR-1.6 | Log the backup lifecycle at INFO level: backup start, backup complete, old file deleted. |
-| FR-1.7 | Log any failure at ERROR level with the exception detail. |
-| FR-1.8 | The backup interval (15 minutes) must remain configurable via application properties. |
-
-## Backup Swap Algorithm
-
-```
-Step 1:  Write new backup to → backup-temp.mv.db
-Step 2:  Verify temp file exists AND size > 0
-Step 3:  If verification passes:
-             Delete → release-tracker-backup.mv.db  (previous)
-             Rename → backup-temp.mv.db  to  release-tracker-backup.mv.db
-Step 4:  If verification fails:
-             Delete backup-temp.mv.db (cleanup)
-             Log ERROR
-             Retain previous release-tracker-backup.mv.db unchanged
-```
+| FR-1.1 | The Team dropdown and Fix Version dropdown must be visually wider — each must take a **meaningful proportion of the available horizontal space** to the right of the heading. |
+| FR-1.2 | Each dropdown must have a **minimum width of 280px** and must grow fluidly up to the available space. |
+| FR-1.3 | The heading ("Release Readiness") and the two dropdowns must remain on the **same horizontal row**. |
+| FR-1.4 | The dropdowns must use `flex-grow` or equivalent so they expand proportionally on wider screens. |
+| FR-1.5 | Dropdown height must be minimum **42px** with font size **15px** inside. |
+| FR-1.6 | Labels ("Team", "Fix Version") above or beside each dropdown must be **bold, 14px minimum**. |
+| FR-1.7 | On narrow screens (< 1100px), dropdowns may stack below the heading gracefully. |
+| FR-1.8 | All existing functionality (selection triggers, cascade behavior) must be unchanged. |
 
 ## Acceptance Criteria
 
 ```
 AC-1.1
-GIVEN the backup scheduler fires
-WHEN the backup starts
-THEN the new backup is written to a temporary file first
-AND the existing backup file is NOT touched during write
+GIVEN the Release Readiness page is open at 1440px width
+WHEN the header area renders
+THEN the Team dropdown and Fix Version dropdown together
+  fill the horizontal space to the right of the "Release Readiness" heading
+  with each dropdown at least 280px wide
 
 AC-1.2
-GIVEN the new backup completes successfully
-WHEN the temp file is verified (exists, size > 0)
-THEN the old backup file is deleted
-AND the temp file is renamed to the fixed backup filename
-AND the backup folder contains exactly 1 backup file
+GIVEN the header dropdowns are rendered
+WHEN the dropdown element is inspected
+THEN its height is at least 42px
+AND the text inside renders at 15px minimum
 
 AC-1.3
-GIVEN the new backup write fails midway
-WHEN the scheduler handles the error
-THEN the temp file is cleaned up
-AND the previous backup file is retained unchanged
-AND an ERROR is logged with the exception detail
+GIVEN the page is at 1080px width
+WHEN the header renders
+THEN the heading and dropdowns are still on the same line with no overflow
 
 AC-1.4
-GIVEN multiple backup cycles have run (e.g., 10 cycles over 2.5 hours)
-WHEN the backup folder is inspected
-THEN it contains at most 2 files (current backup + temp during active swap window)
-AND no timestamped accumulation of files exists
+GIVEN the page is at a narrow width (< 1100px)
+WHEN the header renders
+THEN the dropdowns wrap gracefully below the heading
+AND no content is clipped or hidden
 
 AC-1.5
-GIVEN the application crashes after a successful backup
-WHEN the application restarts
-THEN it restores from the single backup file successfully
+GIVEN the dropdown sizes are changed
+WHEN a Team is selected
+THEN Fix Version cascade behavior works exactly as before
 
 AC-1.6
-GIVEN each backup cycle
-WHEN the lifecycle completes
-THEN INFO logs exist for: backup start, backup success, old file deleted
-
-AC-1.7
-GIVEN the backup interval property is set to a different value
-WHEN the application starts
-THEN the backup runs at the configured interval
+GIVEN the size enhancement is applied
+WHEN other pages are viewed
+THEN no other page layout is affected
 ```
 
-## Edge Cases
-
-- Backup folder does not exist on first run → create it automatically, log INFO
-- No previous backup exists (first ever backup) → skip delete step, write directly
-- Disk full during backup write → log ERROR, do not delete old backup
-- Rename operation fails after delete → log CRITICAL, operator intervention required
-
 ---
 
 ---
 
-# 2. Generate Report — Component Section Smart Filters & Switches
+# 2. Deployment Section — Per-Environment Independence (Architecture)
 
 ## Background
 
-The Generate Report page includes a Component Section that can display 100–200+ components after team and story selection. Users currently must scroll through the entire list to identify problematic components. There is no way to quickly isolate components by status, filter out valid ones, or bulk-exclude a group.
+The current Deployment Section treats all five environments (Test3, Test4, Stage-West, Production-East, Production-West) as a shared block. When a Force Refresh is triggered for any single environment, the entire Deployment Section enters a loading/blocked state — all environment tabs show "refreshing" messages and no other environment can be interacted with.
 
 ## Problem Statement
 
-With 100+ components, the component list is unnavigable. Users cannot efficiently identify issues, act on groups of components, or exclude components in bulk. Validation logic before Generate Report must still run on the complete unfiltered dataset.
+Each environment must be fully independent. Triggering a refresh on Test3 must not affect Test4, Stage-West, or any other environment in any way.
 
-## ⚠️ Critical Rule
+## Architecture Design
 
-> **Filters are display-only. They NEVER affect the pre-report validation logic.**
-> Validation always runs on the complete set of components, regardless of what the user has filtered in or out on screen.
-> Existing validation behavior must not change.
+```
+Current (Wrong):
+  DeploymentSection
+    ├── sharedLoadingState
+    ├── sharedJobId
+    └── allEnvironments ← blocked together
+
+Required (Correct):
+  DeploymentSection
+    ├── EnvironmentPanel [Test3]
+    │     ├── own jobId
+    │     ├── own loadingState
+    │     ├── own results
+    │     ├── own connectionStatus
+    │     └── own Refresh / ForceRefresh buttons
+    ├── EnvironmentPanel [Test4]
+    │     └── (same independent structure)
+    ├── EnvironmentPanel [Stage-West]
+    │     └── (same independent structure)
+    ├── EnvironmentPanel [Production-East]
+    │     └── (same independent structure)
+    └── EnvironmentPanel [Production-West]
+          └── (same independent structure)
+```
 
 ## Functional Requirements
 
-### Filter Bar Requirements
-
 | # | Requirement |
 |---|---|
-| FR-2.1 | Add a **Filter Bar** above the component list in the Component Section. |
-| FR-2.2 | The filter bar must include the filter options described below. |
-| FR-2.3 | Filters operate on the **currently rendered component list** only — frontend filtering, no new backend calls. |
-| FR-2.4 | Multiple filters may be active simultaneously (AND logic — component must match all active filters to be shown). |
-| FR-2.5 | A **"Reset All Filters"** button must clear all active filters and restore the full list. |
-| FR-2.6 | A **component count** must be shown: `Showing X of Y components`. |
-| FR-2.7 | Pre-report validation must continue to evaluate ALL Y components regardless of the active filter. |
+| FR-2.1 | Each environment panel must maintain its **own independent state**: job ID, loading state, results, connection status, error state. |
+| FR-2.2 | Triggering Refresh or Force Refresh on any environment must **not modify the state of any other environment panel**. |
+| FR-2.3 | Multiple environments may run their Refresh/Force Refresh **simultaneously in parallel** — each creates its own backend job. |
+| FR-2.4 | Switching between environment tabs must not interrupt a running job for any other tab. |
+| FR-2.5 | Each environment's results must be independently stored in the DB and independently loaded. |
+| FR-2.6 | The "Invalid Only" toggle must be **per-environment** — toggling it in Test3 must not affect Test4. |
+| FR-2.7 | The backend must accept environment + namespace as **scoping parameters** per job request. |
+| FR-2.8 | The backend must process each job independently — one job per (Team Key + Fix Version + Environment + Namespace) combination. |
 
-### Filter Options
+## Backend Job Scoping
 
-#### Toggle Switches (Quick Filters)
+```
+Job Request Payload (per environment):
+  {
+    teamKey:      "OC",
+    fixVersion:   "26.7.4 (July 26 – August 1, 2026)",   ← full format, never abbreviated
+    environment:  "Test3",
+    namespace:    "com-att-oc-fmo-test3",
+    jobType:      "REFRESH" | "FORCE_REFRESH"
+  }
 
-| Switch Label | Shows |
-|---|---|
-| ✅ Valid Only | Components where Prod K8s matches release branch AND branch cut is complete |
-| ❌ Errors Only | Components with at least one error-level validation message |
-| ⚠️ Warnings Only | Components with at least one warning-level validation message |
-| 🌿 No Branch Formed | Components where no release branch exists matching the current fix version |
-| 🔀 Branch Cut Incomplete | Components where branch cut is not yet completed for the fix version |
-| 🚫 User Excluded | Components currently marked as User Excluded |
-| 📦 Library Components | Components classified as Library type |
-
-#### Dropdown Filters
-
-| Filter | Description |
-|---|---|
-| Branch Status | All / Has Branch / No Branch / Branch Cut Done / Branch Cut Incomplete |
-| Kubernetes Status | All / Deployed & Valid / Deployed & Stale / Not Deployed / Unknown |
-| Component Type | All / Service / Library / System Excluded / User Excluded |
-| Scrum Team | All / [dynamic list from visible components] |
-
-### Bulk Exclude Feature
-
-| # | Requirement |
-|---|---|
-| FR-2.8 | A **checkbox column** must appear on the left of each component row. |
-| FR-2.9 | A **Select All (Filtered)** checkbox must select all currently visible (filtered) components. |
-| FR-2.10 | A **"Exclude Selected"** button must mark all selected components as User Excluded in one action. |
-| FR-2.11 | Excluded components must update their visual state immediately (greyed out / excluded badge). |
-| FR-2.12 | A **"Undo Exclusion"** action must be available per component or for the last bulk action. |
+Job ID returned: unique per request
+DB records scoped to: (teamKey + fixVersion + environment + namespace)
+```
 
 ## Acceptance Criteria
 
 ```
 AC-2.1
-GIVEN 150 components are loaded
-WHEN the user activates the "Errors Only" switch
-THEN only components with error-level messages are shown
-AND the count reads "Showing X of 150 components"
+GIVEN the Deployment Section is open with Test3 selected
+WHEN the user clicks Refresh on Test3
+THEN only Test3 enters loading state
+AND Test4, Stage-West, Production-East, Production-West remain in their previous state
+AND their Refresh and Force Refresh buttons remain clickable
 
 AC-2.2
-GIVEN the "Errors Only" switch is active
-WHEN the user also activates "No Branch Formed"
-THEN only components matching BOTH conditions are shown (AND logic)
+GIVEN Test3 Refresh is in progress
+WHEN the user clicks on the Stage-West tab
+THEN Stage-West loads its existing DB results or shows a ready state
+AND Test3 continues processing in the background
 
 AC-2.3
-GIVEN filters are active showing 20 of 150 components
-WHEN the user clicks "Generate Report"
-THEN validation runs against all 150 components
-AND the filter state does NOT affect which components are included in the report
+GIVEN Test3 Refresh is in progress
+WHEN the user clicks Refresh on Test4
+THEN Test4 starts its own independent job
+AND both Test3 and Test4 run simultaneously
 
 AC-2.4
-GIVEN filters are active
-WHEN the user clicks "Reset All Filters"
-THEN all 150 components are shown
-AND all switches and dropdowns return to default state
+GIVEN Refresh has been run for Test3 and Stage-West on a previous session
+WHEN the user opens the Deployment Section again
+THEN Test3 shows its cached DB results
+AND Stage-West shows its cached DB results
+AND Test4 (never refreshed) shows an empty/ready state
 
 AC-2.5
-GIVEN 20 components are visible after filtering
-WHEN the user clicks "Select All (Filtered)" and then "Exclude Selected"
-THEN all 20 visible components are marked as User Excluded
-AND their visual state updates immediately
+GIVEN the backend receives a Refresh job for Test3
+WHEN the job runs
+THEN it queries only the Test3 namespace
+AND it does not touch records for Test4, Stage-West, or other environments
 
 AC-2.6
-GIVEN the Scrum Team dropdown is open
-WHEN the team list is rendered
-THEN only teams present in the currently visible (filtered) component rows appear
-
-AC-2.7
-GIVEN the "Valid Only" switch is activated
-WHEN the filter runs
-THEN only components where Prod K8s matches release branch AND branch cut is complete are shown
-
-AC-2.8
-GIVEN filters are active and showing a subset
-WHEN the component count is viewed
-THEN it accurately reads "Showing X of Y components"
-
-AC-2.9
-GIVEN a user excludes components via bulk action
-WHEN the page is refreshed or report is reopened
-THEN the exclusion state is persisted in the database
-
-AC-2.10
-GIVEN any filter combination is active
-WHEN pre-report validation runs
-THEN validation output reflects ALL components and is not scoped to the filtered subset
+GIVEN Test4 job fails (e.g., K8s cookie expired)
+WHEN the failure occurs
+THEN only the Test4 panel shows an error
+AND Test3, Stage-West, and other environments are unaffected
 ```
 
-## Edge Cases
-
-- All components match a filter → count reads "Showing Y of Y components", no visual change
-- No components match a filter → show empty state: "No components match the selected filters. Reset filters to view all."
-- Bulk exclude applied to filtered set → undo only reverses the last bulk action, not previous individual exclusions
-
 ---
 
 ---
 
-# 3. Release Readiness — Header Layout Fix & Restore Description Text
+# 3. Per-Environment Job ID & Progress Messaging
 
 ## Background
 
-A previous UI change moved the Team and Fix Version selectors inline with the page heading. This caused the descriptive context text that previously appeared below the heading to be lost. Additionally, the inline selectors appear visually small and inconsistent with the rest of the AT&T design language.
-
-## Problem Statement
-
-1. The descriptive subtitle/context text below "Release Readiness" heading is missing.
-2. The Team and Fix Version filter selectors look small and visually unpolished.
+Currently there is no per-environment visual feedback during a Refresh. The user has no way to know that a background job is running or when it will complete for a specific environment.
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-3.1 | Restore the descriptive context text below the "Release Readiness" heading. |
-| FR-3.2 | The context text should read (restore original wording if available in code/git history, otherwise use): `"Comprehensive release validation dashboard providing story status, branch cut analysis, and deployment readiness across all environments."` |
-| FR-3.3 | The Team selector and Fix Version selector must be visually enlarged — minimum height 38px, font size 14px inside the dropdown. |
-| FR-3.4 | Selector labels ("Team", "Fix Version") must be clearly visible, bold, 13px minimum. |
-| FR-3.5 | The selectors must remain on the same horizontal row as the heading or in a clearly styled sub-header row — not stacked awkwardly. |
-| FR-3.6 | The overall header zone (heading + description + selectors) must feel structured and intentional, not compressed. |
-| FR-3.7 | AT&T Blue & White branding must be maintained. |
+| FR-3.1 | When Refresh or Force Refresh is clicked for an environment, display a **progress message within that environment panel only**. |
+| FR-3.2 | The progress message must follow the same pattern used in the Generate Report section. |
+| FR-3.3 | The progress message must include the Job ID for traceability. |
+| FR-3.4 | The Refresh / Force Refresh buttons in the **active loading panel** must be disabled during processing. |
+| FR-3.5 | Buttons in all **other environment panels** must remain enabled regardless. |
+| FR-3.6 | When the job completes, the progress message is replaced with the results table. |
+| FR-3.7 | When the job fails, the progress message is replaced with a clear error message. |
+| FR-3.8 | The existing job polling mechanism (from Generate Report) must be reused — no new polling implementation. |
+
+## Progress Message Template
+
+```
+┌─────────────────────────────────────────────────────┐
+│  ⏳ Deployment analysis in progress                  │
+│                                                     │
+│  Environment:  Test3                                │
+│  Namespace:    com-att-oc-fmo-test3                 │
+│  Job ID:       JOB-20260728-001                     │
+│  Status:       Running...                           │
+│                                                     │
+│  Results will appear here once the job completes.  │
+│  Other environments are unaffected.                 │
+└─────────────────────────────────────────────────────┘
+```
 
 ## Acceptance Criteria
 
 ```
 AC-3.1
-GIVEN the Release Readiness page is opened
-WHEN the header section renders
-THEN the heading "Release Readiness" is visible
-AND a descriptive subtitle is visible below or beside the heading
+GIVEN the user clicks Refresh on Test3
+WHEN the job starts
+THEN a progress message appears inside the Test3 panel
+AND the message shows: environment name, namespace, Job ID, status
 
 AC-3.2
-GIVEN the page header renders
-WHEN the Team and Fix Version selectors are displayed
-THEN both selectors have a minimum height of 38px
-AND the text inside the selectors is at least 14px
+GIVEN Test3 is showing a progress message
+WHEN the user views Test4, Stage-West, or Production panels
+THEN those panels show no progress message
+AND their Refresh/Force Refresh buttons are fully enabled
 
 AC-3.3
-GIVEN the page header renders
-WHEN the selector labels are viewed
-THEN labels are bold, clearly legible, minimum 13px
+GIVEN the backend job completes
+WHEN the job status polling returns COMPLETED
+THEN the progress message in Test3 is replaced with the results table
 
 AC-3.4
-GIVEN the layout change is applied
-WHEN the page is viewed at 1080p and 1440p
-THEN the header zone does not overflow or appear compressed
+GIVEN the backend job fails
+WHEN the job status polling returns FAILED
+THEN the progress message in Test3 is replaced with a clear error message
+AND the Refresh button re-enables for Test3 so the user can retry
 
 AC-3.5
-GIVEN the descriptive text is restored
-WHEN other pages are viewed
-THEN no other page is affected by this change
+GIVEN the implementation is done
+WHEN a developer reviews the code
+THEN the polling mechanism is the same one used by Generate Report
+AND no duplicate polling logic exists
 ```
 
 ---
 
 ---
 
-# 4. Release Readiness — Deployment Tab Environment Selector Cleanup
+# 4. Connection Status — Moved Inside Each Environment Panel
 
 ## Background
 
-The Deployment tab shows an environment selector row (Test3, Test4, Stage-West, Production-East, Production-West) as tab-style buttons. Above or beside the environment labels, there are green or gray status dot indicators currently being shown. These dots are redundant because each environment button already shows full status information in the content section below.
+The connection/cookie status for Kubernetes environments is currently shown beside the "Deployment Readiness" heading at the top level of the section. This is a global indicator that does not correspond to individual environments.
 
-Additionally, the text inside the environment tab buttons is too small to read comfortably.
+Since each environment is now independent, the connection status must be shown inside each environment's own panel.
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-4.1 | Remove the green/gray status dot indicators from the environment selector buttons at the top of the Deployment tab. |
-| FR-4.2 | The environment tab button labels (Test3, Test4, Stage-West, Production-East, Production-West) must have their font size increased to minimum **15px**. |
-| FR-4.3 | The active/selected environment tab must remain clearly distinguished (AT&T blue highlight or bold). |
-| FR-4.4 | The status detail shown in the content below each environment must remain unchanged. |
-| FR-4.5 | No other functionality of the environment selector must change. |
+| FR-4.1 | **Remove** the connection status indicator from beside the "Deployment Readiness" section heading. |
+| FR-4.2 | Add a connection status indicator **inside each environment panel**, visible alongside the environment's name or at the top of the panel. |
+| FR-4.3 | The connection status must indicate: **Connected** (green) / **Disconnected** (red) / **Unknown** (grey). |
+| FR-4.4 | The indicator style must match the existing green dot / red dot pattern used elsewhere in the application. |
+| FR-4.5 | Test3 and Test4 share a single Test cookie — their connection status reflects the same Test K8s connection. |
+| FR-4.6 | Stage-West has its own cookie — its connection status is independent. |
+| FR-4.7 | Production-East and Production-West have their own cookies — each shows its own connection status. |
+| FR-4.8 | The connection status within each environment panel must update when: cookie is set, cookie expires, connection test runs. |
+
+## Environment-Cookie Mapping
+
+```
+Test3           → Test Cookie (shared)
+Test4           → Test Cookie (shared)
+Stage-West      → Stage Cookie (independent)
+Production-East → Production Cookie (independent)
+Production-West → Production Cookie (independent)
+```
 
 ## Acceptance Criteria
 
 ```
 AC-4.1
-GIVEN the Deployment tab is rendered
-WHEN the environment selector row is displayed
-THEN no green or gray status dots appear alongside the environment labels
+GIVEN the Deployment Section renders
+WHEN the user views the area beside "Deployment Readiness" heading
+THEN no connection status indicator is present there
 
 AC-4.2
-GIVEN the environment selector is rendered
-WHEN the user views the tab labels
-THEN each label (Test3, Test4, Stage-West, etc.) renders at minimum 15px font size
+GIVEN the Deployment Section renders
+WHEN the user views the Test3 environment panel
+THEN a connection status indicator is visible inside the Test3 panel
 
 AC-4.3
-GIVEN the user selects an environment tab
-WHEN the active state is displayed
-THEN the active tab is visually distinct (blue background or bold or underline)
-AND no dots are shown
+GIVEN the Test cookie is valid
+WHEN Test3 and Test4 panels are displayed
+THEN both Test3 and Test4 show "Connected" (green)
 
 AC-4.4
-GIVEN the dots are removed from the top selector
-WHEN the user views the content section below
-THEN all status details in the content area remain intact and unchanged
+GIVEN the Test cookie expires
+WHEN the backend detects the invalid cookie
+THEN both Test3 and Test4 panels show "Disconnected" (red)
+AND Stage-West and Production panels are unaffected
 
 AC-4.5
-GIVEN the change is applied
-WHEN other tabs (Story Status, Branch Cut Validation) are viewed
-THEN those tabs are unaffected
+GIVEN Stage-West cookie is not set
+WHEN the Stage-West panel is displayed
+THEN the Stage-West panel shows "Unknown" or "Disconnected"
+AND Test3, Test4 connection statuses are not affected
+
+AC-4.6
+GIVEN the user sets or updates a cookie in Settings
+WHEN they return to the Deployment Section
+THEN the affected environment panels update their connection status accordingly
 ```
 
 ---
 
 ---
 
-# 5. Global Font Size Increase — Complete UI
+# 5. Refresh Button & Force Refresh Button — Two Separate Actions Per Environment
 
 ## Background
 
-The previous enhancement increased font sizes for Release Readiness. However, the overall application still renders text that is too small across all pages. This is a global pass to bring all UI text up to a comfortable reading size.
+Currently each environment has one "Force Refresh" button. This needs to be replaced with two distinct buttons:
+- **Refresh** — lightweight, DB + K8s only, no GitHub
+- **Force Refresh** — full refresh including GitHub (placeholder for now, logic TBD)
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-5.1 | **Base body font size:** minimum **14px** across all pages. |
-| FR-5.2 | **Table body cells:** minimum **14px**. |
-| FR-5.3 | **Table headers:** minimum **15px**, semi-bold (600 weight). |
-| FR-5.4 | **Section headings / page titles:** minimum **18px**, bold. |
-| FR-5.5 | **Sub-headings / tab labels:** minimum **15px**, medium weight (500). |
-| FR-5.6 | **Form labels / field labels:** minimum **13px**. |
-| FR-5.7 | **Button text:** minimum **14px**. |
-| FR-5.8 | **Badge / tag text (e.g., +N chips, status badges):** minimum **12px**. |
-| FR-5.9 | **Tooltip text:** minimum **13px**. |
-| FR-5.10 | **Navigation / sidebar items:** minimum **14px**. |
-| FR-5.11 | Changes must apply across: Generate Report, Release Readiness, Review Commits, Components, Settings, and all other pages. |
-| FR-5.12 | Changes must be implemented via CSS variables or a shared stylesheet — not scattered inline styles. |
-| FR-5.13 | Line height must be at least **1.5x** the font size for body text to ensure readability. |
+| FR-5.1 | Each environment panel must have **two buttons**: "Refresh" and "Force Refresh". |
+| FR-5.2 | The **Refresh** button is the primary action — styled prominently (AT&T Blue filled button). |
+| FR-5.3 | The **Force Refresh** button is secondary — styled as an outlined/secondary button. |
+| FR-5.4 | Both buttons must be visible within the environment panel, not at the top-level section header. |
+| FR-5.5 | A tooltip on the Refresh button must explain: "Loads component data from database and validates against Kubernetes. No GitHub calls." |
+| FR-5.6 | A tooltip on the Force Refresh button must explain: "Full validation including GitHub commit analysis. Takes longer." |
+| FR-5.7 | During an active Refresh job for an environment: **both buttons in that panel are disabled**. |
+| FR-5.8 | Both buttons in all **other environment panels** remain fully enabled during another panel's job. |
+| FR-5.9 | The existing single "Force Refresh" button must be replaced — not duplicated. |
+| FR-5.10 | The "Invalid Only" toggle must remain per-environment, positioned near the two buttons. |
+
+## Button Layout Per Environment Panel
+
+```
+┌── Environment: Test3  [● Connected] ──────────────────────┐
+│                                                           │
+│  [Refresh]    [Force Refresh]    [⬛ Invalid Only]        │
+│                                                           │
+│  ... results table or progress message ...               │
+└───────────────────────────────────────────────────────────┘
+```
 
 ## Acceptance Criteria
 
 ```
 AC-5.1
-GIVEN any page in the application is opened
-WHEN body text is rendered
-THEN minimum font size is 14px with line-height at least 1.5x
+GIVEN the Deployment Section is open
+WHEN the user views any environment panel
+THEN a "Refresh" button AND a "Force Refresh" button are visible within that panel
 
 AC-5.2
-GIVEN any table across any page
-WHEN the table is rendered
-THEN body cell text is 14px minimum
-AND header text is 15px semi-bold minimum
+GIVEN the Refresh button is hovered
+WHEN the tooltip appears
+THEN it reads "Loads component data from database and validates against Kubernetes. No GitHub calls."
 
 AC-5.3
-GIVEN any page heading
-WHEN the heading is rendered
-THEN font size is at least 18px bold
+GIVEN the Force Refresh button is hovered
+WHEN the tooltip appears
+THEN it reads "Full validation including GitHub commit analysis. Takes longer."
 
 AC-5.4
-GIVEN any button across the application
-WHEN the button is rendered
-THEN button text is at least 14px
+GIVEN Test3 Refresh is running
+WHEN Test3 panel is viewed
+THEN both Refresh and Force Refresh buttons within Test3 are disabled
 
 AC-5.5
-GIVEN a CSS variable approach is used
-WHEN a developer reviews the stylesheet
-THEN font sizes are defined as variables in a single location
-AND no hardcoded small sizes exist scattered across component files
+GIVEN Test3 Refresh is running
+WHEN Test4 panel is viewed
+THEN Test4's Refresh and Force Refresh buttons are fully enabled and clickable
 
 AC-5.6
-GIVEN the font size changes are applied
-WHEN all pages are tested at 1080p
-THEN no layout breaks, no horizontal overflow, no text collision
+GIVEN the Invalid Only toggle is present
+WHEN the user toggles it in Test3
+THEN only Test3's results are filtered
+AND Test4, Stage-West, other environments are unaffected
+
+AC-5.7
+GIVEN the previous single Force Refresh button existed
+WHEN the implementation is reviewed
+THEN the old single button is fully replaced
+AND no duplicate button or stale reference remains
 ```
 
 ---
 
 ---
 
-# 6. Deployment Section — Teams & Stories Loading Fix (DB-First Flow)
+# 6. Refresh Flow — DB + Kubernetes Only (Zero GitHub Calls)
 
 ## Background
 
-When Force Refresh is triggered in the Deployment Section, the backend currently does not load the associated Scrum Teams and Stories for each component. The Teams and Stories columns appear empty in the Deployment table. This is a data flow issue — the backend is not fetching this information from the Components DB table before proceeding with Kubernetes analysis.
+The **Refresh** action is designed to be fast and lightweight. All component metadata (names, branches, stories, teams, exclusion status) is already available in the Components DB table. The only external call needed is to Kubernetes to get the current active branch and commit SHA.
 
-## Problem Statement
+GitHub must NOT be called during Refresh.
 
-Teams and Stories are empty because the backend Deployment flow does not query the Component DB records that already contain this information. The fix is to establish a DB-first data load step before any Kubernetes or GitHub analysis begins.
+## Component Inclusion/Exclusion Rules for Refresh
 
-## Correct Backend Flow (Force Refresh)
+> ⚠️ This is intentionally different from Generate Report behavior.
+
+| Component Type | Refresh Behavior |
+|---|---|
+| Library | **EXCLUDE** — Libraries don't exist in Kubernetes |
+| Helm Project | **EXCLUDE** — Not validated via this flow |
+| System Excluded | **EXCLUDE** — Always excluded everywhere |
+| User Excluded | **INCLUDE** ← Different from Generate Report. User excluded components still need deployment visibility. |
+| Normal / Deployable | **INCLUDE** |
+
+## Refresh Backend Flow
 
 ```
-Step 1 — Load Components from DB
-  Query Component DB table using:
-    - Fix Version
-    - Team Key
-  Retrieve for each component:
-    - Component Name
-    - Component Type
-    - Associated Scrum Teams
-    - Associated Stories
-    - Exclusion Status (System / User / None)
+Step 1 — Validate Inputs
+  Receive: teamKey, fixVersion (full format), environment, namespace
+  Validate: cookie exists for this environment type
+  If no cookie → return error immediately
 
-Step 2 — Filter Components
-  Exclude:
-    - Library components
-    - System Excluded components
-    - User Excluded components
-  Only deployable components proceed
+Step 2 — Load Components from DB
+  Query Components table:
+    WHERE teamKey = :teamKey
+    AND fixVersion = :fixVersion
+  Fields to retrieve per component:
+    - componentName
+    - componentType
+    - releaseBranch (already determined, stored in DB)
+    - latestReleaseCommitId (new field — may be null initially, see Section 10)
+    - scrumTeams (list)
+    - stories (list)
+    - exclusionStatus
 
-Step 3 — Resolve Release Branch
-  Reuse existing release calendar resolution service
-  No new implementation
+Step 3 — Filter Components
+  EXCLUDE: Libraries, Helm Projects, System Excluded
+  INCLUDE: User Excluded (intentional — they need deployment visibility)
+  INCLUDE: All normal deployable components
 
-Step 4 — Kubernetes Analysis (per component)
+Step 4 — Kubernetes Calls (parallel per component)
   For each deployable component:
-    - Fetch running pods from selected Namespace
-    - Extract Deployment Labels:
-        - K8s Branch Label
-        - K8s Commit SHA (full)
+    Call Kubernetes for the given namespace:
+      Retrieve:
+        - K8s Branch Label (raw format: release-26-07-28-rel)
+        - K8s Commit SHA (full 40-char)
+  Use ExecutorService — parallel calls, not sequential
 
-Step 5 — GitHub Analysis (per component)
-  Fetch release branch commit history ONCE (cache for this request)
+Step 5 — Branch Comparison (No GitHub Call)
   For each component:
-    - Find K8s commit SHA on release branch
-    - Identify absolute latest commit (including merge commits) → Latest Release Commit ID
-    - Count non-merge commits after K8s SHA → Commits Behind
+    Normalize K8s branch → canonical format (release/YY.MM.DD.rel)
+    Compare normalized K8s branch with releaseBranch from DB
+    
+    If branches differ:
+      status = "Older Branch"
+      
+    If branches match AND latestReleaseCommitId is available:
+      If K8s commit SHA == latestReleaseCommitId:
+        status = "Valid"
+      Else:
+        status = "Needs Redeployment"
+        commitsBeind = null (not calculable without GitHub in Refresh mode)
+        tooltip = "Deployed commit does not match latest release commit.
+                   Run Force Refresh for detailed commit analysis."
+    
+    If branches match AND latestReleaseCommitId is NULL (not yet stored):
+      status = "Branch Valid — Commit Unverified"
+      tooltip = "Release commit data not yet available.
+                 Run Force Refresh to perform full GitHub commit analysis."
 
-Step 6 — Persist Results
-  Save to Deployment Readiness table per component:
-    - All fields including Scrum Teams and Stories
-
-Step 7 — Return to UI
-  Return full result set including Teams and Stories per component
+Step 6 — Persist Results to DB
+  Save per component to Deployment Readiness table:
+    - componentName, teamKey, fixVersion, environment, namespace
+    - k8sBranchRaw, k8sBranchNormalized
+    - k8sCommitId (full SHA)
+    - latestReleaseCommitId (from DB — not fetched from GitHub)
+    - deploymentStatus
+    - validationMessage
+    - lastValidatedAt
+    
+Step 7 — Mark Job Complete
+  Update job status → COMPLETED
+  UI polls and loads results from DB
 ```
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-6.1 | Step 1 must always execute first — before any K8s or GitHub call. |
-| FR-6.2 | Teams and Stories must be loaded from the Component DB record — NOT from iTrack API. |
-| FR-6.3 | The Teams and Stories data must be passed through to the Deployment Readiness result and returned to the UI. |
-| FR-6.4 | If a component has no teams or stories in DB → return empty list, display `—` in UI. |
-| FR-6.5 | If DB has no component records for the given Fix Version → log WARN and show appropriate UI message. |
+| FR-6.1 | Refresh must only call **Kubernetes** externally. Zero GitHub calls. |
+| FR-6.2 | All component data (branch, teams, stories, release branch) must come from the **Components DB table**. |
+| FR-6.3 | K8s calls for all components in the namespace must run **in parallel** using ExecutorService. |
+| FR-6.4 | Fix Version must be passed to the backend in its **complete original format** (e.g., `"26.7.4 (July 26 – August 1, 2026)"`) — never as an abbreviated or truncated value. |
+| FR-6.5 | Branch comparison must use **normalized canonical format** for both K8s branch and DB release branch. |
+| FR-6.6 | User Excluded components must be included in Refresh results but visually marked as "User Excluded" in the table. |
+| FR-6.7 | If `latestReleaseCommitId` is null in DB, status must indicate branch match without commit verification, with tooltip explaining next steps. |
+| FR-6.8 | Results must be persisted to DB and loaded from DB to the UI. |
+| FR-6.9 | Total Refresh execution time target: **under 15 seconds** for up to 50 components. |
 
 ## Acceptance Criteria
 
 ```
 AC-6.1
-GIVEN Force Refresh is triggered with a valid Fix Version and Namespace
+GIVEN Refresh is triggered for Test3
 WHEN the backend processes the request
-THEN Step 1 (DB component load) executes first
-AND Scrum Teams and Stories are loaded from DB before any K8s call
+THEN ZERO GitHub API calls are made
+AND all component data is read from the Components DB table
 
 AC-6.2
-GIVEN components exist in DB with associated teams and stories
-WHEN the Deployment table renders
-THEN the Scrum Teams column shows the team names for each component
-AND the Stories column shows the story IDs for each component
+GIVEN the Components DB has 60 components for the given team + fix version
+WHEN Refresh runs
+THEN Library components are excluded from results
+AND Helm projects are excluded from results
+AND System Excluded components are excluded from results
+AND User Excluded components ARE included and marked "User Excluded"
 
 AC-6.3
-GIVEN a component in DB has no associated teams
-WHEN the Deployment table renders for that component
-THEN the Scrum Teams column shows "—"
+GIVEN the Refresh job is running
+WHEN K8s calls are made
+THEN all component K8s calls execute in parallel (not sequentially)
 
 AC-6.4
-GIVEN a component in DB has no associated stories
-WHEN the Deployment table renders for that component
-THEN the Stories column shows "—"
+GIVEN Fix Version in the UI is "26.7.4 (July 26 – August 1, 2026)"
+WHEN the Refresh request is sent to the backend
+THEN the fixVersion parameter received is "26.7.4 (July 26 – August 1, 2026)"
+AND NOT "26.7.4" or any other abbreviated form
 
 AC-6.5
-GIVEN the Teams and Stories come from DB
-WHEN the backend is processing
-THEN NO new iTrack API call is made during Force Refresh
+GIVEN K8s returns branch "release-26-07-28-rel"
+AND DB has releaseBranch "release/26.07.28.rel"
+WHEN comparison runs
+THEN both are normalized to "release/26.07.28.rel"
+AND they are considered equal
+AND status is NOT "Older Branch"
 
 AC-6.6
-GIVEN the data flow is corrected
-WHEN the Deployment table is fully rendered
-THEN all columns (component, teams, stories, K8s branch, commits, status) are populated correctly
+GIVEN branches match AND latestReleaseCommitId in DB matches K8s commit SHA
+WHEN status is determined
+THEN status is "Valid"
+
+AC-6.7
+GIVEN branches match AND latestReleaseCommitId in DB does NOT match K8s commit SHA
+WHEN status is determined
+THEN status is "Needs Redeployment"
+AND tooltip reads "Deployed commit does not match latest release commit.
+  Run Force Refresh for detailed commit analysis."
+
+AC-6.8
+GIVEN branches match AND latestReleaseCommitId is NULL in DB
+WHEN status is determined
+THEN status is "Branch Valid — Commit Unverified"
+AND tooltip explains that Force Refresh is needed for full commit analysis
+
+AC-6.9
+GIVEN K8s branch does NOT match normalized release branch
+WHEN status is determined
+THEN status is "Older Branch"
+
+AC-6.10
+GIVEN a single component's K8s call fails
+WHEN the job continues
+THEN that component is marked "Unable to Validate"
+AND all other components complete processing successfully
+AND the overall job is not aborted
+
+AC-6.11
+GIVEN the K8s cookie for Test environment is expired
+WHEN Refresh is triggered for Test3
+THEN the job fails immediately with "Kubernetes connection invalid — please update cookie in Settings"
+AND the Test3 panel shows the error
+AND Test4, Stage-West, and Production panels are unaffected
+
+AC-6.12
+GIVEN 50 components are processed
+WHEN Refresh completes
+THEN total execution time is under 15 seconds
 ```
 
 ---
 
 ---
 
-# 7. Deployment Section — Branch Comparison Normalization + Status Column Simplification
+# 7. Force Refresh Button — Placeholder (Logic TBD)
 
 ## Background
 
-### Problem A — Wrong "Older Branch" Status Due to Format Mismatch
-
-The K8s branch label uses **hyphen-separated** format:
-```
-release-26-07-28-rel
-```
-
-The application's release branch uses **slash and dot** format:
-```
-release/26.07.28.rel
-```
-
-Both represent the **same branch**. The current comparison does a raw string equality check and incorrectly reports "Older Branch" when both branches are actually the same.
-
-### Problem B — Two Columns Where One Is Sufficient
-
-The Deployment table shows both a "Commits Behind" column and a "Status" column. The "Commits Behind" count is redundant because the status message can include it. This wastes column space.
+The Force Refresh button is being introduced in this bundle as a UI element. Its full backend logic (GitHub commit analysis, detailed commit-behind calculation) will be specified and implemented in a future bundle.
 
 ## Functional Requirements
 
-### Branch Normalization
-
 | # | Requirement |
 |---|---|
-| FR-7.1 | Before any branch comparison, **normalize both branch values to a canonical format**. |
-| FR-7.2 | Canonical format: `release/YY.MM.DD.rel` (lowercase, slash separator, dot-separated date parts, `.rel` suffix). |
-| FR-7.3 | Normalization must handle the K8s hyphenated format: `release-YY-MM-DD-rel` → `release/YY.MM.DD.rel`. |
-| FR-7.4 | Normalization must handle slash/dot format if not already canonical. |
-| FR-7.5 | Normalization must be applied at comparison time — the raw stored values in DB remain unchanged. |
-| FR-7.6 | The normalization logic must be a shared utility method reusable across the codebase. |
-| FR-7.7 | Log both raw and normalized values at DEBUG level during comparison. |
-
-### Normalization Rules
-
-```
-Input Formats → Canonical Output
-
-release-26-07-28-rel        →   release/26.07.28.rel
-release-26-07-28-release    →   release/26.07.28.rel
-release/26.07.28.rel        →   release/26.07.28.rel  (already canonical)
-release/26.07.28.release    →   release/26.07.28.rel
-
-Algorithm:
-  1. Lowercase the entire string
-  2. Extract: YY, MM, DD, suffix
-     - Pattern A (hyphens): release-{YY}-{MM}-{DD}-{rel|release}
-     - Pattern B (slashes): release/{YY}.{MM}.{DD}.{rel|release}
-  3. Normalize suffix: "release" → "rel"
-  4. Output: release/{YY}.{MM}.{DD}.rel
-```
-
-### Status Column Simplification
-
-| # | Requirement |
-|---|---|
-| FR-7.8 | **Remove the "Commits Behind" column** from the Deployment table entirely. |
-| FR-7.9 | Keep only a single **"Status"** column. |
-| FR-7.10 | The Status column message must convey all information including commit count where relevant. |
-| FR-7.11 | Status logic must use normalized branch values for comparison (see FR-7.1 through FR-7.6). |
-
-### Status Message Logic (Priority Order)
-
-```
-Priority 1 — Unable to Validate
-  Condition:  Release branch could not be resolved
-              OR K8s commit not found on release branch
-              OR GitHub/K8s fetch failed
-  Message:    "Unable to Validate"
-  Style:      Grey
-
-Priority 2 — Older Branch
-  Condition:  Normalized K8s branch ≠ Normalized resolved release branch
-              (Comparison MUST use normalized values — NOT raw strings)
-  Message:    "Older Branch"
-  Style:      Orange
-
-Priority 3 — X Commits Behind
-  Condition:  Normalized branches match
-              AND commits_behind > 0 (non-merge commit count)
-  Message:    "{N} commit(s) behind. Redeployment recommended."
-  Style:      Amber
-
-Priority 4 — Valid
-  Condition:  Normalized branches match
-              AND commits_behind = 0
-  Message:    "Valid"
-  Style:      Green
-```
+| FR-7.1 | The Force Refresh button must be visible in each environment panel. |
+| FR-7.2 | When clicked, it must display a message: "Force Refresh will be available in a future update. Please use Refresh for current deployment status." |
+| FR-7.3 | The button must be visually distinguishable from the primary Refresh button (outlined/secondary style). |
+| FR-7.4 | No backend call must be triggered by Force Refresh at this stage. |
+| FR-7.5 | Code must be structured to make plugging in Force Refresh logic straightforward — the button handler must call a clearly named method stub: `handleForceRefresh(environment, namespace)`. |
 
 ## Acceptance Criteria
 
 ```
 AC-7.1
-GIVEN K8s branch label is "release-26-07-28-rel"
-AND resolved release branch is "release/26.07.28.rel"
-WHEN branch comparison runs
-THEN both values are normalized to "release/26.07.28.rel"
-AND they are considered EQUAL
-AND status is NOT "Older Branch"
+GIVEN the user clicks Force Refresh on any environment
+WHEN the button is clicked
+THEN a message is shown: "Force Refresh will be available in a future update.
+  Please use Refresh for current deployment status."
+AND no backend call is made
 
 AC-7.2
-GIVEN K8s branch label is "release-26-07-28-release" (with -release suffix)
-WHEN normalization runs
-THEN the result is "release/26.07.28.rel"
-
-AC-7.3
-GIVEN normalized branches match AND K8s commit SHA = Latest Release commit SHA
-WHEN status is determined
-THEN status message is "Valid" displayed in green
-
-AC-7.4
-GIVEN normalized branches match AND commits_behind = 3
-WHEN status is determined
-THEN status message is "3 commit(s) behind. Redeployment recommended." in amber
-
-AC-7.5
-GIVEN normalized K8s branch does not match normalized release branch
-WHEN status is determined
-THEN status message is "Older Branch" in orange
-
-AC-7.6
-GIVEN the Deployment table renders
-WHEN the columns are counted
-THEN there is NO "Commits Behind" column
-AND only a single "Status" column exists
-
-AC-7.7
-GIVEN an unrecognized K8s branch format is encountered
-WHEN normalization runs
-THEN the raw value is used as-is
-AND a WARN is logged with the unrecognized format
-AND status is set to "Unable to Validate"
-
-AC-7.8
-GIVEN the normalization utility is implemented
-WHEN a code review is performed
-THEN normalization exists in a single shared utility method
-AND is NOT duplicated across multiple comparison sites
-
-AC-7.9
-GIVEN the raw K8s branch value is stored in DB
-WHEN normalization is applied
-THEN the DB stored value remains unchanged (normalization is comparison-time only)
+GIVEN the Force Refresh button is inspected in code
+WHEN a developer reviews the handler
+THEN it calls a clearly named method stub "handleForceRefresh(environment, namespace)"
+AND the stub is easy to replace with real logic in a future bundle
 ```
 
 ---
 
 ---
 
-# 8. Deployment Section — Scrum Team Filter (Mandatory)
+# 8. Status Logic + Tooltip Enhancement
 
 ## Background
 
-The Branch Cut Validation section has a working Scrum Team filter. The Deployment Section must have an identical filter. This was specified in the previous requirements document and was not implemented. This is a **mandatory** feature.
+The deployment status per component needs to be a single clear message with supplementary detail available on hover (tooltip). The previous bundle established the priority order — this section refines the exact messages and tooltip behavior.
 
-## Problem Statement
+## Status Messages and Tooltip Specification
 
-Users cannot filter the Deployment table by Scrum Team. With potentially 100+ components across many teams, this makes it impossible to focus on a specific team's deployment status.
+| Status | Condition | Display Style | Tooltip on Hover |
+|---|---|---|---|
+| **Valid** | Branches match (normalized) AND K8s commit = latest release commit | Green badge | "K8s branch and commit match the release branch. Deployment is current." |
+| **Older Branch** | Normalized K8s branch ≠ Normalized release branch | Orange badge | "K8s is running branch: {k8sBranchNormalized}. Expected: {releaseBranch}. Component may be on a previous release." |
+| **Needs Redeployment** | Branches match AND K8s commit ≠ latest release commit AND latestReleaseCommitId is available | Amber badge | "Deployed commit: {k8sCommitId}. Latest release commit: {latestReleaseCommitId}. Run Force Refresh for commit-behind count." |
+| **Branch Valid — Commit Unverified** | Branches match AND latestReleaseCommitId is NULL | Blue/Info badge | "Branch matches release branch but commit comparison is not available. Generate Report first to populate commit data, or run Force Refresh." |
+| **Unable to Validate** | K8s call failed OR branch resolution failed OR cookie invalid | Grey badge | "Validation could not be completed. Reason: {errorMessage}" |
+| **User Excluded** | Component is User Excluded (still shown in Refresh) | Grey italic | "This component is marked as User Excluded. It is shown here for visibility only." |
 
 ## Functional Requirements
 
 | # | Requirement |
 |---|---|
-| FR-8.1 | Add a **Scrum Team filter dropdown** to the Deployment Section — identical in behavior to the Branch Cut Validation Scrum Team filter. |
-| FR-8.2 | The dropdown must be populated from the **currently displayed table rows only** (data-driven, same as Section 10 of Bundle 1). |
-| FR-8.3 | Selecting a team filters the table to show only rows containing that team. |
-| FR-8.4 | An "All Teams" option must be present as the default. |
-| FR-8.5 | Filter resets when environment, namespace, fix version, or force refresh changes. |
-| FR-8.6 | Filter must interact correctly with other active filters (AND logic). |
-| FR-8.7 | Filter must be positioned consistently with the Branch Cut Validation filter bar placement. |
+| FR-8.1 | Only **one status badge** per component row — no multiple indicators. |
+| FR-8.2 | Each status badge must show a **tooltip on hover** with the detail message from the table above. |
+| FR-8.3 | Tooltip must include actual values (branch names, commit SHAs) where specified. |
+| FR-8.4 | Status determination must use **normalized** branch values — never raw strings. |
+| FR-8.5 | The "Commits Behind" column must NOT exist. Status and tooltip carry all needed information in Refresh mode. |
+| FR-8.6 | Commit SHAs shown in tooltips must be **full 40-character SHAs**. |
 
 ## Acceptance Criteria
 
 ```
 AC-8.1
-GIVEN the Deployment table is loaded with data
-WHEN the user views the filter bar
-THEN a Scrum Team dropdown is visible in the Deployment Section
+GIVEN K8s branch "release-26-07-28-rel" and DB release branch "release/26.07.28.rel"
+AND K8s commit SHA matches latestReleaseCommitId in DB
+WHEN the row renders
+THEN status badge shows "Valid" in green
+AND tooltip reads "K8s branch and commit match the release branch. Deployment is current."
 
 AC-8.2
-GIVEN the Deployment table shows rows for Team Alpha, Team Beta, Team Gamma
-WHEN the user opens the Scrum Team dropdown
-THEN only Team Alpha, Team Beta, Team Gamma appear as options
-AND no teams absent from the visible rows appear
+GIVEN K8s branch "release-26-06-14-rel" (older release)
+AND DB release branch is "release/26.07.28.rel"
+WHEN normalized comparison runs
+THEN status badge shows "Older Branch" in orange
+AND tooltip shows the actual K8s branch and expected branch names
 
 AC-8.3
-GIVEN the user selects "Team Beta"
-WHEN the filter is applied
-THEN only rows where Team Beta is in the Scrum Teams list are shown
+GIVEN branches match AND K8s commit SHA is "abc123..." (40 chars)
+AND latestReleaseCommitId in DB is "def456..." (40 chars) — different
+WHEN status is determined
+THEN status badge shows "Needs Redeployment" in amber
+AND tooltip shows both full SHAs and instructs user to run Force Refresh for count
 
 AC-8.4
-GIVEN the user selects "All Teams"
-WHEN the filter is applied or cleared
-THEN all rows are visible again
+GIVEN branches match AND latestReleaseCommitId is NULL in DB
+WHEN status is determined
+THEN status badge shows "Branch Valid — Commit Unverified" in blue
+AND tooltip instructs user to generate report or run Force Refresh
 
 AC-8.5
-GIVEN the "Show Invalid Only" toggle is active showing a subset
-WHEN the Scrum Team dropdown is opened
-THEN the dropdown options reflect only teams in the filtered (invalid) rows
+GIVEN a component is User Excluded
+WHEN the row renders
+THEN status badge shows "User Excluded" in grey italic
+AND the row is visually distinct (slightly greyed out)
 
 AC-8.6
-GIVEN a Force Refresh runs
-WHEN new data loads
-THEN the Scrum Team filter resets to "All Teams"
-
-AC-8.7
-GIVEN this filter is implemented
-WHEN Branch Cut Validation Scrum Team filter behavior is reviewed
-THEN both filters behave identically
+GIVEN any component row
+WHEN the status column is rendered
+THEN exactly ONE status badge exists
+AND the "Commits Behind" column does NOT exist
 ```
 
 ---
 
 ---
 
-# 9. Deployment Section — Async Performance (ExecutorService + Job ID + DB-Cached Reload)
-
-## Background
-
-The Deployment Section Force Refresh currently executes synchronously, causing the browser to hang while waiting for Kubernetes and GitHub responses. The application already has a well-established async pattern used in Generate Report — this same pattern must be applied to the Deployment Section.
-
-## Problem Statement
-
-1. The Force Refresh hangs the UI while processing 20–100+ components.
-2. There is no async job tracking for Deployment analysis.
-3. When the user navigates away and returns, data is re-fetched instead of loading from DB.
-
-## Target Behavior
-
-```
-User clicks Force Refresh
-    ↓
-Backend starts async job (returns Job ID immediately)
-    ↓
-UI receives Job ID → shows progress/loading state
-    ↓
-Backend processes in parallel (ExecutorService):
-    - Load components from DB
-    - For each deployable component (parallel):
-        - Fetch K8s data
-        - Fetch/reuse GitHub commit history
-        - Calculate status
-    - Persist results to DB
-    ↓
-UI polls for job completion (or uses existing polling mechanism)
-    ↓
-Job complete → UI loads results from DB
-    ↓
-Results displayed in table
-
-User navigates away and returns:
-    ↓
-UI checks for existing DB records for (Team + Fix Version + Namespace)
-    ↓
-If records exist → Load from DB immediately (no re-fetch)
-    ↓
-User can trigger Force Refresh to get fresh data
-```
+# 9. Component Filtering Rules for Refresh — Team & Story Filters
 
 ## Functional Requirements
 
-### Async Execution
-
 | # | Requirement |
 |---|---|
-| FR-9.1 | **Reuse the existing async job pattern** used in Generate Report — do NOT create a new async framework. |
-| FR-9.2 | Force Refresh must return a **Job ID immediately** without blocking. |
-| FR-9.3 | Backend must process Deployment analysis in **parallel using ExecutorService** — same executor used for Generate Report. |
-| FR-9.4 | Each component's K8s fetch and GitHub analysis must execute in parallel where possible. |
-| FR-9.5 | GitHub release branch commit history must be fetched **once per Force Refresh** and shared across all component analyses (existing performance rule). |
-| FR-9.6 | Results must be **persisted to DB** as each component completes. |
-| FR-9.7 | Job status must be trackable: `IN_PROGRESS`, `COMPLETED`, `FAILED`. |
-| FR-9.8 | UI must use the **existing job polling mechanism** — no new polling implementation. |
-| FR-9.9 | Maximum execution timeout must be configurable. Default: 120 seconds. |
-
-### DB-Cached Reload
-
-| # | Requirement |
-|---|---|
-| FR-9.10 | When the user navigates to the Deployment Section WITHOUT clicking Force Refresh, the UI must **load results from DB** for the selected Team + Fix Version + Namespace. |
-| FR-9.11 | The `Last Validated At` timestamp must be displayed so users know how recent the data is. |
-| FR-9.12 | A "Stale data" warning must appear if results are older than a configurable threshold (default: 60 minutes). |
-| FR-9.13 | Force Refresh always triggers a fresh backend job — never reads from DB cache. |
-| FR-9.14 | This DB-cached reload behavior must mirror the existing Review Commits reload behavior exactly. |
-
-### Error Handling
-
-| # | Requirement |
-|---|---|
-| FR-9.15 | If a single component's K8s or GitHub fetch fails, that component is marked "Unable to Validate" and processing continues for other components — one failure must NOT abort the entire job. |
-| FR-9.16 | If the entire job fails, the Job ID is marked `FAILED`, the UI shows an error, and any previously persisted DB results remain available. |
+| FR-9.1 | The Scrum Team filter must be present in each environment panel's Deployment table. |
+| FR-9.2 | The Scrum Team filter dropdown must derive its options from the **currently visible rows only** (data-driven — same rule as Bundle 1 Section 10). |
+| FR-9.3 | The Stories column must display using the **+N badge with tooltip** pattern (same as Bundle 1 Section 8). |
+| FR-9.4 | The "Invalid Only" toggle must filter to show only rows where status is NOT "Valid". |
+| FR-9.5 | All filters are **display-only** — they do not affect what is stored in DB or what the backend processes. |
+| FR-9.6 | Filters reset when a new Refresh job is triggered. |
 
 ## Acceptance Criteria
 
 ```
 AC-9.1
-GIVEN the user clicks Force Refresh
-WHEN the request hits the backend
-THEN a Job ID is returned within 500ms
-AND the UI transitions to a loading/progress state
-AND the browser does NOT hang
+GIVEN the Deployment table renders for Test3 with results
+WHEN the user opens the Scrum Team filter
+THEN only teams present in visible rows appear in the dropdown
 
 AC-9.2
-GIVEN the async job is running
-WHEN components are processed
-THEN K8s and GitHub fetches for multiple components run in parallel
-AND the total execution time is substantially less than sequential processing
+GIVEN the "Invalid Only" toggle is activated
+WHEN the table filters
+THEN only rows where status is NOT "Valid" are shown
+AND the Scrum Team dropdown recalculates to reflect only teams in filtered rows
 
 AC-9.3
-GIVEN GitHub commit history is fetched for the release branch
-WHEN multiple components are analyzed
-THEN GitHub is called only ONCE and the result is reused for all components
+GIVEN a new Refresh job is triggered
+WHEN results load
+THEN all filters reset to default (All Teams, Invalid Only = off)
 
 AC-9.4
-GIVEN the async job completes
-WHEN the UI receives the completion signal
-THEN results are loaded from DB and displayed in the table
-AND "Last Validated At" timestamp is visible
-
-AC-9.5
-GIVEN results are in DB from a previous Force Refresh
-WHEN the user navigates away and returns to the Deployment Section
-THEN previous results load immediately from DB without triggering a new backend job
-
-AC-9.6
-GIVEN previously cached results are 90 minutes old
-WHEN the user views the Deployment Section
-THEN a "Stale data" warning is displayed alongside the Last Validated At timestamp
-
-AC-9.7
-GIVEN 1 component out of 30 has a K8s fetch error
-WHEN the async job processes components
-THEN the 29 other components complete successfully
-AND the failed component shows "Unable to Validate"
-AND the job status is COMPLETED (not FAILED)
-
-AC-9.8
-GIVEN the entire job fails (e.g., K8s cookie expired)
-WHEN the failure is detected
-THEN the job status is set to FAILED
-AND the UI shows a clear error message
-AND any previously persisted DB results for this Fix Version remain accessible
-
-AC-9.9
-GIVEN the async job is running
-WHEN the user clicks Force Refresh again
-THEN the previous job is cancelled or a new job supersedes it
-AND the UI tracks the latest job ID only
-
-AC-9.10
-GIVEN the existing Generate Report async infrastructure is used
-WHEN a code review is performed
-THEN no duplicate async framework, executor, or job tracking table has been created
+GIVEN filters are active
+WHEN the user views the component count
+THEN it reads "Showing X of Y components"
 ```
 
 ---
 
 ---
 
-# Summary — Enhancement Bundle 2 at a Glance
+# 10. Components Table — New Field: `latest_release_commit_id`
+
+## Background
+
+The Refresh flow must avoid GitHub calls. To enable commit comparison during Refresh, the latest release branch commit ID must already be stored in the Components table, populated during the Generate Report phase.
+
+## Problem Statement
+
+Currently the Components table does not store `latest_release_commit_id`. Without this field, Refresh can only compare branches — it cannot validate whether the deployed commit is current.
+
+## Database Change
+
+```sql
+ALTER TABLE components
+ADD COLUMN latest_release_commit_id VARCHAR(40) NULL;
+
+-- Description: Full 40-character SHA of the latest commit on the resolved
+-- release branch at the time of the last Generate Report or Force Refresh.
+-- NULL means the value has not yet been populated.
+-- Populated by: Generate Report phase (when GitHub is already being called).
+-- Used by: Deployment Refresh to avoid GitHub calls.
+```
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-10.1 | Add column `latest_release_commit_id VARCHAR(40) NULL` to the Components table. |
+| FR-10.2 | This column must be populated during the **Generate Report phase**, when GitHub is already being called for commit analysis. |
+| FR-10.3 | The value stored must be the **absolute latest commit SHA** on the resolved release branch (including merge commits — same rule as Bundle 1 Section 5). |
+| FR-10.4 | This column must NOT be populated during Refresh — Refresh reads it, never writes it. |
+| FR-10.5 | If the column is NULL when Refresh runs, the status must be "Branch Valid — Commit Unverified" (see Section 8). |
+| FR-10.6 | A DB migration script must be provided for this schema change. |
+| FR-10.7 | The migration must be backward-compatible — existing rows get NULL by default. |
+
+## Acceptance Criteria
+
+```
+AC-10.1
+GIVEN the migration is applied
+WHEN the Components table is inspected
+THEN the column "latest_release_commit_id" exists as VARCHAR(40) NULLABLE
+
+AC-10.2
+GIVEN Generate Report runs for a fix version
+WHEN GitHub commit data is fetched
+THEN the latest commit SHA (including merge commits) is stored in
+  latest_release_commit_id for each component
+
+AC-10.3
+GIVEN Refresh runs for the same fix version
+WHEN the backend reads component data
+THEN it reads latest_release_commit_id from DB
+AND makes NO GitHub call to retrieve it
+
+AC-10.4
+GIVEN latest_release_commit_id is NULL for a component
+WHEN Refresh runs
+THEN the component status is "Branch Valid — Commit Unverified"
+AND the tooltip instructs the user to run Generate Report or Force Refresh
+
+AC-10.5
+GIVEN the migration is run on existing data
+WHEN existing component rows are inspected
+THEN all existing rows have latest_release_commit_id = NULL
+AND no existing functionality is broken
+
+AC-10.6
+GIVEN the migration script is reviewed
+WHEN it is applied to H2 (current) and later PostgreSQL/Azure SQL
+THEN it runs successfully without errors on both databases
+```
+
+---
+
+---
+
+# Summary — Enhancement Bundle 3 at a Glance
 
 | # | Enhancement | Scope | Type |
 |---|---|---|---|
-| 1 | H2 Backup — single file retention, atomic swap | Backend / Scheduler | Backend |
-| 2 | Generate Report — component smart filters + bulk exclude | Generate Report | Frontend + Backend |
-| 3 | Release Readiness header — restore description + bigger selectors | Release Readiness | Frontend |
-| 4 | Deployment tab — remove env status dots + increase tab font | Deployment Section | Frontend |
-| 5 | Global font size increase — all UI pages | All Pages | Frontend / CSS |
-| 6 | Deployment — Teams & Stories loading from DB-first flow | Deployment Section | Backend |
-| 7 | Deployment — Branch normalization + remove Commits Behind column | Deployment Section | Backend + Frontend |
-| 8 | Deployment — Scrum Team filter (mandatory) | Deployment Section | Frontend |
-| 9 | Deployment — Async + Job ID + DB-cached reload | Deployment Section | Backend + Frontend |
+| 1 | Team & Fix Version dropdowns — wider, taller, full-width right | Release Readiness Header | Frontend |
+| 2 | Per-environment independence — no shared state, no cross-blocking | Deployment Section | Frontend + Backend Architecture |
+| 3 | Per-environment Job ID + progress messaging | Deployment Section | Frontend + Backend |
+| 4 | Connection status — moved inside each environment panel | Deployment Section | Frontend |
+| 5 | Two buttons per environment: Refresh + Force Refresh | Deployment Section | Frontend |
+| 6 | Refresh flow — DB + K8s only, zero GitHub calls | Deployment Section | Backend |
+| 7 | Force Refresh — placeholder only (logic TBD) | Deployment Section | Frontend (stub) |
+| 8 | Status logic + tooltip with actual values | Deployment Section | Frontend + Backend |
+| 9 | Team filter + Invalid Only per environment | Deployment Section | Frontend |
+| 10 | Components table — new `latest_release_commit_id` column | Database | DB Migration |
 
 ---
 
@@ -923,30 +877,34 @@ THEN no duplicate async framework, executor, or job tracking table has been crea
 
 All items below must be true before this bundle is considered complete:
 
-- [ ] H2 backup uses atomic swap — max 2 files at any time in backup folder
-- [ ] Previous backup only deleted after new backup fully verified
-- [ ] Generate Report component section has filter bar with all specified toggle switches and dropdowns
-- [ ] Bulk exclude with Select All (Filtered) + Undo works correctly
-- [ ] Pre-report validation still runs on ALL components regardless of active filter
-- [ ] Release Readiness header shows restored description text
-- [ ] Team and Fix Version selectors are visually larger and well-styled
-- [ ] Environment selector dots removed from Deployment tab
-- [ ] Environment tab button font size is minimum 15px
-- [ ] All application pages render body text at minimum 14px
-- [ ] Font sizes implemented via CSS variables (not scattered inline)
-- [ ] Deployment Force Refresh loads teams and stories from DB first before any K8s call
-- [ ] Branch comparison uses normalized canonical format for both K8s and release branch values
-- [ ] "Commits Behind" column removed — Status column is the single source of status
-- [ ] Status message is correct in all four scenarios (Valid / Older Branch / X Behind / Unable to Validate)
-- [ ] Scrum Team filter is present and functional in Deployment Section
-- [ ] Deployment Force Refresh is async — returns Job ID immediately, browser does not hang
-- [ ] Results persist to DB and reload from DB on revisit (no re-fetch)
-- [ ] One component failure does not abort the entire job
-- [ ] Existing async infrastructure (Generate Report pattern) is reused — no duplication
-- [ ] Review Commits, Branch Cut Validation, Generate Report have no regressions
-- [ ] All edge cases handled and logged appropriately
-- [ ] Structured logging (INFO/DEBUG/ERROR) in place for all new backend paths
+- [ ] Team and Fix Version dropdowns are at least 280px wide, 42px tall, 15px font
+- [ ] Each environment panel has fully independent state (no cross-environment side effects)
+- [ ] Clicking Refresh on Test3 does not affect or block Test4, Stage-West, Production panels in any way
+- [ ] Multiple environments can run Refresh simultaneously
+- [ ] Per-environment Job ID created and tracked independently using existing async infrastructure
+- [ ] Progress message shown inside the active environment panel during job execution
+- [ ] Connection status indicator moved inside each environment panel, removed from section heading
+- [ ] Each environment panel has "Refresh" (primary) and "Force Refresh" (secondary/placeholder) buttons
+- [ ] Force Refresh shows placeholder message — no backend call triggered
+- [ ] Refresh backend makes ZERO GitHub calls
+- [ ] Refresh reads all component data from Components DB table
+- [ ] Libraries, Helm Projects, System Excluded are excluded from Refresh
+- [ ] User Excluded components are INCLUDED in Refresh (intentional difference from Generate Report)
+- [ ] Fix Version is sent to backend in full original format — never abbreviated
+- [ ] Branch comparison uses normalized canonical format (both K8s and DB values normalized before compare)
+- [ ] Status is a single badge per row with appropriate tooltip containing actual values
+- [ ] "Commits Behind" column does NOT exist
+- [ ] Scrum Team filter is data-driven and per-environment
+- [ ] Invalid Only toggle is per-environment
+- [ ] `latest_release_commit_id` column added to Components table via migration
+- [ ] Column is populated during Generate Report phase (not Refresh)
+- [ ] Refresh reads `latest_release_commit_id` from DB — no GitHub call
+- [ ] DB migration is backward compatible — existing rows get NULL
+- [ ] Migration works on both H2 and PostgreSQL/Azure SQL
+- [ ] No regression in Generate Report, Branch Cut Validation, Review Commits, Settings
+- [ ] Structured logging at INFO/DEBUG/ERROR for all new backend paths
+- [ ] No duplicate async infrastructure, executor, or job tracking introduced
 
 ---
 
-*Document Version: 2.0 — Ready for Devin / Claude Opus 4.6 Thinking Implementation*
+*Document Version: 3.0 — Ready for Devin / Claude Opus 4.6 Thinking Implementation*
