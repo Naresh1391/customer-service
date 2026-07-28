@@ -1,608 +1,1235 @@
-# Phase XX – Generate Report Refactoring, Team Key Migration & Commit Analysis Enhancements
+# Release Readiness Tool — Enhancement Bundle 5
+## Generate Report Backend Refactor — Team Key Migration, GitHub Call Optimization, Commit Analysis Tab, DB Cleanup
 
-## Objective
-
-Refactor the Generate Report workflow to:
-
-- Eliminate Project Key dependency.
-- Standardize on Team Key across the application.
-- Remove duplicate Scan Job implementation.
-- Reduce GitHub API calls.
-- Improve commit analysis accuracy.
-- Introduce Commit Analysis metadata persistence.
-- Simplify database model.
-- Improve maintainability without changing existing functionality.
+**Module Scope:** ReportController / Generate Report Service · GitHub Client Integration · Job Tracking · Commit Analysis · Database Cleanup
+**Audience:** Devin AI (Claude Opus 4.6 Thinking)
+**Prepared By:** Senior Solution Architect + Senior Java Backend Architect + Senior Database Architect
+**Status:** Implementation Ready
 
 ---
 
-# Enhancement 1 – Replace Project Key with Team Key
+## ⚠️ Critical Implementation Rules
+
+1. **Read the actual code first.** Method and table names below are reconstructed from verbal walkthrough notes (e.g., `getBranchHeadSha`, `classifyCommit`, `ScanJob`) and may not match exact identifiers in the codebase. Verify actual names before implementing — do not create new classes/methods if an equivalent already exists under a different name.
+2. **Line numbers referenced (e.g., "line 221") are point-in-time references** from manual code review and will shift as other changes land. Locate the logic by description, not by line number.
+3. Do NOT delete code flagged for "comment out" — comment it out only, with a clear marker explaining why and what replaced it.
+4. Do NOT remove a TODO comment unless the exact requirement it refers to has been fully implemented in this bundle (see Section 15).
+5. No backward-compatibility shims are required for the Branch Repository removal (Section 10) — this is a clean, hard removal.
+6. All new/changed timestamps follow the established rule: **stored in UTC, converted to IST/CST only on the frontend** (per Bundle 4 Section 8).
+7. All new/changed identity fields use **Team Key** — Project Key must not be introduced into any new table, DTO, or response.
+
+---
+
+## 🔁 Reconciliation Notes — Corrections to Prior Bundles
+
+This bundle corrects and finalizes a few points from the earlier DB Analysis document. Read this before implementing anything from that document.
+
+| Item | Earlier Guidance | Corrected / Finalized Guidance (This Bundle) |
+|---|---|---|
+| `commit_validations` | DB Analysis doc recommended **removal** (no data observed, purpose unclear at the time) | **KEEP.** Purpose is now clarified: it stores manual override decisions on commit compliance status. See Section 11 for full schema and usage. **Do not drop this table.** |
+| `scan_jobs` / `scan_runs` merge | DB Analysis doc recommended **merging** `scan_jobs` and `scan_runs` into one unified table | **Refined.** Upon closer code review, the redundant tracking is a separate `ScanJob` entity duplicating the application's existing primary async job tracking (the same mechanism used for Deployment Refresh job polling, per Bundle 3/4). The correct action is to **eliminate `ScanJob` entirely** and standardize on the single pre-existing job tracking table — not merge two tables into a new one. See Section 2. |
+| `release_branches` (standalone table) | DB Analysis doc recommended removal, with a migration/compatibility note | **Confirmed for removal, no backward compatibility needed.** See Section 10 for the finalized, simplified removal plan. |
+| `commit_comments` | DB Analysis doc recommended merging into `commits.commit_message` | **Confirmed — proceeding as planned.** No change to this guidance. |
+| `project_keys` table | DB Analysis doc recommended removal in favor of YAML | **Confirmed and extended** — this bundle additionally removes the `project_key` **column** from the `commits` table and from the Generate Report request/response contracts. See Sections 1 and 12. |
+
+---
+
+## Table of Contents
+
+1. Project Key Removal — Team Key as Sole Identifier
+2. Redundant Job Tracking Removal — Eliminate `ScanJob`, Standardize on Primary Async Job
+3. GitHub Call Optimization — Derive Head SHA from Prefetch Commits
+4. Default Branch Name — Read from Team Config YAML
+5. Rename — Prefetch Main Commits → Prefetch Current Branch & Main Commits
+6. New Method — Prefetch Previous Release Branch & Main Branch Commits
+7. New Table — `commit_analysis_status`
+8. New Release Readiness Tab — Commit Analysis
+9. Comment Out Redundant Legacy Code — Per-Component Head SHA Call
+10. Remove Branch Repository — Complete Hard Removal
+11. `commit_validations` Table — Corrected Purpose & Proper Implementation
+12. Remove `project_key` Column from `commits` Table
+13. Component Lifecycle Analysis — Updated Commit List Input
+14. `classifyCommit` Method — Condition Order Investigation
+15. TODO Comment Discipline — Scoped, Requirement-Matched Removal
+
+---
+
+---
+
+# 1. Project Key Removal — Team Key as Sole Identifier
 
 ## Background
 
-Project Key represents only one project under a Team.
+`ReportController.generateReport()` currently accepts a request object from the UI that includes a `projectKey` field. Project Key is a narrower concept than Team Key — one team can span multiple projects. Project Key should only ever be used internally for one purpose: fetching stories from iTrack. It should never be sent by the UI, stored as a primary identifier, or used to key any lookups outside that one iTrack call.
 
-Release execution always happens at Team level.
+## Functional Requirements
 
-Therefore Project Key must no longer participate in Generate Report processing.
-
----
-
-## Acceptance Criteria
-
-### AC-1.1
-
-Remove `projectKey` from Generate Report request payload.
-
-UI must never send Project Key.
-
----
-
-### AC-1.2
-
-ReportController.generateReport()
-
-must no longer read Project Key.
-
----
-
-### AC-1.3
-
-Replace every Project Key usage with Team Key.
-
-This includes:
-
-- Controller
-- Service
-- Repository
-- DTO
-- Entity
-- Database queries
-- Cache
-- Validation
-- Report generation
-
----
-
-### AC-1.4
-
-Project Key should remain only where it is genuinely required for iTrack story retrieval.
-
-No other module should depend on Project Key.
-
----
-
-# Enhancement 2 – Remove Scan Job Framework
-
-## Background
-
-Normal asynchronous Job tracking already exists.
-
-A second Scan Job implementation duplicates the same functionality.
-
----
+| # | Requirement |
+|---|---|
+| FR-1.1 | Remove `projectKey` from the Generate Report request DTO accepted by the UI. The UI must send only `teamKey` and `fixVersion`. |
+| FR-1.2 | Anywhere `projectKey` is currently used to key logic, lookups, or responses (outside the iTrack story-fetch call), replace it with `teamKey`. |
+| FR-1.3 | Where Project Key is genuinely required (the iTrack story-fetch call only), resolve it **server-side** from the Team Key via the team configuration YAML (`teamKey` → list of `projectKeys`) — never accept it as client input. |
+| FR-1.4 | Remove `projectKey` from all response DTOs returned to the UI for Generate Report and related endpoints, unless the UI has an explicit, justified need to display it (default assumption: it does not). |
+| FR-1.5 | Database-wide: remove `project_key` columns/references except where explicitly retained for iTrack-scoping purposes at the config/YAML level (not DB). See Section 12 for the specific `commits` table change. |
+| FR-1.6 | Update any validation logic that currently checks `projectKey` presence to instead validate `teamKey` presence. |
 
 ## Acceptance Criteria
-
-### AC-2.1
-
-Remove Scan Job entity.
-
----
-
-### AC-2.2
-
-Remove Scan Job repository.
-
----
-
-### AC-2.3
-
-Remove Scan Job service.
-
----
-
-### AC-2.4
-
-Remove Scan Job controller logic.
-
----
-
-### AC-2.5
-
-Remove Scan Job database table.
-
----
-
-### AC-2.6
-
-Generate Report shall only create a normal asynchronous Job.
-
----
-
-### AC-2.7
-
-UI shall display only one Job History.
-
-No Scan Job history should exist.
-
----
-
-# Enhancement 3 – Reuse Prefetch Commit Data
-
-## Background
-
-Current implementation performs an additional GitHub call for every component to retrieve the latest branch HEAD SHA.
-
-This is unnecessary.
-
----
-
-## Acceptance Criteria
-
-### AC-3.1
-
-During Prefetch Commits,
-
-retrieve:
-
-- Commit list
-- Latest HEAD SHA
-
-using the same GitHub request.
-
----
-
-### AC-3.2
-
-For every component,
-
-store:
-
-- Commit list
-- Latest HEAD SHA
-
-inside Prefetch result.
-
----
-
-### AC-3.3
-
-Remove per-component
-
-GitHubClient.getBranchHeadSha()
-
-calls.
-
----
-
-### AC-3.4
-
-No additional GitHub call should be required solely for retrieving branch HEAD SHA.
-
----
-
-# Enhancement 4 – Default Branch from Team Configuration
-
-Current implementation hardcodes:
 
 ```
-master
+AC-1.1
+GIVEN the UI submits a Generate Report request
+WHEN the request payload is inspected
+THEN it contains teamKey and fixVersion
+AND it does NOT contain a projectKey field
+
+AC-1.2
+GIVEN a Generate Report request with a valid teamKey
+WHEN the backend needs to fetch stories from iTrack
+THEN it resolves the project key(s) internally from the team config YAML
+AND does not require or accept a projectKey from the request
+
+AC-1.3
+GIVEN the codebase is searched for "projectKey" usage
+WHEN results are reviewed
+THEN the only remaining reference is the internal YAML-resolved value
+used exclusively for the iTrack story-fetch call
+
+AC-1.4
+GIVEN a Generate Report response is returned to the UI
+WHEN the payload is inspected
+THEN no projectKey field is present unless explicitly required and justified
+
+AC-1.5
+GIVEN the request DTO validation runs
+WHEN teamKey is missing
+THEN a validation error is returned
+AND projectKey is not part of the validation rules at all
 ```
 
 ---
 
+---
+
+# 2. Redundant Job Tracking Removal — Eliminate `ScanJob`, Standardize on Primary Async Job
+
+## Background
+
+The Generate Report flow currently tracks execution status in two places:
+1. The application's **primary async job tracking table** (the same mechanism used for job status, polling, and progress messaging elsewhere in the app — including Deployment Refresh, per Bundle 3/4).
+2. A separate, duplicate **`ScanJob`** entity/table that independently tracks similar status for the same execution.
+
+The UI currently shows both job types, which is confusing and unnecessary. Only the primary async job tracking is needed.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-2.1 | Remove the `ScanJob` entity class entirely. |
+| FR-2.2 | Remove the `ScanJob` database table entirely (migration to drop). |
+| FR-2.3 | Remove any repository, service, or controller code that creates, updates, or reads `ScanJob` records. |
+| FR-2.4 | Generate Report must create and update its execution status using **only** the primary async job tracking mechanism already used elsewhere in the application. |
+| FR-2.5 | Remove any UI component, state, or polling logic tied to `ScanJob` status display. |
+| FR-2.6 | The UI must show a single, unified job status view — sourced only from the primary async job. |
+| FR-2.7 | Verify no other module (Deployment Refresh, Review Commits) has any dependency on `ScanJob` before removal. |
+
+## Removal Checklist
+
+```
+□ Remove ScanJob entity class
+□ Remove ScanJobRepository
+□ Remove ScanJobService (or equivalent) and all its methods
+□ Remove ScanJob-related DB migration table (DROP TABLE)
+□ Remove ScanJob creation calls inside Generate Report flow
+□ Remove ScanJob status update calls inside Generate Report flow
+□ Remove ScanJob references in Generate Report controller
+□ Remove ScanJob-specific UI components / state / polling
+□ Confirm Generate Report now creates/updates ONLY the primary async job record
+□ Confirm UI polls and displays ONLY the primary async job status
+□ Run a global search for "ScanJob" — zero results in active code after removal
+```
+
 ## Acceptance Criteria
 
-### AC-4.1
+```
+AC-2.1
+GIVEN Generate Report is triggered
+WHEN the job starts
+THEN only ONE job record is created — using the primary async job tracking table
+AND no ScanJob record is created
 
-Add configuration:
+AC-2.2
+GIVEN the Generate Report job is running
+WHEN the UI polls for status
+THEN it polls the primary async job endpoint only
+AND no ScanJob-specific status endpoint exists or is called
+
+AC-2.3
+GIVEN the ScanJob entity, repository, and table are removed
+WHEN the application starts
+THEN it compiles and runs without errors related to missing ScanJob references
+
+AC-2.4
+GIVEN a global code search is run for "ScanJob"
+WHEN results are reviewed
+THEN zero results exist in active/executable code
+
+AC-2.5
+GIVEN the Deployment Refresh module (Bundle 3/4) is tested after this change
+WHEN its job tracking is exercised
+THEN it continues to function correctly using the primary async job table,
+confirming no ScanJob dependency existed there
+```
+
+---
+
+---
+
+# 3. GitHub Call Optimization — Derive Head SHA from Prefetch Commits
+
+## Background
+
+During Generate Report, the prefetch commits step already fetches, in parallel per component, the full commit list for the release branch — ordered newest-first. Separately, the code makes an **additional GitHub API call per component** (`getBranchHeadSha()` or similarly named) purely to determine the head/latest commit SHA of that branch. This is redundant: the head commit is simply the first entry in the already-fetched, newest-first commit list.
+
+## Problem Statement
+
+An extra GitHub call per component, on top of the parallel prefetch, adds latency and unnecessary GitHub API rate-limit consumption at scale (100+ components).
+
+## Required Change
+
+```
+BEFORE (redundant):
+
+  Map<String, List<Commit>> prefetchedCommits =
+      executorService.invokeAll(componentsFetchTasks);
+      // parallel fetch, one GitHub call per component, newest-first ordering
+
+  // ... later, separately:
+  for (Component component : components) {
+      String headSha = githubClient.getBranchHeadSha(
+          component.getRepoUrl(), releaseBranch);
+      // EXTRA GitHub call per component — redundant
+  }
+
+
+AFTER (optimized — single GitHub call batch, two outputs):
+
+  Map<String, List<Commit>> prefetchedCommits =
+      executorService.invokeAll(componentsFetchTasks);
+      // UNCHANGED — same parallel fetch as before
+
+  // Derive head SHA map from already-fetched data — NO extra GitHub call
+  Map<String, String> headShaByComponent = prefetchedCommits.entrySet().stream()
+      .collect(Collectors.toMap(
+          Map.Entry::getKey,
+          entry -> entry.getValue().isEmpty()
+              ? null
+              : entry.getValue().get(0).getSha()
+              // first commit in newest-first list = head = latest commit
+              // includes merge commits intentionally — this IS the head,
+              // regardless of commit type
+      ));
+```
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-3.1 | Remove the separate per-component GitHub head-SHA call from the Generate Report flow. |
+| FR-3.2 | Derive the head SHA for each component from the **first element** of its already-fetched, newest-first prefetch commits list. |
+| FR-3.3 | The head SHA must include merge commits — do not filter merge commits out before taking the first element. This mirrors the existing rule established for the Deployment Section (Bundle 1 Section 5) — head/latest must always reflect the true latest commit. |
+| FR-3.4 | If a component's prefetched commit list is empty, its head SHA must be `null` — do not throw an exception; log a WARN and continue processing other components. |
+| FR-3.5 | The resulting head SHA map must be used to populate `components.release_branch_latest_commit_id` (established in Bundle 3 Section 10). |
+| FR-3.6 | Total GitHub API calls for this step must not increase compared to the current prefetch-only call count — the head SHA extraction must add zero additional calls. |
+
+## Acceptance Criteria
+
+```
+AC-3.1
+GIVEN prefetch commits returns a newest-first ordered list for a component
+WHEN the head SHA is derived
+THEN it is exactly the SHA of the first (index 0) commit in that list
+AND no additional GitHub API call is made to obtain it
+
+AC-3.2
+GIVEN the release branch's latest commit is a merge commit
+WHEN the head SHA is derived
+THEN the merge commit's SHA is used (not filtered out)
+
+AC-3.3
+GIVEN a component's prefetched commit list is empty
+WHEN the head SHA is derived
+THEN the value is null
+AND a WARN is logged
+AND processing continues for other components without failure
+
+AC-3.4
+GIVEN the optimization is implemented
+WHEN GitHub API call counts are measured before and after for a 100-component run
+THEN the call count is reduced by approximately 100 calls (one head-SHA call eliminated per component)
+AND the prefetch commits call count is unchanged
+
+AC-3.5
+GIVEN the head SHA map is produced
+WHEN components.release_branch_latest_commit_id is populated
+THEN it uses this derived map — not a separate fetch
+```
+
+---
+
+---
+
+# 4. Default Branch Name — Read from Team Config YAML
+
+## Background
+
+The code that fetches commits between the release branch and the main/master branch currently hardcodes the literal string `"master"` as the base branch. This will break for any team whose repositories use `"main"` as the default branch instead.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-4.1 | Add a `defaultBranch` field to the team configuration YAML, at the team level. |
+| FR-4.2 | If `defaultBranch` is not specified for a team, fall back to `"master"` as the default value. |
+| FR-4.3 | Remove the hardcoded `"master"` literal from the GitHub commit-comparison call sites. |
+| FR-4.4 | All call sites that previously hardcoded `"master"` must instead read the resolved default branch for the relevant team. |
+| FR-4.5 | Log the resolved default branch at DEBUG level whenever it is used in a GitHub call, for traceability. |
+
+## YAML Configuration Example
 
 ```yaml
-defaultBranch: master
+# team-config.yaml
+teams:
+  OC:
+    teamKey: OC
+    projectKeys: [SPT-OC]
+    defaultBranch: master     # NEW — optional; defaults to "master" if omitted
+    github:
+      # ... existing config
+    itrack:
+      # ... existing config
 ```
 
-inside Team Config.
+## Code Change
 
----
+```java
+// BEFORE:
+githubClient.getCommitsBetweenBranches(repoUrl, releaseBranch, "master");
 
-### AC-4.2
+// AFTER:
+String defaultBranch = teamConfig.getDefaultBranch() != null
+    ? teamConfig.getDefaultBranch()
+    : "master"; // fallback default
 
-Future teams may configure:
-
-- master
-- main
-- trunk
-
-without code change.
-
----
-
-### AC-4.3
-
-All GitHub comparisons shall use configured Default Branch.
-
----
-
-# Enhancement 5 – Third Commit Collection
-
-Currently:
-
-1. Previous → Current
-2. Current → Main
-
-Need:
-
-3. Previous → Main
-
----
+githubClient.getCommitsBetweenBranches(repoUrl, releaseBranch, defaultBranch);
+```
 
 ## Acceptance Criteria
 
-Create a third commit collection.
-
-Comparison:
-
-Base:
-
-Previous Release Branch
-
-Head:
-
-Configured Default Branch
-
-Store separately.
-
-This collection represents commits existing in Main after Previous Release.
-
----
-
-# Enhancement 6 – Commit Analysis Metadata Table
-
-Introduce new table.
-
-Suggested name:
-
 ```
-commit_analysis_status
+AC-4.1
+GIVEN team-config.yaml specifies defaultBranch: main for team "XYZ"
+WHEN commits are fetched for that team
+THEN "main" is used as the base branch — not "master"
+
+AC-4.2
+GIVEN team-config.yaml does NOT specify defaultBranch for team "OC"
+WHEN commits are fetched for that team
+THEN "master" is used as the fallback default
+
+AC-4.3
+GIVEN the codebase is searched for hardcoded "master" string literals
+WHEN results are reviewed in the GitHub comparison call sites
+THEN none remain — all resolve from team config
+
+AC-4.4
+GIVEN a GitHub call is made using the resolved default branch
+WHEN DEBUG logging is enabled
+THEN the resolved branch name is logged alongside the team key
 ```
 
 ---
 
-## Suggested Columns
-
-- Team Key
-- Fix Version
-- Component
-- Library Flag
-- Stories
-- Teams
-- Previous Branch
-- Current Branch
-- Analysis Performed
-- Analysis Skipped
-- Skip Reason
-- Total Commits
-- Valid Commits
-- Cherry Pick Required
-- Direct Release
-- Reverted
-- Violations
-- Warnings
-- Analysis Timestamp
-- Last Updated
-
 ---
+
+# 5. Rename — Prefetch Main Commits → Prefetch Current Branch & Main Commits
+
+## Background
+
+The existing method that fetches commits comparing the current release branch against the main/master branch is named ambiguously (referred to as "prefetch main commits"). Its actual behavior combines **current release branch** and **main/master branch** commit data. The name should reflect both branches involved.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-5.1 | Rename the method (and any associated variables, cache keys, or map names) to clearly indicate it covers **current branch and main branch** commits — e.g., `prefetchCurrentBranchAndMainCommits`. |
+| FR-5.2 | Update every call site referencing the old name. |
+| FR-5.3 | Update any related log messages, comments, or Javadoc referencing the old name. |
+| FR-5.4 | No behavioral change in this step — this is a rename/clarity-only change. |
 
 ## Acceptance Criteria
 
-Every component shall have one metadata record.
-
----
-
-If skipped,
-
-store reason.
-
-Example:
-
-- Branch Cut Pending
-- User Excluded
-- Default Excluded
-- Missing Branch
-
----
-
-If analysed,
-
-store metadata counts.
-
----
-
-# Enhancement 7 – Release Readiness Commit Analysis Tab
-
-Add new tab.
-
 ```
-Commit Analysis
+AC-5.1
+GIVEN the method is renamed
+WHEN the codebase is searched for the old method name
+THEN zero references remain
+
+AC-5.2
+GIVEN the rename is applied
+WHEN the method is called from all original call sites
+THEN behavior is functionally identical to before the rename
+
+AC-5.3
+GIVEN the rename is complete
+WHEN logs are reviewed during execution
+THEN log messages reference the new, clearer method/variable name
 ```
 
 ---
 
-## Acceptance Criteria
-
-Load data entirely from
-
-commit_analysis_status
-
-No recalculation.
-
 ---
 
-Provide filters:
+# 6. New Method — Prefetch Previous Release Branch & Main Branch Commits
 
-- Team
-- Status
-- Analysis Performed
-- Pending
-- Violations
+## Background
 
----
+A third commit-fetching method is required, distinct from the two that already exist:
 
-Reuse Branch Validation filter framework.
+1. **Prefetch commits** — the release branch's own commit history (used for head SHA, Section 3)
+2. **Prefetch current branch & main commits** — current release branch vs. main/master (renamed in Section 5)
+3. **NEW: Prefetch previous release branch & main commits** — main/master vs. the **previous** release branch
 
----
+This third set captures commits that have landed on master/main but have not yet made it into the **previous** release branch — i.e., what has moved forward on master since the last release cut.
 
-# Enhancement 8 – Remove Duplicate Branch HEAD Population
+## Functional Requirements
 
-Current code calls:
+| # | Requirement |
+|---|---|
+| FR-6.1 | Create a new method, e.g., `prefetchPreviousReleaseBranchAndMainCommits()`. |
+| FR-6.2 | Head branch = the resolved default branch (master/main, per Section 4 config). |
+| FR-6.3 | Base branch = the component's **previous release branch** (already stored in `components.previous_branch`). |
+| FR-6.4 | Execution must run **in parallel** across components, consistent with the existing prefetch patterns (ExecutorService). |
+| FR-6.5 | Return type must match the existing prefetch pattern: `Map<String componentName, List<Commit>>`. |
+| FR-6.6 | This method must be called during the same Generate Report phase as the other two prefetch steps, so all three commit sets are available before commit analysis begins. |
 
-populateLatestReleaseCommitId()
+## Method Signature (Reference)
 
-Again.
+```java
+/**
+ * Fetches commits present on the default branch (master/main) that are
+ * NOT yet present on each component's previous release branch.
+ * Head branch: resolved default branch (from team config, Section 4)
+ * Base branch: component.previousBranch
+ */
+Map<String, List<Commit>> prefetchPreviousReleaseBranchAndMainCommits(
+        String teamKey,
+        String fixVersion,
+        List<Component> deployableComponents) {
 
-This duplicates Prefetch.
+    String defaultBranch = resolveDefaultBranch(teamKey);
 
----
+    List<Callable<Map.Entry<String, List<Commit>>>> tasks =
+        deployableComponents.stream()
+            .map(component -> (Callable<Map.Entry<String, List<Commit>>>) () -> {
+                List<Commit> commits = githubClient.getCommitsBetweenBranches(
+                    component.getRepoUrl(),
+                    defaultBranch,               // head
+                    component.getPreviousBranch() // base
+                );
+                return Map.entry(component.getComponentName(), commits);
+            })
+            .collect(Collectors.toList());
 
-## Acceptance Criteria
-
-Comment out duplicate implementation.
-
-Do not delete.
-
-Reuse Prefetch HEAD SHA.
-
----
-
-# Enhancement 9 – Remove Branch Repository
-
-Current Branch Repository is no longer required.
-
----
-
-## Acceptance Criteria
-
-Remove:
-
-- Entity
-- Repository
-- Service
-- Controller
-- Database Table
-- DTO
-- API
-- Configuration
-
-Branch resolution shall use Components table.
-
----
-
-# Enhancement 10 – Commit Validation Overrides
-
-Current manual overrides must come from
-
-commit_validations
-
----
+    return executeInParallel(tasks); // reuse existing ExecutorService pattern
+}
+```
 
 ## Acceptance Criteria
 
-Primary Key:
+```
+AC-6.1
+GIVEN a component with previousBranch = "release/26.06.14.rel"
+AND resolved default branch = "master"
+WHEN prefetchPreviousReleaseBranchAndMainCommits runs
+THEN it fetches commits with head=master, base=release/26.06.14.rel
 
-- Team Key
-- Fix Version
-- Commit SHA
+AC-6.2
+GIVEN 50 deployable components
+WHEN this new prefetch method runs
+THEN all 50 component fetches execute in parallel via ExecutorService
+AND total execution time is comparable to the existing prefetch steps (not sequential)
+
+AC-6.3
+GIVEN the three prefetch methods (commits, current+main, previous+main)
+WHEN Generate Report executes
+THEN all three complete before commit analysis (Section 13) begins
+
+AC-6.4
+GIVEN the new method follows the existing return type pattern
+WHEN its output is inspected
+THEN it returns Map<String, List<Commit>> keyed by component name,
+consistent with the other two prefetch methods
+```
+
+---
 
 ---
 
-Read:
+# 7. New Table — `commit_analysis_status`
 
-- Manual Override
-- Approval Status
-- Requested By
-- Requested Date
-- Approved By
-- Approved Date
-- Override Reason
+## Background
 
----
+During commit analysis, components are iterated and some are skipped from analysis (excluded, user-excluded, branch cut pending/missing, etc.). Currently, when a component is skipped, no record of that decision or reason is persisted — the information is lost. Additionally, when analysis IS performed, only in-memory/log data captures the resulting counts (compliant, non-compliant, reverted, cherry-picked, etc.) — nothing is durably stored per component.
 
-Apply these overrides during report generation.
+## Problem Statement
 
----
+There is no queryable, persistent record of commit analysis outcomes or skip reasons per component. This is needed both for auditability and to power a new UI tab (Section 8).
 
-Future Commit Comments table can be retired.
+## Database Design
 
----
+```sql
+CREATE TABLE commit_analysis_status (
+    id                            BIGINT PRIMARY KEY AUTO_INCREMENT,
 
-# Enhancement 11 – Commit Table Cleanup
+    -- Identity (composite key)
+    team_key                      VARCHAR(50)  NOT NULL,
+    fix_version                   VARCHAR(200) NOT NULL,
+    component_name                VARCHAR(255) NOT NULL,
 
-Remove Project Key column.
+    -- Component Context (denormalized for direct UI display without extra joins)
+    component_type                VARCHAR(50)  NULL,   -- SERVICE | LIBRARY | HELM | SYSTEM
+    scrum_teams                   TEXT NULL,            -- JSON array, copied from components table
+    stories                       TEXT NULL,            -- JSON array, copied from components table
 
----
+    -- Analysis Execution State
+    analysis_performed            BOOLEAN NOT NULL DEFAULT FALSE,
+    skip_reason                   VARCHAR(100) NULL,
+        -- BRANCH_CUT_PENDING | BRANCH_CUT_MISSING | SYSTEM_EXCLUDED
+        -- | USER_EXCLUDED | LIBRARY | OTHER
+
+    -- Analysis Metrics (populated only when analysis_performed = TRUE)
+    total_commits_analyzed        INT NULL,
+    compliant_count                INT NULL,
+    non_compliant_count            INT NULL,
+    reverted_count                  INT NULL,
+    cherry_picked_count             INT NULL,
+    missing_cherry_pick_count       INT NULL,
+    direct_release_commit_count     INT NULL,
+    duplicate_commit_count          INT NULL,
+    invalid_story_mapping_count     INT NULL,
+
+    -- Overall Result
+    overall_status                 VARCHAR(50) NULL,
+        -- COMPLIANT | NON_COMPLIANT | PARTIAL | NOT_ANALYZED
+
+    -- Timestamps (UTC)
+    last_analyzed_at               TIMESTAMP NULL,
+
+    -- Audit
+    created_by                     VARCHAR(255) NOT NULL,
+    created_date                   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by                     VARCHAR(255) NOT NULL,
+    updated_date                   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_commit_analysis_status
+        UNIQUE (team_key, fix_version, component_name)
+);
+
+-- Indexes
+CREATE INDEX idx_cas_team_fix
+    ON commit_analysis_status(team_key, fix_version);
+
+CREATE INDEX idx_cas_status
+    ON commit_analysis_status(team_key, fix_version, overall_status);
+
+CREATE INDEX idx_cas_skip_reason
+    ON commit_analysis_status(team_key, fix_version, skip_reason);
+```
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-7.1 | Create `commit_analysis_status` table with the schema above. |
+| FR-7.2 | **Every** component for a given team + fix version must get a row — including Libraries, System Excluded, and User Excluded — not only components that undergo full analysis. |
+| FR-7.3 | When a component is skipped from analysis, set `analysis_performed = FALSE` and populate `skip_reason` with the specific cause. |
+| FR-7.4 | When analysis is performed, populate all metric columns and set `analysis_performed = TRUE`. |
+| FR-7.5 | `scrum_teams` and `stories` must be copied from the `components` table at the time of analysis — this avoids a join when the UI tab (Section 8) loads. |
+| FR-7.6 | This table must be **UPSERTed** — a re-run of Generate Report for the same team + fix version must update existing rows, not create duplicates (enforced by the unique constraint). |
+| FR-7.7 | `overall_status` must be derived from the metric counts: `COMPLIANT` if `non_compliant_count = 0` and analysis was performed; `NON_COMPLIANT` if `non_compliant_count > 0`; `NOT_ANALYZED` if `analysis_performed = FALSE`. |
 
 ## Acceptance Criteria
 
-Commit table shall contain Team Key only.
+```
+AC-7.1
+GIVEN Generate Report runs for team OC, fix version 26.7.4, with 80 components
+WHEN commit analysis completes
+THEN commit_analysis_status has exactly 80 rows for (OC, 26.7.4)
+— one per component, regardless of whether analysis was performed or skipped
 
-Project Key removed completely.
+AC-7.2
+GIVEN a component is skipped because branch cut is pending
+WHEN its row is written
+THEN analysis_performed = FALSE
+AND skip_reason = 'BRANCH_CUT_PENDING'
+AND all metric columns are NULL
+
+AC-7.3
+GIVEN a component undergoes full analysis with 2 reverted commits and 1 missing cherry-pick
+WHEN its row is written
+THEN analysis_performed = TRUE
+AND reverted_count = 2
+AND missing_cherry_pick_count = 1
+AND overall_status = 'NON_COMPLIANT' (since non_compliant_count > 0)
+
+AC-7.4
+GIVEN Generate Report is re-run for the same team + fix version
+WHEN commit_analysis_status is written again
+THEN existing rows are updated (UPSERT) — no duplicate rows are created
+
+AC-7.5
+GIVEN a component has scrum teams ["Team Alpha", "Team Beta"] in the components table
+WHEN its commit_analysis_status row is written
+THEN scrum_teams contains the same JSON array, copied at analysis time
+```
 
 ---
 
-# Enhancement 12 – Lifecycle Classification
-
-Current lifecycle analysis uses incorrect comparison commits.
-
 ---
+
+# 8. New Release Readiness Tab — Commit Analysis
+
+## Background
+
+A new tab must be added to the Release Readiness page: **Commit Analysis**, positioned after **Branch Cut Validation**. This gives users visibility into commit-level compliance without needing to dig through logs.
+
+## Tab Order (Final)
+
+```
+Release Readiness
+  ├── Story Status
+  ├── Branch Cut Validation
+  ├── Commit Analysis        ← NEW
+  └── Deployment Readiness
+```
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-8.1 | Add a "Commit Analysis" tab positioned immediately after "Branch Cut Validation" and before "Deployment Readiness". |
+| FR-8.2 | Data must load from the `commit_analysis_status` table, filtered by the top-level selected Team Key and Fix Version — no live recomputation on tab load. |
+| FR-8.3 | The table must display: Component Name, Component Type, Scrum Teams (+N pattern per Bundle 1 Section 8), Stories (+N pattern), Overall Status, and key metric counts. |
+| FR-8.4 | Components with `analysis_performed = FALSE` must clearly show their `skip_reason` in place of metrics. |
+| FR-8.5 | A **Scrum Team filter** must be present, using the same data-driven dropdown pattern established for Branch Cut Validation (Bundle 1 Section 10) — options derived from currently visible rows only. |
+| FR-8.6 | An "Invalid Only" or "Non-Compliant Only" toggle must be available, consistent with the pattern used elsewhere. |
+| FR-8.7 | Clicking a component row (or an info icon) should reveal the detailed metric breakdown (reverted, cherry-picked, missing, duplicate, invalid story mapping counts) — via tooltip or expandable row. |
+| FR-8.8 | Font sizing and spacing must follow the global UI standards established in Bundle 2 Section 5 (14px body minimum, etc.). |
 
 ## Acceptance Criteria
 
-Instead of:
+```
+AC-8.1
+GIVEN the Release Readiness page tabs are rendered
+WHEN the user views the tab order
+THEN it reads: Story Status, Branch Cut Validation, Commit Analysis, Deployment Readiness
 
-Current → Main
+AC-8.2
+GIVEN Team OC and Fix Version 26.7.4 are selected
+WHEN the user clicks the Commit Analysis tab
+THEN data loads directly from commit_analysis_status for (OC, 26.7.4)
+AND no live GitHub or Kubernetes call is triggered
 
-Use:
+AC-8.3
+GIVEN a component was skipped due to BRANCH_CUT_PENDING
+WHEN its row renders in the Commit Analysis tab
+THEN the skip reason "Branch Cut Pending" is clearly shown
+AND no misleading zero-count metrics are displayed
 
-Previous → Main
+AC-8.4
+GIVEN the Scrum Team filter is opened
+WHEN the dropdown renders
+THEN only teams present in the currently visible rows appear as options
 
-commit collection.
+AC-8.5
+GIVEN the "Non-Compliant Only" toggle is activated
+WHEN the table filters
+THEN only components with overall_status = NON_COMPLIANT are shown
 
----
-
-Pass new SHA list into
-
-classifyCommit()
-
----
-
-Review ordering of lifecycle classification conditions.
-
-Ensure most specific conditions execute first.
-
-Refactor condition ordering where required.
-
----
-
-# Enhancement 13 – Persist Analysis Summary
-
-After component analysis,
-
-store summary into
-
-commit_analysis_status.
-
----
-
-Examples
-
-Store:
-
-- Valid
-- Invalid
-- Reverted
-- Cherry Pick
-- Direct Release
-- Missing
-- Warnings
-
-per component.
+AC-8.6
+GIVEN a component row with non_compliant metrics
+WHEN the user views the detail breakdown
+THEN reverted, cherry-picked, missing cherry-pick, duplicate, and invalid story mapping
+counts are all visible
+```
 
 ---
 
-# Enhancement 14 – TODO Cleanup
-
-Developer TODOs should only disappear after implementation.
-
 ---
+
+# 9. Comment Out Redundant Legacy Code — Per-Component Head SHA Call
+
+## Background
+
+Bundle 3 Section 10 originally introduced logic to populate `components.release_branch_latest_commit_id` (then referred to more generally) using a dedicated per-component GitHub branch-head-SHA call. Section 3 of this bundle now derives that same value for free from the prefetch commits result. The original per-component call, and any code that depended specifically on its standalone invocation, is now redundant.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-9.1 | **Do not delete** the original per-component head-SHA fetch code and its directly dependent ("downlined") code. |
+| FR-9.2 | **Comment out** this code block entirely. |
+| FR-9.3 | Add a clear marker comment at the top of the commented block explaining the reason and pointing to its replacement. |
+| FR-9.4 | Ensure the commented-out code does not interfere with compilation (fully commented, not conditionally disabled via a flag). |
+| FR-9.5 | This code remains commented for a future cleanup pass — do not schedule automatic deletion in this bundle. |
+
+## Marker Comment Format
+
+```java
+// ==========================================================================
+// COMMENTED OUT — Bundle 5, Section 3/9
+// Reason: Redundant per-component GitHub head-SHA call. This logic is now
+// replaced by deriving the head SHA from the already-fetched prefetch
+// commits list (see prefetchCommits() output -> headShaByComponent map).
+// Retained here temporarily for reference/rollback safety.
+// Scheduled for hard deletion in a future cleanup bundle once validated.
+// ==========================================================================
+//
+// String headSha = githubClient.getBranchHeadSha(component.getRepoUrl(), releaseBranch);
+// ... (any directly dependent code below, also commented)
+//
+// ==========================================================================
+```
 
 ## Acceptance Criteria
 
-If TODO fully implemented:
+```
+AC-9.1
+GIVEN the redundant head-SHA call code is identified
+WHEN the change is applied
+THEN the code is commented out, not deleted
 
-Remove TODO.
+AC-9.2
+GIVEN the commented block
+WHEN a developer reads it
+THEN a clear marker explains why it's commented and what replaced it
 
----
+AC-9.3
+GIVEN the code is commented out
+WHEN the application builds
+THEN it compiles successfully with no errors related to this block
 
-If partially implemented:
-
-Retain TODO.
-
----
-
-Never delete future TODOs.
-
----
-
-Only completed TODOs may be removed.
-
----
-
-# Performance Requirements
-
-- Eliminate duplicate GitHub calls.
-- Minimize repository lookups.
-- Reuse Prefetch cache.
-- Reuse metadata.
-- Reduce report execution time.
-- Preserve asynchronous processing.
+AC-9.4
+GIVEN the application runs after this change
+WHEN release_branch_latest_commit_id is populated
+THEN it is populated exclusively via the Section 3 derived-map approach,
+confirming the commented code is truly unused
+```
 
 ---
 
-# Logging Requirements
+---
 
-INFO Logs
+# 10. Remove Branch Repository — Complete Hard Removal
 
-- Generate Report Started
-- Prefetch Completed
-- Third Commit Collection Completed
-- Commit Analysis Started
-- Commit Analysis Completed
-- Commit Analysis Metadata Saved
-- Overrides Loaded
-- Generate Report Completed
+## Background
 
-DEBUG Logs
+This finalizes the recommendation from the earlier DB Analysis document (Section 2.9, "release_branches (Standalone Table)"). All release branch data is already present on the `components` table (`release_branch`, `previous_branch`, `production_branch`, `production_commit_anchor`, `resolution_source`). The standalone branch repository table and its associated code are confirmed unnecessary and must be fully removed — no backward-compatibility layer is needed.
 
-- HEAD SHA Resolution
-- Commit Collection Sizes
-- Lifecycle Classification
-- Override Matching
-- Metadata Persistence
-- Condition Evaluation
-- Branch Resolution
+## Removal Checklist
+
+```
+□ Remove the branch repository entity class (e.g., ReleaseBranch / BranchRepository entity)
+□ Remove the branch repository JPA repository interface
+□ Remove the branch repository service class and all its methods
+□ Remove all controller endpoints that read from or write to the branch repository
+□ Remove all call sites in Generate Report / Deployment / Branch Cut Validation
+  that reference the branch repository — redirect to components table fields
+□ Remove the branch repository database table (migration: DROP TABLE)
+□ Remove any DTOs specific to the branch repository
+□ Remove any UI code that references branch-repository-specific fields
+  (should already be reading from components-derived data)
+□ Run a global search for the branch repository's class/table name —
+  zero results in active code after removal
+```
+
+## Database Migration
+
+```sql
+-- Hard removal — no backward compatibility, no data migration needed
+-- (all relevant data already exists in the components table)
+DROP TABLE IF EXISTS release_branches;
+```
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-10.1 | Fully remove the branch repository table, entity, repository, service, and controller code. |
+| FR-10.2 | Confirm every consumer of branch repository data is redirected to the equivalent `components` table field before removal. |
+| FR-10.3 | No migration script for preserving old branch repository data is required — this is a clean drop. |
+| FR-10.4 | Verify no other module silently depended on this table (Generate Report, Deployment Section, Branch Cut Validation) before dropping. |
+
+## Acceptance Criteria
+
+```
+AC-10.1
+GIVEN the branch repository table, entity, and service are removed
+WHEN the application starts
+THEN it compiles and runs without errors
+
+AC-10.2
+GIVEN Generate Report, Deployment Refresh, and Branch Cut Validation are tested
+WHEN they read release branch information
+THEN all reads come from the components table
+AND none reference the removed branch repository
+
+AC-10.3
+GIVEN a global code search for the branch repository class/table name
+WHEN results are reviewed
+THEN zero references remain in active code
+
+AC-10.4
+GIVEN the DROP TABLE migration runs
+WHEN the database schema is inspected afterward
+THEN the release_branches table no longer exists
+```
 
 ---
 
-# Definition of Done (DoD)
+---
 
-The enhancement is complete only if all of the following are satisfied:
+# 11. `commit_validations` Table — Corrected Purpose & Proper Implementation
 
-- [ ] Project Key removed from Generate Report request payload.
-- [ ] Team Key replaces Project Key throughout report generation.
-- [ ] Project Key retained only for iTrack retrieval where applicable.
-- [ ] Scan Job implementation removed completely.
-- [ ] UI displays only asynchronous Job history.
-- [ ] Prefetch Commits returns both commit list and latest HEAD SHA.
-- [ ] Duplicate GitHub HEAD SHA calls removed.
-- [ ] Default Branch configurable through Team Configuration.
-- [ ] Third commit collection (Previous → Main) implemented.
-- [ ] Commit lifecycle analysis updated to use the new commit collection.
-- [ ] Lifecycle condition ordering reviewed and corrected.
-- [ ] New `commit_analysis_status` table created.
-- [ ] Analysis metadata stored for every component.
-- [ ] Skipped analysis reasons persisted.
-- [ ] Commit Analysis tab added to Release Readiness.
-- [ ] Commit Analysis tab loads data only from database.
-- [ ] Team-level filtering implemented in Commit Analysis.
-- [ ] Branch Repository removed completely.
-- [ ] Commit Validation overrides loaded using Team Key + Fix Version + Commit SHA.
-- [ ] Commit table migrated to Team Key only.
-- [ ] Duplicate branch HEAD population logic commented out.
-- [ ] Completed TODO comments removed.
-- [ ] Pending TODO comments retained.
-- [ ] Existing functionality remains unchanged.
-- [ ] No regression introduced.
-- [ ] GitHub API calls reduced.
-- [ ] Database migration scripts updated.
-- [ ] Unit tests and integration tests pass.
-- [ ] End-to-end report generation verified successfully.
+## Background
+
+> See Reconciliation Notes at the top of this document. The earlier DB Analysis recommendation to remove this table was **incorrect** — its actual purpose is to store manual override decisions on commit compliance/validation status, including who requested and approved the override.
+
+## Database Design
+
+```sql
+CREATE TABLE commit_validations (
+    id                       BIGINT PRIMARY KEY AUTO_INCREMENT,
+
+    -- Identity (composite key)
+    team_key                 VARCHAR(50)  NOT NULL,
+    fix_version               VARCHAR(200) NOT NULL,
+    commit_sha                 VARCHAR(40)  NOT NULL,
+
+    -- Override Details
+    overridden_status           VARCHAR(50)  NULL,   -- the manually-set status
+    override_reason             TEXT NULL,
+    override_requested_by       VARCHAR(255) NULL,
+    override_requested_at        TIMESTAMP NULL,
+    override_approved_by         VARCHAR(255) NULL,
+    override_approved_at          TIMESTAMP NULL,
+
+    -- Audit
+    created_by                    VARCHAR(255) NOT NULL,
+    created_date                   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by                      VARCHAR(255) NOT NULL,
+    updated_date                     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_commit_validations
+        UNIQUE (team_key, fix_version, commit_sha)
+);
+
+CREATE INDEX idx_commit_validations_lookup
+    ON commit_validations(team_key, fix_version, commit_sha);
+```
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-11.1 | Retain and properly implement the `commit_validations` table using the schema above (correcting/aligning any existing partial schema to match). |
+| FR-11.2 | The composite key is `(team_key, fix_version, commit_sha)` — this is the lookup key everywhere this table is consulted. |
+| FR-11.3 | During the "fetch overrides" step of Generate Report / commit analysis, query this table for any existing manual overrides matching the current team + fix version + commit SHAs being processed. |
+| FR-11.4 | When a manual override exists for a commit, its `overridden_status` must take precedence over the system-computed compliance status for that commit in the analysis output. |
+| FR-11.5 | This table is independent of — and must not be confused with — the `commit_comments` table, which is being removed (its data merged into `commits.commit_message` per the DB Analysis document, unchanged by this bundle). |
+| FR-11.6 | Provide a service method (e.g., `getOverridesForCommits(teamKey, fixVersion, List<String> commitShas)`) that batch-fetches applicable overrides in a single query — do not query per-commit in a loop. |
+
+## Acceptance Criteria
+
+```
+AC-11.1
+GIVEN a manual override exists for commit SHA "abc123..." with overridden_status = "COMPLIANT"
+AND the system's computed status for that commit would otherwise be "NON_COMPLIANT"
+WHEN commit analysis runs
+THEN the final status used is "COMPLIANT" (the override wins)
+
+AC-11.2
+GIVEN no override exists for a given commit
+WHEN commit analysis runs
+THEN the system-computed status is used as-is
+
+AC-11.3
+GIVEN 200 commits are being analyzed for a team + fix version
+WHEN overrides are fetched
+THEN a single batch query retrieves all applicable overrides
+— not 200 individual queries
+
+AC-11.4
+GIVEN the commit_validations schema is reviewed
+WHEN compared against the existing table (if partially implemented)
+THEN all fields listed in FR-11.1 are present and correctly typed
+
+AC-11.5
+GIVEN the commit_comments table removal proceeds separately (per DB Analysis doc)
+WHEN commit_validations is reviewed
+THEN it remains untouched and fully functional — the two tables serve different purposes
+```
+
+---
+
+---
+
+# 12. Remove `project_key` Column from `commits` Table
+
+## Background
+
+Consistent with Section 1's Team Key migration, the `commits` table currently stores a `project_key` column. This must be removed — `team_key` is the correct and sufficient identifier for this table.
+
+## Database Migration
+
+```sql
+ALTER TABLE commits
+DROP COLUMN project_key;
+
+-- Ensure team_key remains NOT NULL and is the correct scoping identifier
+-- (should already exist per prior conventions; verify before dropping)
+```
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-12.1 | Remove the `project_key` column from the `commits` table via migration. |
+| FR-12.2 | Remove all code that reads or writes `project_key` when persisting or querying commits. |
+| FR-12.3 | Confirm `team_key` is already present and correctly populated on every `commits` row before dropping `project_key` — if not, this must be fixed first. |
+| FR-12.4 | Update any DTOs or mappers referencing `commit.projectKey`. |
+
+## Acceptance Criteria
+
+```
+AC-12.1
+GIVEN the migration runs
+WHEN the commits table schema is inspected
+THEN project_key column no longer exists
+
+AC-12.2
+GIVEN commits are saved after this change
+WHEN a new commit record is persisted
+THEN it is scoped and queried using team_key only
+
+AC-12.3
+GIVEN the codebase is searched for "commit.getProjectKey" or equivalent
+WHEN results are reviewed
+THEN zero references remain
+
+AC-12.4
+GIVEN existing commits data (pre-migration)
+WHEN the migration is applied
+THEN team_key values are verified populated correctly before project_key is dropped
+```
+
+---
+
+---
+
+# 13. Component Lifecycle Analysis — Updated Commit List Input
+
+## Background
+
+The component lifecycle analysis step (`analyzeComponentLifecycle()`, which internally calls `classifyCommit()`) currently receives the **current branch & main commits** list (renamed in Section 5) as an input. With the introduction of the new **previous release branch & main commits** list (Section 6), this input needs to change.
+
+## ⚠️ Requires Verification During Implementation
+
+The verbal walkthrough on this point contained some ambiguity about whether the new previous-branch-and-main list **replaces** the current-branch-and-main list entirely, or is passed **in addition to** it. The clear, repeated instruction is that the new previous-branch-and-main commits list **must** be passed into this analysis. Before finalizing the method signature, the implementer must:
+
+1. Trace how the currently-passed commit list is actually used inside `classifyCommit()`.
+2. Determine whether that usage logically requires the current-branch-and-main list, the new previous-branch-and-main list, or both.
+3. If both are genuinely needed for correct classification (e.g., one list to identify candidate commits, the other as a reference set to check against), update the method signature to accept both explicitly, with clearly named parameters — do not silently drop a list that turns out to be required.
+4. Document the final decision in a code comment at the method signature explaining what each parameter represents.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-13.1 | The previous release branch & main commits list (Section 6 output) must be passed into `analyzeComponentLifecycle()` / `classifyCommit()`. |
+| FR-13.2 | Follow the verification steps above to determine whether the current-branch-and-main list is still required as a second input. |
+| FR-13.3 | Update the method signature with clearly named parameters reflecting exactly which commit sets are passed (e.g., `previousBranchMainCommits`, and if retained, `currentBranchMainCommits`). |
+| FR-13.4 | Update all call sites to match the finalized signature. |
+| FR-13.5 | Add/update Javadoc on `classifyCommit()` explaining the purpose of each commit list parameter. |
+
+## Acceptance Criteria
+
+```
+AC-13.1
+GIVEN the new previous-branch-and-main commits list is available (Section 6)
+WHEN analyzeComponentLifecycle() executes
+THEN this new list is passed into classifyCommit()
+
+AC-13.2
+GIVEN the verification steps in this section are followed
+WHEN the final method signature is implemented
+THEN it is documented (via Javadoc/comment) explaining exactly which
+commit list(s) are passed and why
+
+AC-13.3
+GIVEN the commit classification logic runs with the updated inputs
+WHEN existing test cases (or manually validated components) are checked
+THEN classification results (reverted, cherry-picked, missing, etc.)
+are equal to or more accurate than before this change
+— no regression in classification correctness
+
+AC-13.4
+GIVEN the method signature changes
+WHEN all call sites are reviewed
+THEN every caller is updated consistently — no stale calls remain
+```
+
+---
+
+---
+
+# 14. `classifyCommit` Method — Condition Order Investigation
+
+## Background
+
+Within `classifyCommit()`, a condition checking roughly "commit does not exist on master AND masterMatch == null" is suspected of being evaluated too early in the method, potentially causing incorrect classification for the common case (where a commit DOES exist on master). This needs investigation and correction now that the method's inputs are changing (Section 13).
+
+## Investigation Task
+
+This is explicitly flagged by the business owner as requiring analysis rather than a predetermined fix. The implementer must:
+
+1. Read the full `classifyCommit()` method and enumerate every conditional branch in order.
+2. Identify the specific condition referenced ("not existed on master" combined with "masterMatch == null").
+3. Determine, given the updated inputs from Section 13, which classification outcome this condition is meant to represent, and how frequently each branch is expected to be hit in real data (the expectation is that "exists on master" is the common case).
+4. Reorder the conditional chain so that the most common, primary classification path is evaluated first, and edge-case/fallback conditions (like the one flagged) are evaluated later — without changing the correctness of any individual condition's logic.
+5. Add inline comments explaining the reasoning for the final order, so future readers understand why the conditions are sequenced as they are.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-14.1 | Enumerate and document all conditional branches in `classifyCommit()` before making changes. |
+| FR-14.2 | Reorder conditions so common-case logic (commit exists on master) precedes rare edge-case logic (commit not on master AND masterMatch is null), unless doing so would change correctness — correctness takes priority over ordering. |
+| FR-14.3 | Do not alter the internal logic of any individual condition without explicit confirmation that it's part of this fix — only reorder unless a genuine bug is found in the condition itself. |
+| FR-14.4 | Add code comments explaining the final condition order and reasoning. |
+| FR-14.5 | Validate the reordering against a representative sample of components (a mix of clean merges, reverted commits, cherry-picks, and direct commits) to confirm classification outcomes are correct or improved. |
+
+## Acceptance Criteria
+
+```
+AC-14.1
+GIVEN the classifyCommit() method is reviewed
+WHEN all conditional branches are enumerated
+THEN a clear list of conditions and their order is documented (in code comments
+or a brief note accompanying the PR)
+
+AC-14.2
+GIVEN the conditions are reordered
+WHEN a commit that exists on master is classified
+THEN it is correctly identified via the primary/common-case path
+— not incorrectly falling through to the edge-case branch
+
+AC-14.3
+GIVEN a commit that genuinely does not exist on master
+AND masterMatch is null
+WHEN classification runs
+THEN it is still correctly handled by the edge-case branch,
+now evaluated later in the sequence
+
+AC-14.4
+GIVEN the reordering is complete
+WHEN a representative sample of components (reverted, cherry-picked,
+direct commits, clean merges) is tested
+THEN classification results are correct for all sample cases
+
+AC-14.5
+GIVEN the final code is reviewed
+WHEN the condition order is inspected
+THEN inline comments explain why the conditions are sequenced as they are
+```
+
+---
+
+---
+
+# 15. TODO Comment Discipline — Scoped, Requirement-Matched Removal
+
+## Background
+
+This refines the general TODO audit approach from Bundle 4 Section 3, specifically for the requirements described in this document. Multiple TODO comments in the code correspond directly to items covered in this bundle. Some other TODOs relate to future work not being addressed now.
+
+## Functional Requirements
+
+| # | Requirement |
+|---|---|
+| FR-15.1 | For each TODO comment in the code that corresponds to a requirement fully implemented in this bundle, **remove that specific TODO comment**. |
+| FR-15.2 | For TODO comments that correspond to a requirement **partially** addressed in this bundle, remove only the portion of the TODO's content that has been completed; leave a clear, updated TODO describing what remains. |
+| FR-15.3 | For TODO comments explicitly marked (per this session) as **not being worked on now** — deferred to a future step — leave the TODO **fully intact**, unchanged. |
+| FR-15.4 | Do **not** perform a blanket removal of all TODOs — this is a precise, requirement-by-requirement matching exercise, not a general cleanup pass. |
+| FR-15.5 | Where a TODO is removed, the surrounding code must reflect the completed implementation — a removed TODO with no corresponding code change is not acceptable. |
+
+## Matching Guide
+
+```
+For each TODO found in scope:
+
+  Does this TODO describe a requirement covered in Sections 1–14 above?
+    NO  → Leave TODO untouched.
+    YES → Continue:
+
+      Is the requirement FULLY implemented as specified?
+        YES → Remove the TODO comment entirely.
+        NO (partial) → Update the TODO to describe only the remaining gap.
+                        Remove the portion already completed.
+
+      Was this specific TODO flagged in this session as
+      "not being worked on right now / next steps"?
+        YES → Leave TODO fully intact regardless of the above.
+```
+
+## Acceptance Criteria
+
+```
+AC-15.1
+GIVEN a TODO comment describes "remove project key, use team key"
+AND Section 1 of this bundle is fully implemented
+WHEN the code is reviewed
+THEN that specific TODO comment is removed
+
+AC-15.2
+GIVEN a TODO comment describes a requirement only partially completed in this bundle
+WHEN the code is reviewed
+THEN the TODO is updated to reflect only the remaining, unfinished portion
+
+AC-15.3
+GIVEN a TODO was explicitly flagged as deferred / not being worked on in this session
+WHEN the code is reviewed
+THEN that TODO remains fully intact, unmodified
+
+AC-15.4
+GIVEN the full set of TODOs in the affected files is reviewed
+WHEN the matching guide is applied
+THEN no TODO is removed without a corresponding, verifiable code change
+implementing what it described
+```
+
+---
+
+---
+
+# Summary — Enhancement Bundle 5 at a Glance
+
+| # | Enhancement | Scope | Type |
+|---|---|---|---|
+| 1 | Remove Project Key from UI/DTOs — Team Key is sole identifier | Generate Report Controller/Service | Backend |
+| 2 | Eliminate redundant `ScanJob` entity — standardize on primary async job | Generate Report / Job Tracking | Backend + DB |
+| 3 | Derive head SHA from prefetch commits — eliminate redundant GitHub call | GitHub Integration | Backend (Performance) |
+| 4 | Default branch from team config YAML — remove hardcoded "master" | GitHub Integration / Config | Backend |
+| 5 | Rename prefetch main commits → prefetch current branch & main commits | GitHub Integration | Backend (Clarity) |
+| 6 | New method — prefetch previous release branch & main commits | GitHub Integration | Backend |
+| 7 | New table `commit_analysis_status` — per-component tracking + metrics | Database | DB |
+| 8 | New "Commit Analysis" tab in Release Readiness | Release Readiness UI | Frontend + Backend |
+| 9 | Comment out (not delete) redundant legacy head-SHA code | GitHub Integration | Backend (Cleanup) |
+| 10 | Hard-remove Branch Repository table + all code | Database | Backend + DB |
+| 11 | Correct & implement `commit_validations` — manual override workflow | Database / Commit Analysis | Backend + DB |
+| 12 | Remove `project_key` column from `commits` table | Database | DB |
+| 13 | Update lifecycle analysis input — previous branch & main commits | Commit Analysis | Backend |
+| 14 | Investigate & correct `classifyCommit` condition order | Commit Analysis | Backend |
+| 15 | Scoped TODO removal — matched to completed requirements only | Entire Codebase | Code Quality |
+
+---
+
+# Database Changes Summary
+
+| Table | Change | Type |
+|---|---|---|
+| `commit_analysis_status` | **NEW TABLE** — full schema per Section 7 | Addition |
+| `commit_validations` | **CORRECTED** — proper schema implemented per Section 11 (supersedes earlier removal recommendation) | Correction |
+| `release_branches` | **DROPPED** — hard removal, no compatibility layer | Removal |
+| `ScanJob` (table/entity) | **DROPPED** — eliminated in favor of primary async job table | Removal |
+| `commits.project_key` | **COLUMN DROPPED** | Removal |
+| `components.release_branch_latest_commit_id` | Populated via new derivation method (Section 3) instead of dedicated call | Behavior Change (no schema change — column already exists per Bundle 3) |
+| Team Config YAML | **NEW FIELD** — `defaultBranch` per team | Config Addition |
+
+---
+
+# Definition of Done
+
+## Project Key → Team Key
+- [ ] `projectKey` removed from Generate Report request DTO
+- [ ] `projectKey` resolved server-side from YAML for iTrack calls only
+- [ ] `projectKey` removed from response DTOs (unless explicitly justified)
+- [ ] Global search confirms no stray `projectKey` usage outside iTrack resolution
+
+## ScanJob Removal
+- [ ] `ScanJob` entity, repository, service, controller code fully removed
+- [ ] `ScanJob` database table dropped
+- [ ] Generate Report uses only the primary async job tracking table
+- [ ] UI shows a single unified job status — no ScanJob-specific UI remains
+- [ ] Global search confirms zero `ScanJob` references
+
+## GitHub Call Optimization
+- [ ] Redundant per-component head-SHA call removed from active execution path
+- [ ] Head SHA correctly derived from prefetch commits (first element, newest-first)
+- [ ] Merge commits included in head SHA derivation (not filtered)
+- [ ] GitHub API call count reduced as expected for large component sets
+
+## Default Branch Config
+- [ ] `defaultBranch` field added to team config YAML with fallback to "master"
+- [ ] All hardcoded "master" literals removed from GitHub comparison call sites
+
+## Rename & New Prefetch Method
+- [ ] `prefetchMainCommits` renamed to `prefetchCurrentBranchAndMainCommits` (or equivalent), all call sites updated
+- [ ] New `prefetchPreviousReleaseBranchAndMainCommits` method implemented, parallel execution confirmed
+
+## Commit Analysis Table & Tab
+- [ ] `commit_analysis_status` table created with full schema and indexes
+- [ ] Every component (including skipped ones) gets a row with correct skip reason or metrics
+- [ ] UPSERT behavior confirmed on repeated Generate Report runs
+- [ ] "Commit Analysis" tab added to Release Readiness, positioned after Branch Cut Validation
+- [ ] Tab loads from DB only — no live recomputation
+- [ ] Scrum Team filter implemented, data-driven per established pattern
+- [ ] Non-Compliant Only toggle implemented
+
+## Legacy Code Cleanup
+- [ ] Redundant head-SHA code commented out (not deleted) with clear marker
+- [ ] Branch Repository fully and cleanly removed — table, entity, service, controller
+- [ ] No backward-compatibility code left behind for Branch Repository
+
+## Commit Validations
+- [ ] `commit_validations` schema corrected/implemented per Section 11
+- [ ] Manual overrides correctly take precedence over computed status
+- [ ] Batch fetch (not per-commit loop) used to retrieve overrides
+- [ ] `commit_comments` table removal proceeds independently, unaffected by this correction
+
+## Commits Table Cleanup
+- [ ] `project_key` column dropped from `commits` table
+- [ ] All code reading/writing `commits.projectKey` updated to use `teamKey`
+
+## Lifecycle Analysis & Classification
+- [ ] `analyzeComponentLifecycle()` / `classifyCommit()` receive the new previous-branch-and-main commits list
+- [ ] Method signature finalized and documented per the verification steps in Section 13
+- [ ] `classifyCommit()` condition order investigated, reordered for common-case-first evaluation, and documented
+- [ ] Classification correctness validated against representative sample components
+
+## TODO Discipline
+- [ ] TODOs matching fully-completed requirements removed
+- [ ] TODOs matching partially-completed requirements updated to reflect remaining gap
+- [ ] TODOs explicitly deferred in this session left fully intact
+- [ ] No blanket/unscoped TODO removal performed
+
+## No Regressions
+- [ ] Deployment Refresh (Bundle 3/4) unaffected by ScanJob removal
+- [ ] Branch Cut Validation unaffected by Branch Repository removal
+- [ ] Review Commits unaffected by commit list renaming/restructuring
+- [ ] Application compiles and runs cleanly after all removals
+
+---
+
+*Document Version: 5.0 — Ready for Devin / Claude Opus 4.6 Thinking Implementation*
+*Verify all method/table names against actual codebase before implementation — names above are reconstructed from verbal walkthrough.*
