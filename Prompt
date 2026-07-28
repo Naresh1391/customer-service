@@ -1,20 +1,29 @@
-# Phase XX – Release Readiness & Component Refresh Metadata Enhancements
+# Phase XX – Generate Report Refactoring, Team Key Migration & Commit Analysis Enhancements
 
 ## Objective
 
-Improve the Deployment Readiness page, Component Refresh metadata handling, and overall UI consistency by ensuring that deployment data is always loaded correctly from the database, refresh operations behave consistently, and users can clearly identify when the component information was last refreshed.
+Refactor the Generate Report workflow to:
+
+- Eliminate Project Key dependency.
+- Standardize on Team Key across the application.
+- Remove duplicate Scan Job implementation.
+- Reduce GitHub API calls.
+- Improve commit analysis accuracy.
+- Introduce Commit Analysis metadata persistence.
+- Simplify database model.
+- Improve maintainability without changing existing functionality.
 
 ---
 
-# Enhancement 1 – Deployment Readiness should load existing DB data
+# Enhancement 1 – Replace Project Key with Team Key
 
-## Problem
+## Background
 
-Currently, when the Deployment Refresh job completes successfully, backend logs show that records are updated into H2 database.
+Project Key represents only one project under a Team.
 
-However, returning to the Deployment Readiness page does not display those records.
+Release execution always happens at Team level.
 
-This results in users assuming refresh has failed even though database contains valid data.
+Therefore Project Key must no longer participate in Generate Report processing.
 
 ---
 
@@ -22,103 +31,109 @@ This results in users assuming refresh has failed even though database contains 
 
 ### AC-1.1
 
-When a user selects an Environment/Namespace,
+Remove `projectKey` from Generate Report request payload.
 
-the application shall first read Deployment Readiness information from H2 database.
-
-No Kubernetes API call should be triggered automatically.
+UI must never send Project Key.
 
 ---
 
 ### AC-1.2
 
-If deployment data exists in database,
+ReportController.generateReport()
 
-UI shall immediately display stored deployment information.
+must no longer read Project Key.
 
 ---
 
 ### AC-1.3
 
-If no deployment data exists,
+Replace every Project Key usage with Team Key.
 
-UI shall display an appropriate empty state.
+This includes:
 
-Example:
-
-> No deployment readiness information available.
-> Click "Refresh Deployment Status" to retrieve latest deployment information.
+- Controller
+- Service
+- Repository
+- DTO
+- Entity
+- Database queries
+- Cache
+- Validation
+- Report generation
 
 ---
 
 ### AC-1.4
 
-Database becomes the primary source for Deployment Readiness page.
+Project Key should remain only where it is genuinely required for iTrack story retrieval.
 
-Kubernetes should never be queried simply because the user selected an environment.
-
----
-
-### AC-1.5
-
-Deployment Refresh button is the only action that should refresh deployment information from Kubernetes.
+No other module should depend on Project Key.
 
 ---
 
-# Enhancement 2 – Refresh Deployment Status behaviour
+# Enhancement 2 – Remove Scan Job Framework
+
+## Background
+
+Normal asynchronous Job tracking already exists.
+
+A second Scan Job implementation duplicates the same functionality.
+
+---
 
 ## Acceptance Criteria
 
 ### AC-2.1
 
-Clicking **Refresh Deployment Status**
-
-shall:
-
-- Create background Job
-- Call Kubernetes
-- Recalculate deployment readiness
-- Update Deployment tables
-- Update validation status
-- Update validation messages
-- Persist everything into database
+Remove Scan Job entity.
 
 ---
 
 ### AC-2.2
 
-Immediately after refresh completes,
-
-UI should automatically reload latest Deployment data from DB.
-
-User should not need to leave and reopen page.
+Remove Scan Job repository.
 
 ---
 
 ### AC-2.3
 
-If refresh is still running,
-
-show message similar to:
-
-> Deployment validation is running in background.
-> Latest deployment information will appear automatically after completion.
+Remove Scan Job service.
 
 ---
 
 ### AC-2.4
 
-Backend should not require browser refresh.
-
-Automatic reload should occur after job completion.
+Remove Scan Job controller logic.
 
 ---
 
-# Enhancement 3 – Validation Status Tooltip
+### AC-2.5
 
-Currently Validation Status and Validation Message are shown separately.
+Remove Scan Job database table.
 
-This wastes screen space.
+---
+
+### AC-2.6
+
+Generate Report shall only create a normal asynchronous Job.
+
+---
+
+### AC-2.7
+
+UI shall display only one Job History.
+
+No Scan Job history should exist.
+
+---
+
+# Enhancement 3 – Reuse Prefetch Commit Data
+
+## Background
+
+Current implementation performs an additional GitHub call for every component to retrieve the latest branch HEAD SHA.
+
+This is unnecessary.
 
 ---
 
@@ -126,61 +141,53 @@ This wastes screen space.
 
 ### AC-3.1
 
-Validation Status column remains visible.
+During Prefetch Commits,
 
-Example:
+retrieve:
 
-- Passed
-- Warning
-- Failed
+- Commit list
+- Latest HEAD SHA
+
+using the same GitHub request.
 
 ---
 
 ### AC-3.2
 
-Validation Message should appear as Tooltip.
+For every component,
 
-Hovering Validation Status shall display complete validation message.
+store:
+
+- Commit list
+- Latest HEAD SHA
+
+inside Prefetch result.
 
 ---
 
 ### AC-3.3
 
-Tooltip should support multi-line content.
+Remove per-component
+
+GitHubClient.getBranchHeadSha()
+
+calls.
 
 ---
 
 ### AC-3.4
 
-Validation Message column may be removed if tooltip fully replaces it.
+No additional GitHub call should be required solely for retrieving branch HEAD SHA.
 
 ---
 
-# Enhancement 4 – Component Refresh Metadata Table
+# Enhancement 4 – Default Branch from Team Configuration
 
-Introduce metadata table to track last successful Component Refresh.
-
----
-
-## New Table
+Current implementation hardcodes:
 
 ```
-component_refresh_metadata
+master
 ```
-
----
-
-### Suggested Columns
-
-| Column | Description |
-|---------|-------------|
-| id | Primary Key |
-| team_key | Team identifier |
-| fix_version | Fix Version |
-| refreshed_at | Last refresh timestamp |
-| refreshed_by | Username |
-| created_at | Timestamp |
-| updated_at | Timestamp |
 
 ---
 
@@ -188,245 +195,381 @@ component_refresh_metadata
 
 ### AC-4.1
 
-Whenever Generate Report stores updated Components,
+Add configuration:
 
-system shall also update
+```yaml
+defaultBranch: master
+```
 
-component_refresh_metadata.
+inside Team Config.
 
 ---
 
 ### AC-4.2
 
-Metadata record shall be uniquely maintained using
+Future teams may configure:
 
-- Team Key
-- Fix Version
+- master
+- main
+- trunk
+
+without code change.
 
 ---
 
 ### AC-4.3
 
-Repeated Generate Report operations shall update
-
-refreshed_at
-
-instead of creating duplicate rows.
+All GitHub comparisons shall use configured Default Branch.
 
 ---
 
-### AC-4.4
+# Enhancement 5 – Third Commit Collection
 
-Latest timestamp always represents the most recent successful Component Refresh.
+Currently:
 
----
+1. Previous → Current
+2. Current → Main
 
-# Enhancement 5 – Update Metadata during Generate Report
+Need:
 
-Current Generate Report flow:
-
-Load Components
-
-↓
-
-User Overrides
-
-↓
-
-Generate Report
-
-↓
-
-Update Components
-
----
-
-## Updated Flow
-
-Load Components
-
-↓
-
-Store Components
-
-↓
-
-Preview
-
-↓
-
-User Overrides
-
-↓
-
-Generate Report
-
-↓
-
-Update Components
-
-↓
-
-Update Component Refresh Metadata
-
-↓
-
-Start Report Generation
+3. Previous → Main
 
 ---
 
 ## Acceptance Criteria
 
-Metadata update must happen immediately before actual Report Generation starts.
+Create a third commit collection.
+
+Comparison:
+
+Base:
+
+Previous Release Branch
+
+Head:
+
+Configured Default Branch
+
+Store separately.
+
+This collection represents commits existing in Main after Previous Release.
 
 ---
 
-# Enhancement 6 – Show Last Component Refresh Timestamp
+# Enhancement 6 – Commit Analysis Metadata Table
 
-Users should always know how fresh component information is.
+Introduce new table.
 
----
-
-## Display Location
-
-Display Last Component Refresh on:
-
-- Generate Report
-- Review Commits
-- Release Readiness
-- Scan History
-
-Do NOT display on:
-
-- Dashboard
-- Settings
-
----
-
-## UI Location
-
-Top-right section.
-
-Immediately below blue header.
-
-Within white content area.
-
-Consistent across all four pages.
-
----
-
-## Display Format
-
-Example
+Suggested name:
 
 ```
-Last Component Refresh
-
-IST
-28-Jul-2026 10:42:15 AM
-
-CST
-27-Jul-2026 11:12:15 PM
+commit_analysis_status
 ```
 
 ---
 
-### Acceptance Criteria
+## Suggested Columns
 
-### AC-6.1
-
-Timestamp shall be loaded from
-
-component_refresh_metadata.
-
----
-
-### AC-6.2
-
-Timestamp displayed using
-
-- IST
-- CST
-
----
-
-### AC-6.3
-
-Display must include
-
-- Date
-- Time
-- AM/PM
+- Team Key
+- Fix Version
+- Component
+- Library Flag
+- Stories
+- Teams
+- Previous Branch
+- Current Branch
+- Analysis Performed
+- Analysis Skipped
+- Skip Reason
+- Total Commits
+- Valid Commits
+- Cherry Pick Required
+- Direct Release
+- Reverted
+- Violations
+- Warnings
+- Analysis Timestamp
+- Last Updated
 
 ---
 
-### AC-6.4
+## Acceptance Criteria
 
-Timestamp updates automatically after Generate Report refreshes Components.
-
----
-
-### AC-6.5
-
-Timestamp should never be calculated on client.
-
-Backend provides formatted values.
+Every component shall have one metadata record.
 
 ---
 
-# Enhancement 7 – UI Consistency
+If skipped,
 
-Timestamp widget should look identical across
+store reason.
 
-- Generate Report
-- Review Commits
-- Release Readiness
-- Scan History
+Example:
 
----
-
-### Acceptance Criteria
-
-- Same font
-- Same spacing
-- Same alignment
-- Same colors
-- Same formatting
-- Responsive layout
+- Branch Cut Pending
+- User Excluded
+- Default Excluded
+- Missing Branch
 
 ---
 
-# Backend Requirements
+If analysed,
 
-- Read deployment data from DB by default.
-- Refresh Deployment updates DB.
-- UI reloads from DB.
-- Metadata table maintained.
-- Timestamp API exposed.
-- Timestamp reused by all pages.
-- Avoid unnecessary Kubernetes calls.
-- Follow existing asynchronous Job architecture.
-- Maintain existing functionality.
+store metadata counts.
+
+---
+
+# Enhancement 7 – Release Readiness Commit Analysis Tab
+
+Add new tab.
+
+```
+Commit Analysis
+```
+
+---
+
+## Acceptance Criteria
+
+Load data entirely from
+
+commit_analysis_status
+
+No recalculation.
+
+---
+
+Provide filters:
+
+- Team
+- Status
+- Analysis Performed
+- Pending
+- Violations
+
+---
+
+Reuse Branch Validation filter framework.
+
+---
+
+# Enhancement 8 – Remove Duplicate Branch HEAD Population
+
+Current code calls:
+
+populateLatestReleaseCommitId()
+
+Again.
+
+This duplicates Prefetch.
+
+---
+
+## Acceptance Criteria
+
+Comment out duplicate implementation.
+
+Do not delete.
+
+Reuse Prefetch HEAD SHA.
+
+---
+
+# Enhancement 9 – Remove Branch Repository
+
+Current Branch Repository is no longer required.
+
+---
+
+## Acceptance Criteria
+
+Remove:
+
+- Entity
+- Repository
+- Service
+- Controller
+- Database Table
+- DTO
+- API
+- Configuration
+
+Branch resolution shall use Components table.
+
+---
+
+# Enhancement 10 – Commit Validation Overrides
+
+Current manual overrides must come from
+
+commit_validations
+
+---
+
+## Acceptance Criteria
+
+Primary Key:
+
+- Team Key
+- Fix Version
+- Commit SHA
+
+---
+
+Read:
+
+- Manual Override
+- Approval Status
+- Requested By
+- Requested Date
+- Approved By
+- Approved Date
+- Override Reason
+
+---
+
+Apply these overrides during report generation.
+
+---
+
+Future Commit Comments table can be retired.
+
+---
+
+# Enhancement 11 – Commit Table Cleanup
+
+Remove Project Key column.
+
+---
+
+## Acceptance Criteria
+
+Commit table shall contain Team Key only.
+
+Project Key removed completely.
+
+---
+
+# Enhancement 12 – Lifecycle Classification
+
+Current lifecycle analysis uses incorrect comparison commits.
+
+---
+
+## Acceptance Criteria
+
+Instead of:
+
+Current → Main
+
+Use:
+
+Previous → Main
+
+commit collection.
+
+---
+
+Pass new SHA list into
+
+classifyCommit()
+
+---
+
+Review ordering of lifecycle classification conditions.
+
+Ensure most specific conditions execute first.
+
+Refactor condition ordering where required.
+
+---
+
+# Enhancement 13 – Persist Analysis Summary
+
+After component analysis,
+
+store summary into
+
+commit_analysis_status.
+
+---
+
+Examples
+
+Store:
+
+- Valid
+- Invalid
+- Reverted
+- Cherry Pick
+- Direct Release
+- Missing
+- Warnings
+
+per component.
+
+---
+
+# Enhancement 14 – TODO Cleanup
+
+Developer TODOs should only disappear after implementation.
+
+---
+
+## Acceptance Criteria
+
+If TODO fully implemented:
+
+Remove TODO.
+
+---
+
+If partially implemented:
+
+Retain TODO.
+
+---
+
+Never delete future TODOs.
+
+---
+
+Only completed TODOs may be removed.
+
+---
+
+# Performance Requirements
+
+- Eliminate duplicate GitHub calls.
+- Minimize repository lookups.
+- Reuse Prefetch cache.
+- Reuse metadata.
+- Reduce report execution time.
+- Preserve asynchronous processing.
 
 ---
 
 # Logging Requirements
 
-Add INFO logs for:
+INFO Logs
 
-- Deployment Refresh Started
-- Deployment Refresh Completed
-- Deployment Data Loaded from DB
-- Component Metadata Updated
-- Timestamp Retrieved
-- Timestamp Display Request
+- Generate Report Started
+- Prefetch Completed
+- Third Commit Collection Completed
+- Commit Analysis Started
+- Commit Analysis Completed
+- Commit Analysis Metadata Saved
+- Overrides Loaded
+- Generate Report Completed
 
-Add DEBUG logs for:
+DEBUG Logs
 
-- Metadata SQL operations
-- Deployment reload
-- Timestamp formatting
-- Job completion
+- HEAD SHA Resolution
+- Commit Collection Sizes
+- Lifecycle Classification
+- Override Matching
+- Metadata Persistence
+- Condition Evaluation
+- Branch Resolution
 
 ---
 
@@ -434,23 +577,32 @@ Add DEBUG logs for:
 
 The enhancement is complete only if all of the following are satisfied:
 
-- [ ] Deployment page loads existing deployment data directly from H2 database.
-- [ ] Selecting an environment does not trigger Kubernetes calls.
-- [ ] Refresh Deployment Status refreshes Kubernetes data and persists latest records.
-- [ ] UI automatically reloads refreshed deployment data after background job completion.
-- [ ] Validation Status displays tooltip with detailed validation message.
-- [ ] New `component_refresh_metadata` table created.
-- [ ] Metadata updated after every successful Generate Report component refresh.
-- [ ] Metadata uniquely maintained by Team Key + Fix Version.
-- [ ] Last Component Refresh timestamp displayed on Generate Report page.
-- [ ] Last Component Refresh timestamp displayed on Review Commits page.
-- [ ] Last Component Refresh timestamp displayed on Release Readiness page.
-- [ ] Last Component Refresh timestamp displayed on Scan History page.
-- [ ] Timestamp shown in both IST and CST with AM/PM.
-- [ ] Dashboard and Settings do not display the timestamp.
-- [ ] Logging implemented using INFO and DEBUG best practices.
-- [ ] Existing Generate Report functionality remains unchanged.
-- [ ] Existing Deployment Readiness functionality remains intact.
+- [ ] Project Key removed from Generate Report request payload.
+- [ ] Team Key replaces Project Key throughout report generation.
+- [ ] Project Key retained only for iTrack retrieval where applicable.
+- [ ] Scan Job implementation removed completely.
+- [ ] UI displays only asynchronous Job history.
+- [ ] Prefetch Commits returns both commit list and latest HEAD SHA.
+- [ ] Duplicate GitHub HEAD SHA calls removed.
+- [ ] Default Branch configurable through Team Configuration.
+- [ ] Third commit collection (Previous → Main) implemented.
+- [ ] Commit lifecycle analysis updated to use the new commit collection.
+- [ ] Lifecycle condition ordering reviewed and corrected.
+- [ ] New `commit_analysis_status` table created.
+- [ ] Analysis metadata stored for every component.
+- [ ] Skipped analysis reasons persisted.
+- [ ] Commit Analysis tab added to Release Readiness.
+- [ ] Commit Analysis tab loads data only from database.
+- [ ] Team-level filtering implemented in Commit Analysis.
+- [ ] Branch Repository removed completely.
+- [ ] Commit Validation overrides loaded using Team Key + Fix Version + Commit SHA.
+- [ ] Commit table migrated to Team Key only.
+- [ ] Duplicate branch HEAD population logic commented out.
+- [ ] Completed TODO comments removed.
+- [ ] Pending TODO comments retained.
+- [ ] Existing functionality remains unchanged.
 - [ ] No regression introduced.
-- [ ] Code passes compilation and regression testing.
-- [ ] UI verified for responsive layout and consistent design.
+- [ ] GitHub API calls reduced.
+- [ ] Database migration scripts updated.
+- [ ] Unit tests and integration tests pass.
+- [ ] End-to-end report generation verified successfully.
