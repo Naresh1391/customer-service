@@ -1,379 +1,459 @@
-BSSE – Release Readiness & Compliance Portal
+Phase 11 – Data Refresh Simplification & Cache Removal
 
-Leadership Wiki – High-Level Overview (Draft)
-
-BSSE Release Readiness & Compliance Portal
-
-Executive Summary
-
-The BSSE Release Readiness & Compliance Portal is a centralized release governance platform designed to improve deployment quality, release visibility, and engineering productivity.
-
-The primary objective of this portal is simple:
-
-Ensure that only the right code reaches the right environment at the right time.
-
-Instead of relying on multiple manual activities, spreadsheets, scripts, and individual validations, this portal provides a single place where Release Managers, Technical Leads, Developers, and Testers can verify release readiness with confidence.
-
-The portal continuously validates release information from GitHub, Kubernetes, and iTrack and presents actionable insights before production deployment.
+Generate Report / Fetch Stories / Load Components / Deployment Readiness Enhancements
 
 ⸻
 
-Why This Tool?
+Objective
 
-Modern BSSE development is extremely fast paced.
+This phase simplifies the entire report generation workflow by removing unnecessary cache options and ensuring that every operation always retrieves the latest source data from external systems.
 
-* Hundreds of commits are pushed every day.
-* Multiple teams work on the same release.
-* Multiple release branches exist simultaneously.
-* Deployments happen across several environments.
-* Release Managers currently spend significant manual effort validating releases.
+The application should no longer depend on previously cached Stories or Components during manual execution.
 
-Although the development process is mature, release governance still relies heavily on manual verification.
+Instead:
 
-This portal fills that gap.
+* Fetch Stories → Always from iTrack
+* Load Components → Always from GitHub/Kubernetes
+* Generate Report → Always use freshly loaded data
+* Deployment Refresh → Always refresh Deployment Readiness records
 
-Rather than discovering problems after deployment, the portal helps identify release issues before production, where the cost of fixing them is significantly lower.
-
-⸻
-
-Business Value
-
-The portal helps answer questions that traditionally require multiple people, scripts, and manual verification.
-
-Examples include:
-
-* Is every required story included?
-* Has branch cut been completed?
-* Is every required component deployed?
-* Is the latest release commit actually deployed?
-* Are deployments behind the release branch?
-* Which team owns the component?
-* Which stories are affected?
-* Which commits require action?
-
-All of these are available from a single portal.
+This ensures that release analysis is always based on the latest information.
 
 ⸻
 
-Why Early Detection Matters
+Feature 1 – Remove Story Cache Option
 
-One of the key principles behind this solution is:
+Existing Behavior
 
-The earlier an issue is detected, the lower the cost of fixing it.
+The Fetch Stories section currently provides:
 
-Example release lifecycle:
+* Fetch Stories
+* Use Cache Data From Database
+* Force Fetch From iTrack
 
-Stage	Approximate Cost
-Requirement grooming	₹0–₹500 (planning effort)
-Development	Minimal additional effort
-QA Testing	Higher due to rework and regression
-Integration/System Testing	Significantly higher involving multiple teams
-Production	Highest cost including rollback, incident management, release delay, customer impact and engineering effort
-
-Finding an issue before production is always less expensive than fixing it after deployment.
-
-This portal is designed specifically to shift validation earlier into the release process.
+This introduces unnecessary complexity and stale data.
 
 ⸻
 
-Problems with Current Process
+New Requirement
 
-Current release validation depends on several manual activities.
+Remove the cache option completely.
 
-Examples include:
+Only one action should remain:
 
-* Manual Excel generation
-* Custom scripts
-* Waiting for branch cuts to complete
-* Manual comparison of release branches
-* Manual deployment verification
-* No continuous validation
-* Limited rerun capability
-* Possible omission of commits added after the initial validation
-* Information spread across multiple tools
+Fetch Stories
 
-As release size grows, these activities become increasingly time consuming and error prone.
+Every execution must retrieve stories directly from iTrack.
 
 ⸻
 
-How the Portal Helps
+Acceptance Criteria
 
-The portal automates these validations and provides continuous visibility throughout the release lifecycle.
-
-Benefits include:
-
-* Centralized release dashboard
-* Continuous validation
-* On-demand report generation
-* Real-time deployment verification
-* Component ownership visibility
-* Story traceability
-* Branch validation
-* Deployment readiness
-* Better filtering
-* Better search capability
-* Improved user experience
-* Faster release decisions
+* Remove “Use Cache Data From Database” option from UI.
+* Remove cache selection dropdown.
+* Remove all backend cache-related logic.
+* Remove cache-specific controller/service methods.
+* Remove cache validation logic.
+* Always fetch directly from iTrack.
+* Existing functionality must continue without regression.
 
 ⸻
 
-Major Capabilities
+Feature 2 – Refresh iTrack Stories Before Saving
 
-1. Review Commit Analysis
+Requirement
 
-Provides complete commit compliance analysis.
+Whenever Fetch Stories is invoked:
 
-Capabilities include:
+Before fetching data from iTrack,
 
-* Commit validation
-* Cherry-pick detection
-* Missing release commits
-* Reverted commit handling
-* Release compliance
-* Story mapping
-* Team ownership
-* Commit lifecycle visibility
-* Manual override workflow
-* Advanced filtering
+Delete all existing records for:
 
-This enables Release Managers to immediately identify commits requiring attention.
+* Team Key
+* Fix Version
+
+from the iTrack Stories table.
+
+Then insert the latest records.
+
+Never merge with old records.
 
 ⸻
 
-2. Story Readiness
+Reason
 
-Provides release level story visibility.
+Stories may change during the release window.
 
-Examples:
+Keeping old records can result in:
 
-* Story status
-* Pending stories
-* Accepted stories
-* Completed stories
-* Team filters
-* Reporter filters
-* Assignee filters
+* stale stories
+* removed stories remaining
+* modified stories not updated
 
-This helps ensure release scope is ready before deployment.
+Every execution should represent the latest iTrack state.
 
 ⸻
 
-3. Branch Cut Validation
+Acceptance Criteria
 
-Automatically validates release branches.
+Controller Flow
 
-Capabilities include:
-
-* Branch cut completed
-* Branch cut pending
-* Previous release branch detection
-* Kubernetes-based validation
-* Resolution source visibility
-* Team ownership
-* Story mapping
-* Component filtering
-* Team filtering
-
-This eliminates manual branch verification.
+1. Receive Fetch Stories request.
+2. Delete existing records using:
+    * Team Key
+    * Fix Version
+3. Fetch latest stories from iTrack.
+4. Save latest records.
+5. Return latest response.
 
 ⸻
 
-4. Deployment Readiness (Major Feature)
+Database Changes
 
-Deployment readiness is one of the most valuable capabilities of the portal.
+Replace every Project Key reference with Team Key.
 
-The system validates deployments directly from Kubernetes.
+Primary logical key:
 
-It verifies:
+* Team Key
+* Fix Version
+* Story Number
 
-* Test-3
-* Test-4
-* Stage West
-* Production East
-* Production West
+⸻
 
-For every component it validates:
+Performance Requirement
 
-* Deployment status
-* Environment status
-* Latest deployed Git SHA
-* Latest release branch Git SHA
-* Branch alignment
-* Deployment freshness
+Do not delete records individually.
 
-If an environment is behind the release branch, the portal clearly identifies the gap.
+Use repository bulk delete operations.
 
 Example:
 
-Deployment is behind latest release by 2 commits.
+Delete By TeamKey And FixVersion
 
-This immediately informs Release Managers that redeployment is required before promotion.
-
-This capability does not currently exist in the existing release process and significantly reduces deployment-related risks.
+Avoid unnecessary database calls.
 
 ⸻
 
-Deployment Visibility
+Feature 3 – Remove Project Key Usage
 
-Instead of asking developers whether the correct version has been deployed, the portal verifies it directly.
+This applies to Fetch Stories.
 
-The portal compares:
+⸻
 
-Release Branch Latest Commit
+UI
+
+Do not send Project Key.
+
+Send only:
+
+* Team Key
+* Fix Version
+
+⸻
+
+Backend
+
+Do not use Project Key.
+
+Replace every usage with Team Key.
+
+⸻
+
+Database
+
+Rename:
+
+ProjectKey
+
+to
+
+TeamKey
+
+where applicable.
+
+⸻
+
+Feature 4 – Remove Component Cache
+
+Existing
+
+Load Components currently supports:
+
+* Use Cache Data
+* Force Load
+
+⸻
+
+New Requirement
+
+Remove cache functionality completely.
+
+Only one button:
+
+Load Components
+
+Every execution loads directly from GitHub/Kubernetes.
+
+⸻
+
+Acceptance Criteria
+
+Remove:
+
+* cache dropdown
+* cache APIs
+* cache service methods
+* cache repository logic
+
+Always load latest component data.
+
+⸻
+
+Feature 5 – Refresh Components Table
+
+Whenever Load Components starts:
+
+Delete all Components for:
+
+* Team Key
+* Fix Version
+
+Then load latest components.
+
+Store fresh records.
+
+Never merge with previous records.
+
+⸻
+
+Reason
+
+Story-to-component mapping changes during release.
+
+Keeping stale components causes incorrect Release Readiness.
+
+⸻
+
+Acceptance Criteria
+
+Flow
+
+Delete existing components
 
 ↓
 
-Kubernetes Running Commit
+Load latest components
 
 ↓
 
-Deployment Validation Result
+Store new records
 
-This removes guesswork from deployment verification.
+↓
 
-⸻
-
-Component Ownership
-
-Every component includes:
-
-* Responsible teams
-* Related stories
-* Previous release branch
-* Current release branch
-* Resolution source
-* Deployment information
-
-This greatly improves accountability during release validation.
+Display Preview
 
 ⸻
 
-Better User Experience
+Feature 6 – Generate Report Cleanup
 
-The portal has been designed with usability in mind.
+Before Generate Report starts:
 
-Improvements include:
+Delete existing Commit records for:
 
-* Simplified workflows
-* Cleaner UI
-* Better filtering
-* Better layouts
-* Rich tooltips
-* Context-aware actions
-* Status indicators
-* Refresh timestamps
-* Release statistics
-* Improved navigation
+* Team Key
+* Fix Version
 
-The goal is to minimize clicks while maximizing visibility.
+Then regenerate complete analysis.
+
+Never append.
 
 ⸻
 
-Administrative Controls
+Acceptance Criteria
 
-Generating reports requires significant interaction with external systems such as GitHub and Kubernetes.
+Generate Report Flow
 
-To avoid unnecessary API traffic:
+Start
 
-* Report generation is restricted to Admin users.
-* Deployment refresh operations are Admin-only.
-* Developers have read-only visibility.
-* Release Managers and Technical Leads can refresh release data whenever required.
+↓
 
-This follows the same governance approach used by other internal AT&T engineering tools.
+Delete existing Commit records
 
-⸻
+↓
 
-Operational Benefits
+Run analysis
 
-The portal provides measurable operational improvements.
+↓
 
-Examples include:
+Store latest Commit records
 
-* Reduced manual effort
-* Faster release validation
-* Better deployment confidence
-* Earlier issue detection
-* Reduced production risk
-* Improved governance
-* Better traceability
-* Centralized reporting
-* Standardized release process
-* Reduced dependency on individual knowledge
+↓
+
+Complete Job
 
 ⸻
 
-Future Roadmap
+Feature 7 – Deployment Readiness Refresh
 
-The current portal establishes the foundation for broader release governance.
+Whenever Deployment Refresh is executed:
 
-Planned enhancements include:
+Delete Deployment Readiness records for:
 
-Configuration Drift Analysis
+* Team Key
+* Fix Version
 
-Automatically detect:
+Then perform fresh Deployment Validation.
 
-* Added configurations
-* Deleted configurations
-* Modified configurations
+Store latest records.
 
-across release environments.
-
-⸻
-
-SAST Integration
-
-Integrate Static Application Security Testing results directly into the portal.
-
-Capabilities may include:
-
-* Security score
-* Critical vulnerabilities
-* Trend analysis
-* Compliance summary
+Never merge.
 
 ⸻
 
-Microsoft Teams Notifications
+Acceptance Criteria
 
-Provide proactive notifications for:
+Deployment Refresh Flow
 
-* Missing deployments
-* Missing branch cuts
-* Pending release actions
-* Compliance violations
-* Deployment failures
-* Release readiness alerts
+Delete Deployment Readiness
 
-This allows Release Managers and development teams to react immediately.
+↓
 
-⸻
+Refresh Kubernetes
 
-Branch Cut Automation
+↓
 
-Future releases may allow the portal to perform controlled branch cut operations with appropriate validations and governance.
+Validate Deployment
 
-⸻
+↓
 
-AI-Assisted Release Governance
+Store latest records
 
-As engineering continues adopting AI-assisted development, this portal can evolve into an intelligent release assistant capable of:
+↓
 
-* Predicting release risks
-* Highlighting deployment anomalies
-* Suggesting corrective actions
-* Identifying missing validations
-* Prioritizing critical issues
-* Assisting Release Managers during release execution
+Update UI
 
 ⸻
 
-Conclusion
+Feature 8 – Repository Optimization
 
-The BSSE Release Readiness & Compliance Portal transforms release governance from a largely manual process into an automated, centralized, and continuously validated experience.
+All cleanup operations must use bulk repository methods.
 
-Rather than depending on scripts, spreadsheets, and manual verification, engineering teams gain a single source of truth for release readiness.
+Avoid:
 
-By validating stories, commits, branch cuts, deployments, and release compliance before production, the portal reduces operational risk, improves engineering efficiency, and increases confidence in every release.
+Looping through records
 
-This is not simply another dashboard—it is a governance platform that enables safer, faster, and more reliable software releases while providing a strong foundation for future automation and AI-assisted release management.
+Delete one by one
+
+Multiple repository calls
+
+Preferred approach:
+
+Single repository delete operation using Team Key and Fix Version.
+
+⸻
+
+Feature 9 – Last Component Refresh Timestamp UI
+
+Current implementation is technically correct but visually weak.
+
+Improve visibility.
+
+⸻
+
+UI Improvements
+
+Display timestamp using an informational badge/card.
+
+Recommended layout:
+
+Last Component Refresh
+
+08 Aug 2026 10:42 AM IST
+
+07 Aug 2026 11:12 PM CST
+
+Suggested improvements:
+
+* Light information background
+* Calendar/clock icon
+* Better spacing
+* Better typography
+* Small informational card
+* Read-only appearance
+* Professional styling
+* Consistent with AT&T design language
+
+Avoid bright or distracting colors.
+
+The timestamp should provide visibility without dominating the page.
+
+⸻
+
+Feature 10 – Reduce Header Height
+
+Current Release Readiness page header occupies excessive vertical space.
+
+The section:
+
+“Comprehensive Release Validation Dashboard”
+
+should be compressed.
+
+⸻
+
+Requirement
+
+Reduce:
+
+* top padding
+* bottom padding
+* vertical spacing
+* unnecessary margins
+
+Maintain:
+
+* font size
+* readability
+* branding consistency
+
+Target height should be similar to:
+
+SOX Compliance Release Commit Tracker header.
+
+This improves usable screen space for actual release data.
+
+⸻
+
+Definition of Done
+
+All cache-related UI options removed.
+
+Project Key completely replaced by Team Key.
+
+Fetch Stories always retrieves live iTrack data.
+
+Load Components always retrieves latest GitHub/Kubernetes data.
+
+Existing Stories are deleted before refresh.
+
+Existing Components are deleted before refresh.
+
+Existing Commit records are deleted before Generate Report.
+
+Existing Deployment Readiness records are deleted before Deployment Refresh.
+
+Bulk repository delete methods are used everywhere.
+
+No record-by-record deletion logic remains.
+
+Last Component Refresh timestamp redesigned with improved UI.
+
+Release Readiness header height reduced.
+
+No regression in existing functionality.
+
+No stale data remains after refresh operations.
+
+Database always reflects the latest external source state after each execution.
+
+Code is cleaned up by removing obsolete cache-related services, controller methods, repository methods, DTO fields, and UI components that are no longer required.
