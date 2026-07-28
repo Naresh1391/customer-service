@@ -1,381 +1,456 @@
-# Phase 11.2 – Release Readiness: Deployment Section Refinements & Refresh Workflow
+# Phase XX – Release Readiness & Component Refresh Metadata Enhancements
 
 ## Objective
 
-This phase focuses on stabilizing the **Release Readiness → Deployment** section by improving refresh behavior, fixing UI update issues, simplifying the deployment workflow, removing unnecessary functionality, and adding deployment metadata for better traceability.
-
-The implementation should improve both the backend execution flow and the user experience without breaking any existing functionality.
+Improve the Deployment Readiness page, Component Refresh metadata handling, and overall UI consistency by ensuring that deployment data is always loaded correctly from the database, refresh operations behave consistently, and users can clearly identify when the component information was last refreshed.
 
 ---
 
-# Acceptance Criteria
+# Enhancement 1 – Deployment Readiness should load existing DB data
 
-## 1. Fix Deployment Refresh Not Updating UI
+## Problem
 
-### Current Issue
+Currently, when the Deployment Refresh job completes successfully, backend logs show that records are updated into H2 database.
 
-For some environments:
+However, returning to the Deployment Readiness page does not display those records.
 
-- Clicking **Refresh** displays a success message such as:
-  - "Refresh completed"
-  - "Deployment refreshed"
-
-However, the actual deployment data is **not refreshed in the UI**.
-
-Some environments work correctly while others do not.
-
-### Required Changes
-
-- Review the complete refresh flow for every supported environment.
-- Verify:
-  - Frontend API call
-  - Controller
-  - Service
-  - Kubernetes lookup
-  - DTO mapping
-  - UI state update
-- Ensure every successful refresh immediately updates the deployment table.
-- Remove any stale UI state or cached frontend objects that prevent refreshed data from appearing.
+This results in users assuming refresh has failed even though database contains valid data.
 
 ---
 
-# 2. Display Background Job Status
+## Acceptance Criteria
 
-Deployment refresh executes asynchronously.
+### AC-1.1
 
-Currently users only see a spinner or a success message.
+When a user selects an Environment/Namespace,
 
-### Required
+the application shall first read Deployment Readiness information from H2 database.
 
-Display a user-friendly progress message while the refresh job is executing.
-
-Examples:
-
-- Refreshing deployment status...
-- Deployment validation is in progress...
-- Fetching latest Kubernetes deployment information...
-- Background job is running. Results will appear automatically.
-
-The message should disappear automatically once processing completes.
+No Kubernetes API call should be triggered automatically.
 
 ---
 
-# 3. Review and Resolve Existing TODOs
+### AC-1.2
 
-Review every existing `TODO` comment related to the Deployment module.
+If deployment data exists in database,
 
-For each TODO:
-
-- Determine whether it can now be completed.
-- If yes:
-  - Implement the missing functionality.
-  - Remove the TODO.
-- If it cannot yet be completed:
-  - Update the TODO with a meaningful explanation and expected future work.
-
-Do not leave obsolete TODO comments in the code.
+UI shall immediately display stored deployment information.
 
 ---
 
-# 4. Skip Helm Projects During Deployment Readiness
+### AC-1.3
 
-Current implementation still evaluates Helm repositories during deployment readiness.
+If no deployment data exists,
 
-This is unnecessary.
-
-Deployment readiness should evaluate only:
-
-- Main Microservice repositories
-
-Do NOT evaluate:
-
-- Helm repositories
-
-Helm repositories inherit deployment information from the main application and should not generate additional Kubernetes calls.
-
-This should improve overall refresh performance.
-
----
-
-# 5. Remove Force Refresh Feature
-
-The current Deployment page contains:
-
-- Force Refresh
-
-This functionality is no longer required.
-
-### Required
-
-Completely remove:
-
-- Force Refresh button
-- Force Refresh backend API
-- Force Refresh controller
-- Force Refresh service methods
-- DTOs used only for Force Refresh
-- Any unused frontend state associated with Force Refresh
-
-The implementation should be fully removed from both frontend and backend.
-
----
-
-# 6. Standard Refresh Workflow
-
-Only one refresh action should remain.
+UI shall display an appropriate empty state.
 
 Example:
 
-**Refresh Deployment Status**
-
-Behavior:
-
-- Re-evaluate deployment readiness
-- Fetch latest Kubernetes information
-- Update database
-- Refresh UI automatically
+> No deployment readiness information available.
+> Click "Refresh Deployment Status" to retrieve latest deployment information.
 
 ---
 
-# 7. Refresh Must Always Revalidate Kubernetes
+### AC-1.4
 
-Current behavior appears to reuse existing database values.
+Database becomes the primary source for Deployment Readiness page.
 
-This is incorrect.
-
-Whenever the user clicks **Refresh**:
-
-The application must:
-
-1. Read latest component information from the database.
-2. Call Kubernetes again.
-3. Retrieve current deployment state.
-4. Compare latest deployment.
-5. Update database.
-6. Reload UI.
-
-Refresh should always perform a fresh Kubernetes validation.
+Kubernetes should never be queried simply because the user selected an environment.
 
 ---
 
-# 8. Initial Screen Load Behavior
+### AC-1.5
 
-When an environment is selected:
-
-If deployment data already exists in the database:
-
-- Load existing database values immediately.
-
-Do NOT automatically call Kubernetes.
-
-This provides a fast initial experience.
-
-Only after the user clicks **Refresh** should Kubernetes be queried again.
+Deployment Refresh button is the only action that should refresh deployment information from Kubernetes.
 
 ---
 
-# 9. Separate Initial Load and Refresh Logic
+# Enhancement 2 – Refresh Deployment Status behaviour
 
-Implement two distinct flows.
+## Acceptance Criteria
 
-### Initial Load
+### AC-2.1
 
-Database
+Clicking **Refresh Deployment Status**
 
-↓
+shall:
 
-Display existing deployment information
-
-### Refresh
-
-Database
-
-↓
-
-Kubernetes
-
-↓
-
-Update database
-
-↓
-
-Reload UI
-
-Do not mix these two execution paths.
+- Create background Job
+- Call Kubernetes
+- Recalculate deployment readiness
+- Update Deployment tables
+- Update validation status
+- Update validation messages
+- Persist everything into database
 
 ---
 
-# 10. Persist Refreshed Deployment Data
+### AC-2.2
 
-Every refresh should overwrite deployment readiness information in the database.
+Immediately after refresh completes,
 
-Database should always represent the latest validated deployment state.
+UI should automatically reload latest Deployment data from DB.
 
----
-
-# 11. Display Component Refresh Timestamp
-
-Add a deployment metadata section on the Release Readiness page.
-
-Location:
-
-Top-right corner of the page.
-
-Do not consume significant screen space.
+User should not need to leave and reopen page.
 
 ---
 
-### Display
+### AC-2.3
+
+If refresh is still running,
+
+show message similar to:
+
+> Deployment validation is running in background.
+> Latest deployment information will appear automatically after completion.
+
+---
+
+### AC-2.4
+
+Backend should not require browser refresh.
+
+Automatic reload should occur after job completion.
+
+---
+
+# Enhancement 3 – Validation Status Tooltip
+
+Currently Validation Status and Validation Message are shown separately.
+
+This wastes screen space.
+
+---
+
+## Acceptance Criteria
+
+### AC-3.1
+
+Validation Status column remains visible.
 
 Example:
 
-**Components Last Refreshed**
-
-15-Aug-2026 11:42:18 AM IST
-
-03:12:18 AM CDT
-
-Show both:
-
-- IST
-- CDT
-
-Use a readable date/time format.
+- Passed
+- Warning
+- Failed
 
 ---
 
-# 12. Meaning of Components Refresh Timestamp
+### AC-3.2
 
-This timestamp represents:
+Validation Message should appear as Tooltip.
 
-The most recent time the Components table was populated from the Generate Report workflow for the selected:
-
-- Team
-- Fix Version
-
-This is **not** the deployment refresh timestamp.
-
-It specifically indicates when the component metadata was last refreshed.
+Hovering Validation Status shall display complete validation message.
 
 ---
 
-# 13. Timestamp Storage
+### AC-3.3
 
-Review the existing schema.
+Tooltip should support multi-line content.
 
-If necessary, introduce a metadata table to store refresh history.
+---
 
-Suggested fields:
+### AC-3.4
+
+Validation Message column may be removed if tooltip fully replaces it.
+
+---
+
+# Enhancement 4 – Component Refresh Metadata Table
+
+Introduce metadata table to track last successful Component Refresh.
+
+---
+
+## New Table
+
+```
+component_refresh_metadata
+```
+
+---
+
+### Suggested Columns
+
+| Column | Description |
+|---------|-------------|
+| id | Primary Key |
+| team_key | Team identifier |
+| fix_version | Fix Version |
+| refreshed_at | Last refresh timestamp |
+| refreshed_by | Username |
+| created_at | Timestamp |
+| updated_at | Timestamp |
+
+---
+
+## Acceptance Criteria
+
+### AC-4.1
+
+Whenever Generate Report stores updated Components,
+
+system shall also update
+
+component_refresh_metadata.
+
+---
+
+### AC-4.2
+
+Metadata record shall be uniquely maintained using
 
 - Team Key
 - Fix Version
-- Components Refresh Timestamp
-- Last Updated By
-- Created Timestamp
-- Updated Timestamp
-
-One record should exist for each Team + Fix Version combination.
-
-Design the schema appropriately instead of duplicating timestamps across multiple component records.
 
 ---
 
-# 14. Display Timestamp Per Team and Fix Version
+### AC-4.3
 
-When the user changes:
+Repeated Generate Report operations shall update
 
-- Team
-- Fix Version
+refreshed_at
 
-The displayed Components Refresh Timestamp should automatically update to reflect that specific combination.
-
----
-
-# 15. Time Zone Display
-
-Display timestamps in both:
-
-- IST (Indian Standard Time)
-- CDT (Central Daylight Time)
-
-Format example:
-
-15-Aug-2026 11:42:18 AM IST
-
-15-Aug-2026 01:12:18 AM CDT
-
-Ensure formatting is consistent across the application.
+instead of creating duplicate rows.
 
 ---
 
-# 16. UI Improvements
+### AC-4.4
 
-The metadata section should be compact and visually aligned with the existing page layout.
-
-Avoid introducing large cards or banners.
-
-Use subtle typography that complements the existing AT&T-themed UI.
+Latest timestamp always represents the most recent successful Component Refresh.
 
 ---
 
-# 17. Backend Logging
+# Enhancement 5 – Update Metadata during Generate Report
+
+Current Generate Report flow:
+
+Load Components
+
+↓
+
+User Overrides
+
+↓
+
+Generate Report
+
+↓
+
+Update Components
+
+---
+
+## Updated Flow
+
+Load Components
+
+↓
+
+Store Components
+
+↓
+
+Preview
+
+↓
+
+User Overrides
+
+↓
+
+Generate Report
+
+↓
+
+Update Components
+
+↓
+
+Update Component Refresh Metadata
+
+↓
+
+Start Report Generation
+
+---
+
+## Acceptance Criteria
+
+Metadata update must happen immediately before actual Report Generation starts.
+
+---
+
+# Enhancement 6 – Show Last Component Refresh Timestamp
+
+Users should always know how fresh component information is.
+
+---
+
+## Display Location
+
+Display Last Component Refresh on:
+
+- Generate Report
+- Review Commits
+- Release Readiness
+- Scan History
+
+Do NOT display on:
+
+- Dashboard
+- Settings
+
+---
+
+## UI Location
+
+Top-right section.
+
+Immediately below blue header.
+
+Within white content area.
+
+Consistent across all four pages.
+
+---
+
+## Display Format
+
+Example
+
+```
+Last Component Refresh
+
+IST
+28-Jul-2026 10:42:15 AM
+
+CST
+27-Jul-2026 11:12:15 PM
+```
+
+---
+
+### Acceptance Criteria
+
+### AC-6.1
+
+Timestamp shall be loaded from
+
+component_refresh_metadata.
+
+---
+
+### AC-6.2
+
+Timestamp displayed using
+
+- IST
+- CST
+
+---
+
+### AC-6.3
+
+Display must include
+
+- Date
+- Time
+- AM/PM
+
+---
+
+### AC-6.4
+
+Timestamp updates automatically after Generate Report refreshes Components.
+
+---
+
+### AC-6.5
+
+Timestamp should never be calculated on client.
+
+Backend provides formatted values.
+
+---
+
+# Enhancement 7 – UI Consistency
+
+Timestamp widget should look identical across
+
+- Generate Report
+- Review Commits
+- Release Readiness
+- Scan History
+
+---
+
+### Acceptance Criteria
+
+- Same font
+- Same spacing
+- Same alignment
+- Same colors
+- Same formatting
+- Responsive layout
+
+---
+
+# Backend Requirements
+
+- Read deployment data from DB by default.
+- Refresh Deployment updates DB.
+- UI reloads from DB.
+- Metadata table maintained.
+- Timestamp API exposed.
+- Timestamp reused by all pages.
+- Avoid unnecessary Kubernetes calls.
+- Follow existing asynchronous Job architecture.
+- Maintain existing functionality.
+
+---
+
+# Logging Requirements
 
 Add INFO logs for:
 
-- Deployment refresh started
-- Environment selected
-- Kubernetes validation started
-- Deployment refresh completed
-- Database updated
-- UI refresh completed
+- Deployment Refresh Started
+- Deployment Refresh Completed
+- Deployment Data Loaded from DB
+- Component Metadata Updated
+- Timestamp Retrieved
+- Timestamp Display Request
 
 Add DEBUG logs for:
 
-- Kubernetes responses
-- Deployment parsing
-- Namespace resolution
-- Deployment comparison
-- Timestamp updates
-
-Use MDC to include the authenticated username in all logs.
+- Metadata SQL operations
+- Deployment reload
+- Timestamp formatting
+- Job completion
 
 ---
 
-# 18. Performance Optimisation
+# Definition of Done (DoD)
 
-Reduce unnecessary Kubernetes calls by:
+The enhancement is complete only if all of the following are satisfied:
 
-- Skipping Helm repositories
-- Refreshing only the selected environment
-- Avoiding duplicate controller invocations
-- Reusing database state during initial page load
-
-Only Refresh should perform live Kubernetes validation.
-
----
-
-# 19. Validation Checklist
-
-Before marking this phase complete, verify:
-
-- Refresh updates UI for every environment.
-- No environment silently fails after refresh.
-- Background progress message is displayed correctly.
-- All Deployment TODO items have been reviewed.
-- Helm repositories are skipped.
-- Force Refresh functionality is completely removed.
-- Only one Refresh action remains.
-- Initial page load reads from the database.
-- Refresh always performs live Kubernetes validation.
-- Database is updated after every refresh.
-- Components Last Refreshed timestamp is displayed.
-- Timestamp updates correctly for each Team + Fix Version.
-- IST and CDT are displayed correctly.
-- Existing deployment functionality continues to work without regression.
-
----
-
-## Non-Functional Requirement
-
-This phase is primarily a **stability, usability, and maintainability improvement**. Existing business logic should remain unchanged except for the explicitly requested refresh workflow changes. All changes should be fully backward compatible.
+- [ ] Deployment page loads existing deployment data directly from H2 database.
+- [ ] Selecting an environment does not trigger Kubernetes calls.
+- [ ] Refresh Deployment Status refreshes Kubernetes data and persists latest records.
+- [ ] UI automatically reloads refreshed deployment data after background job completion.
+- [ ] Validation Status displays tooltip with detailed validation message.
+- [ ] New `component_refresh_metadata` table created.
+- [ ] Metadata updated after every successful Generate Report component refresh.
+- [ ] Metadata uniquely maintained by Team Key + Fix Version.
+- [ ] Last Component Refresh timestamp displayed on Generate Report page.
+- [ ] Last Component Refresh timestamp displayed on Review Commits page.
+- [ ] Last Component Refresh timestamp displayed on Release Readiness page.
+- [ ] Last Component Refresh timestamp displayed on Scan History page.
+- [ ] Timestamp shown in both IST and CST with AM/PM.
+- [ ] Dashboard and Settings do not display the timestamp.
+- [ ] Logging implemented using INFO and DEBUG best practices.
+- [ ] Existing Generate Report functionality remains unchanged.
+- [ ] Existing Deployment Readiness functionality remains intact.
+- [ ] No regression introduced.
+- [ ] Code passes compilation and regression testing.
+- [ ] UI verified for responsive layout and consistent design.
