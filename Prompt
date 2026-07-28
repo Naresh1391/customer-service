@@ -1,1136 +1,381 @@
-# Release Readiness Tool — Database Analysis & Restructuring Plan
-## Senior Database Architect Review Document
+# Phase 11.2 – Release Readiness: Deployment Section Refinements & Refresh Workflow
 
-**Role:** Senior Database Architect + Full Stack Developer
-**Scope:** Full DB schema analysis, cleanup, restructuring, and migration plan
-**Status:** Review & Approval Required — Do NOT implement until approved
-**Target Databases:** H2 (current) → PostgreSQL / Azure SQL (future)
+## Objective
 
----
+This phase focuses on stabilizing the **Release Readiness → Deployment** section by improving refresh behavior, fixing UI update issues, simplifying the deployment workflow, removing unnecessary functionality, and adding deployment metadata for better traceability.
 
-## ⚠️ Important Instructions for Implementer
-
-1. **This is a PLANNING document.** Do not implement anything until Sai reviews and approves.
-2. Every table removal must first verify zero active usage in code via full codebase grep.
-3. Every column removal must verify no queries, JPA mappings, or service references exist.
-4. DB migrations must be written for both H2 and PostgreSQL compatibility.
-5. All code impacted by schema changes must be updated in the same PR — no orphaned references.
-6. The `created_by` / `updated_by` fix is a **cross-cutting concern** — applies to every table.
-7. This is an evolving project — design for extensibility, not just current state.
+The implementation should improve both the backend execution flow and the user experience without breaking any existing functionality.
 
 ---
 
-## Table of Contents
+# Acceptance Criteria
 
-1. Overall DB Health Assessment
-2. Tables — Recommended for REMOVAL
-3. Tables — Recommended to MERGE
-4. Tables — Recommended to RESTRUCTURE (Column-Level Changes)
-5. Tables — KEEP As-Is
-6. Cross-Cutting: created_by / updated_by — Logged-In User Fix
-7. New Columns Required
-8. Index Recommendations
-9. Primary Key & Foreign Key Design
-10. Migration Plan & Execution Order
-11. Code Impact Summary
-12. Definition of Done
+## 1. Fix Deployment Refresh Not Updating UI
 
----
+### Current Issue
 
----
+For some environments:
 
-# 1. Overall DB Health Assessment
+- Clicking **Refresh** displays a success message such as:
+  - "Refresh completed"
+  - "Deployment refreshed"
 
-## Current State Observations
+However, the actual deployment data is **not refreshed in the UI**.
 
-| Issue | Impact | Priority |
-|---|---|---|
-| `created_by` / `updated_by` always "system" | Audit trail is useless — no user identity | HIGH |
-| `namespace` column not populating in components | Deployment validation broken | HIGH |
-| `cluster_environment` always null | Dead column, wasted space | MEDIUM |
-| `active_deployment` in components — likely unused | Misleading data | MEDIUM |
-| `gh_error` in components — purpose unclear | May be needed for error tracking | MEDIUM |
-| `overlay_status` in components — purpose unclear | Dead or misunderstood column | MEDIUM |
-| `scan_jobs` + `scan_runs` duplicating concerns | Unnecessary complexity | MEDIUM |
-| Multiple tables serving no clear purpose | Schema noise, confusion | MEDIUM |
-| No foreign key enforcement (H2 in-memory) | Referential integrity risks | LOW (fix at PostgreSQL migration) |
-| K8s timestamps not environment-specific | Wrong data model | HIGH |
+Some environments work correctly while others do not.
 
-## Guiding Principles for This Restructure
+### Required Changes
 
-```
-1. Components table = environment-agnostic master metadata per component per fix version
-2. Deployment Readiness table = environment-specific K8s data per component
-3. If data exists in YAML config → do NOT duplicate in DB
-4. If a table has no clear consumer in code → justify or remove
-5. created_by/updated_by must always reflect the authenticated user — never "system"
-6. Every K8s result must be scoped to environment + namespace — not stored globally
-7. Design for future PostgreSQL migration — use standard SQL types
-```
+- Review the complete refresh flow for every supported environment.
+- Verify:
+  - Frontend API call
+  - Controller
+  - Service
+  - Kubernetes lookup
+  - DTO mapping
+  - UI state update
+- Ensure every successful refresh immediately updates the deployment table.
+- Remove any stale UI state or cached frontend objects that prevent refreshed data from appearing.
 
 ---
 
----
+# 2. Display Background Job Status
 
-# 2. Tables — Recommended for REMOVAL
+Deployment refresh executes asynchronously.
 
-## 2.1 `audit_logs`
+Currently users only see a spinner or a success message.
 
-### Current State
-The table exists but is not being populated with any meaningful data. No code appears to be actively writing to it beyond perhaps a placeholder.
+### Required
 
-### Analysis
-For a SOC compliance application, a proper audit log IS strategically important long-term. However, the current empty table serves no purpose and creates confusion. The two options are:
+Display a user-friendly progress message while the refresh job is executing.
 
-**Option A — Remove now, reimplement properly later**
-The table exists but is empty and not integrated. Removing it now avoids confusion.
-When audit logging is properly required (during Azure Auth integration / production readiness), it should be reimplemented as a structured, event-driven audit trail with defined event types.
+Examples:
 
-**Option B — Keep but leave dormant**
-Keep the table definition so the migration path is easier later.
+- Refreshing deployment status...
+- Deployment validation is in progress...
+- Fetching latest Kubernetes deployment information...
+- Background job is running. Results will appear automatically.
 
-### Recommendation
-**Remove now.** When properly implemented, the audit trail will likely have a different schema than what exists today. Keeping an empty, unused table causes more confusion than removing it.
-
-### Future Design (for reference when reimplementing)
-```sql
--- Future audit_logs table design (do NOT implement now)
-CREATE TABLE audit_logs (
-    id                BIGINT PRIMARY KEY AUTO_INCREMENT,
-    event_type        VARCHAR(100) NOT NULL,  -- e.g., REPORT_GENERATED, COMPONENT_EXCLUDED
-    entity_type       VARCHAR(100),           -- e.g., COMPONENT, STORY, REPORT
-    entity_id         VARCHAR(255),
-    old_value         TEXT,
-    new_value         TEXT,
-    performed_by      VARCHAR(255) NOT NULL,  -- logged-in user
-    performed_at      TIMESTAMP NOT NULL,
-    team_key          VARCHAR(50),
-    fix_version       VARCHAR(100),
-    ip_address        VARCHAR(50),
-    session_id        VARCHAR(255)
-);
-```
-
-### Code Impact
-- Search codebase for: `audit_logs`, `AuditLog`, `AuditLogRepository`, `AuditLogService`
-- Remove all references
-- Remove JPA entity, repository, and any service calls
+The message should disappear automatically once processing completes.
 
 ---
 
-## 2.2 `commit_validations`
+# 3. Review and Resolve Existing TODOs
 
-### Current State
-Table has no data. Purpose is unclear.
+Review every existing `TODO` comment related to the Deployment module.
 
-### Analysis
-This table was likely intended to store the result of commit-level validation rules (e.g., "does this commit have a valid story ID in the message?", "is this commit a cherry-pick?"). However:
-- No data is being written to it
-- The validation logic in Review Commits works without persisting per-commit validation results
-- If validation results are needed per commit, they should be derived on-demand or stored as a flag on the `commits` table itself
+For each TODO:
 
-### Recommendation
-**Remove.** If per-commit validation persistence is needed in the future, add a `validation_status` and `validation_message` column directly to the `commits` table rather than maintaining a separate table.
+- Determine whether it can now be completed.
+- If yes:
+  - Implement the missing functionality.
+  - Remove the TODO.
+- If it cannot yet be completed:
+  - Update the TODO with a meaningful explanation and expected future work.
 
-### Code Impact
-- Search for: `commit_validations`, `CommitValidation`, `CommitValidationRepository`
-- Remove entity, repository, service references
+Do not leave obsolete TODO comments in the code.
 
 ---
 
-## 2.3 `excluded_components`
+# 4. Skip Helm Projects During Deployment Readiness
 
-### Current State
-A separate table for excluded components exists alongside exclusion flags in the `components` table itself.
+Current implementation still evaluates Helm repositories during deployment readiness.
 
-### Analysis
-The `components` table already has an `exclusion_type` or equivalent column (System Excluded / User Excluded / None). Maintaining a separate `excluded_components` table creates:
-- Duplicate state that can go out of sync
-- Extra joins needed for simple queries
-- Confusion about which is the source of truth
+This is unnecessary.
 
-The `components` table is the source of truth for exclusion status. This separate table is redundant.
+Deployment readiness should evaluate only:
 
-### Recommendation
-**Remove.** Ensure the `components` table has proper `exclusion_type ENUM('NONE', 'SYSTEM', 'USER')` with `exclusion_reason TEXT NULL` column. All exclusion logic must read from and write to `components` only.
+- Main Microservice repositories
 
-### Code Impact
-- Search for: `excluded_components`, `ExcludedComponent`, `ExcludedComponentRepository`
-- Redirect all exclusion reads/writes to `components.exclusion_type`
-- Remove entity, repository, service
+Do NOT evaluate:
+
+- Helm repositories
+
+Helm repositories inherit deployment information from the main application and should not generate additional Kubernetes calls.
+
+This should improve overall refresh performance.
 
 ---
 
-## 2.4 `team_configurations` / `team_configs`
+# 5. Remove Force Refresh Feature
 
-### Current State
-Table exists for storing team-level configuration (Team Key, projects, GitHub settings, iTrack settings, etc.)
+The current Deployment page contains:
 
-### Analysis
-The user has confirmed: **YAML file is the source of truth for team configuration.** Database duplication of YAML config creates:
-- Sync issues (YAML updated but DB not, or vice versa)
-- Unnecessary complexity
-- Dual maintenance burden
+- Force Refresh
 
-The YAML file (`team-config.yaml`) already contains all required team configuration. The application already reads from it. No DB table is needed.
+This functionality is no longer required.
 
-### Recommendation
-**Remove.** Keep YAML as sole source of truth for team configuration.
+### Required
 
-### Caveat for Future
-When the application evolves toward a multi-tenant, admin-configurable setup (likely during Azure Auth + production hardening phase), team configuration may move to DB at that point. Until then, YAML is sufficient.
+Completely remove:
 
-### Code Impact
-- Search for: `team_configurations`, `TeamConfiguration`, `TeamConfigRepository`, `TeamConfigService`
-- Verify all team config reads go through YAML loader — not DB
-- Remove entity, repository, table
+- Force Refresh button
+- Force Refresh backend API
+- Force Refresh controller
+- Force Refresh service methods
+- DTOs used only for Force Refresh
+- Any unused frontend state associated with Force Refresh
+
+The implementation should be fully removed from both frontend and backend.
 
 ---
 
-## 2.5 `itrack_field_configs`
+# 6. Standard Refresh Workflow
 
-### Current State
-Table for storing iTrack field configuration (field mappings, custom field IDs, etc.)
+Only one refresh action should remain.
 
-### Analysis
-Same reasoning as team configurations — the YAML file already maintains iTrack configurations. DB duplication is unnecessary at this stage.
+Example:
 
-### Recommendation
-**Remove.** YAML is the source of truth.
+**Refresh Deployment Status**
 
-### Code Impact
-- Search for: `itrack_field_configs`, `ItrackFieldConfig`, `ItrackFieldConfigRepository`
-- Ensure all iTrack field lookups use YAML config loader
-- Remove entity, repository, table
+Behavior:
 
----
-
-## 2.6 `project_keys`
-
-### Current State
-A table storing project keys (e.g., SPT-OC, OC-INFRA).
-
-### Analysis
-- Project keys are already defined in the YAML team configuration under each team
-- The application has moved to **Team Key** as the primary identifier
-- Project Keys are used internally to scope iTrack queries but do not need a standalone DB table
-- Any project key lookup should come from the YAML team config
-
-### Recommendation
-**Remove.** Project Keys are available from YAML team config. The standalone table is redundant.
-
-### Code Impact
-- Search for: `project_keys`, `ProjectKey`, `ProjectKeyRepository`
-- Replace all project key DB lookups with YAML team config reads
-- Remove entity, repository, table
+- Re-evaluate deployment readiness
+- Fetch latest Kubernetes information
+- Update database
+- Refresh UI automatically
 
 ---
 
-## 2.7 `team_kubernetes_connections` / `team_k8s_configs`
+# 7. Refresh Must Always Revalidate Kubernetes
 
-### Current State
-Table for storing Kubernetes connection/cookie configuration per team or environment.
+Current behavior appears to reuse existing database values.
 
-### Analysis
-- Kubernetes cookies are **session-scoped** — this is a core architectural rule established at project inception
-- Cookies must NEVER be persisted in DB (existing rule)
-- Connection configuration (URLs, namespaces) is in YAML team config
-- This table may be storing namespace URLs or cookie metadata — both are wrong if cookies are in it
+This is incorrect.
 
-### Recommendation
-**Remove.** Kubernetes connection parameters belong in YAML. Cookies belong in session. Nothing K8s-connection-related belongs in DB.
+Whenever the user clicks **Refresh**:
 
-### Code Impact
-- Search for: `team_kubernetes_connections`, `TeamK8sConfig`, `K8sConnectionRepository`
-- Ensure K8s cookies go through session manager only
-- Ensure K8s URLs/namespaces come from YAML team config
-- Remove entity, repository, table
+The application must:
 
----
+1. Read latest component information from the database.
+2. Call Kubernetes again.
+3. Retrieve current deployment state.
+4. Compare latest deployment.
+5. Update database.
+6. Reload UI.
 
-## 2.8 `repo_overrides`
-
-### Current State
-Table purpose is unclear. Not actively used based on review.
-
-### Analysis
-This was likely created to allow users to override the GitHub repository URL for a component (e.g., if a component's repo moved or was renamed). However:
-- No data is in it
-- No UI exposes it
-- The components table already stores repo information
-
-### Recommendation
-**Remove.** If repository override capability is needed in the future, add an `override_repo_url VARCHAR(500) NULL` column directly to the `components` table.
-
-### Code Impact
-- Search for: `repo_overrides`, `RepoOverride`, `RepoOverrideRepository`
-- Remove entity, repository, service
-- Add `override_repo_url` to components table if needed (defer to future requirement)
+Refresh should always perform a fresh Kubernetes validation.
 
 ---
 
-## 2.9 `release_branches` (Standalone Table)
+# 8. Initial Screen Load Behavior
 
-### Current State
-A standalone `release_branches` table exists alongside release branch information stored in the `components` table.
+When an environment is selected:
 
-### Analysis
-The `components` table already stores:
-- `release_branch` — the resolved release branch for this component/fix version
-- `previous_branch` — the previous release's branch
-- `production_branch` — the current production branch
+If deployment data already exists in the database:
 
-The standalone `release_branches` table likely stores the same `release_branch` per fix version at a team or fix-version level (not component level). This was probably created to cache the release branch resolution result so it doesn't need to be re-derived every time.
+- Load existing database values immediately.
 
-However:
-- The release branch is already resolved and stored per component in the `components` table
-- Resolution source tracking (`resolution_source` column) can live in the `components` table
-- A separate table for this adds joins and sync complexity
+Do NOT automatically call Kubernetes.
 
-### Recommendation
-**Remove the standalone `release_branches` table.** Consolidate all release branch information into the `components` table. Add `resolution_source` column to `components` if not already present.
+This provides a fast initial experience.
 
-### Columns to Absorb into `components`
-```
-release_branch          → already in components ✅
-previous_branch         → already in components ✅
-production_branch       → already in components ✅
-resolution_source       → ADD to components if missing
-production_commit_anchor → already in components ✅
-```
-
-### Code Impact
-- Search for: `release_branches`, `ReleaseBranch`, `ReleaseBranchRepository`, `ReleaseBranchService`
-- Redirect all release branch reads/writes to `components` table
-- Remove entity, repository, table
+Only after the user clicks **Refresh** should Kubernetes be queried again.
 
 ---
 
----
+# 9. Separate Initial Load and Refresh Logic
 
-# 3. Tables — Recommended to MERGE
+Implement two distinct flows.
 
-## 3.1 `scan_jobs` + `scan_runs` → Merged into `scan_jobs`
+### Initial Load
 
-### Current State
-Two separate tables:
-- `scan_jobs` — the parent job (e.g., "Generate Report for OC team, fix version 26.7.4")
-- `scan_runs` — individual run attempts or sub-tasks within a job
+Database
 
-### Analysis
-Having two tables for job tracking creates:
-- Unnecessary joins to get full job status
-- Confusion about which table to query for job status polling
-- Duplicate lifecycle management
+↓
 
-A single table with a `run_type` or `job_type` discriminator and a `parent_job_id` self-reference (for sub-jobs, if needed) is sufficient for the current use case and future extensibility.
+Display existing deployment information
 
-### Recommended Merged `scan_jobs` Table
+### Refresh
 
-```sql
-CREATE TABLE scan_jobs (
-    id                  BIGINT PRIMARY KEY AUTO_INCREMENT,
-    job_id              VARCHAR(100) NOT NULL UNIQUE,       -- e.g., JOB-20260728-001
-    job_type            VARCHAR(50) NOT NULL,               -- GENERATE_REPORT | REFRESH | FORCE_REFRESH | REVIEW_COMMITS
-    parent_job_id       VARCHAR(100) NULL,                  -- for sub-jobs, self-reference
-    team_key            VARCHAR(50) NOT NULL,
-    fix_version         VARCHAR(200) NOT NULL,              -- full format: "26.7.4 (July 26 – August 1, 2026)"
-    environment         VARCHAR(50) NULL,                   -- Test3 | Stage-West | Production-East | etc.
-    namespace           VARCHAR(200) NULL,                  -- com-att-oc-fmo-test3
-    status              VARCHAR(20) NOT NULL,               -- QUEUED | IN_PROGRESS | COMPLETED | FAILED | CANCELLED
-    progress_message    TEXT NULL,                          -- displayed in UI during job execution
-    error_message       TEXT NULL,                          -- populated on failure
-    result_summary      TEXT NULL,                          -- JSON summary of results
-    started_at          TIMESTAMP NULL,
-    completed_at        TIMESTAMP NULL,
-    duration_ms         BIGINT NULL,                        -- computed: completedAt - startedAt
-    created_by          VARCHAR(255) NOT NULL,
-    created_date        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_by          VARCHAR(255) NOT NULL,
-    updated_date        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+Database
 
--- Index for polling by job_id
-CREATE INDEX idx_scan_jobs_job_id ON scan_jobs(job_id);
--- Index for loading by team + fix version
-CREATE INDEX idx_scan_jobs_team_fix ON scan_jobs(team_key, fix_version);
--- Index for active jobs
-CREATE INDEX idx_scan_jobs_status ON scan_jobs(status);
-```
+↓
 
-### Migration Steps
-1. Create new merged `scan_jobs` table with above schema
-2. Migrate data from old `scan_jobs` into new table
-3. Migrate data from `scan_runs` into new table with appropriate `job_type` mapping
-4. Update all code references from `scan_runs` → `scan_jobs`
-5. Drop old `scan_runs` table
-6. Drop old `scan_jobs` table (after renaming new one in place)
+Kubernetes
 
-### Code Impact
-- Search for: `scan_runs`, `ScanRun`, `ScanRunRepository`, `ScanRunService`
-- Redirect all scan run operations to unified `scan_jobs` table
-- Update job polling service to use single table
-- Update job status update logic
+↓
+
+Update database
+
+↓
+
+Reload UI
+
+Do not mix these two execution paths.
 
 ---
 
----
+# 10. Persist Refreshed Deployment Data
 
-# 4. Tables — Recommended to RESTRUCTURE
+Every refresh should overwrite deployment readiness information in the database.
 
-## 4.1 `components` — Comprehensive Column Review
-
-The `components` table is the most critical table in the application. It is the master record for a component within a specific team + fix version context. Below is a column-by-column analysis.
-
-### Columns to REMOVE from `components`
-
-| Column | Reason for Removal |
-|---|---|
-| `active_deployment` | Deployment state is environment-specific and belongs in `deployment_readiness` table, not in the environment-agnostic components table |
-| `cluster_environment` | Always null. Environment is captured in `deployment_readiness` per K8s call. Remove. |
-| `overlay_status` | Purpose unclear. If it refers to a UI overlay state, it should never be persisted in DB. If it refers to some validation overlay, the purpose must be clarified — but since it's unknown and likely unused, remove. |
-| `gh_error` | A GitHub error message stored on the component is a transient error, not persistent metadata. Errors should be in `scan_jobs.error_message` or per-component error in `deployment_readiness`. Remove from components. |
-
-### Columns to RENAME / FIX in `components`
-
-| Current Column | Issue | Fix |
-|---|---|---|
-| `kubernetes_sync_timestamp` or similar | Generic — does not indicate which environment the K8s sync was from. Also, K8s data is environment-specific — this column is misplaced in components | **REMOVE from components.** K8s timestamps belong in `deployment_readiness` with environment+namespace scope. |
-| `namespace` | Not populating | Root cause: The namespace is passed as a runtime parameter during K8s calls. It must be captured from the request and stored. If namespace is environment-specific, it belongs in `deployment_readiness`, not components. **Assess: is this the namespace of the main repo or a specific environment? If environment-specific → move to deployment_readiness. If it's the component's primary GitHub namespace → fix the population bug.** |
-| `production_commit_anchor` | Good but ambiguous — which production? | As discussed, user prefers to keep this as-is. **Keep.** Future: may split into `prod_east_commit_anchor` and `prod_west_commit_anchor` when dual-prod validation is needed. |
-| `created_by` / `updated_by` | Always "system" | Fix — see Section 6 |
-
-### Columns to ADD to `components`
-
-| New Column | Type | Purpose |
-|---|---|---|
-| `release_branch_latest_commit_id` | `VARCHAR(40) NULL` | The absolute latest commit SHA on the resolved release branch at report generation time. Includes merge commits. Used by Refresh to compare without GitHub calls. |
-| `resolution_source` | `VARCHAR(50) NULL` | Source used to resolve the release branch: `PRODUCTION_K8S` / `GITHUB` / `MANUAL`. Absorbed from `release_branches` table being removed. |
-| `override_repo_url` | `VARCHAR(500) NULL` | Future-proofing: allows override of GitHub repo URL per component. Absorbs `repo_overrides` use case. NULL by default. |
-
-### Recommended Final `components` Table Structure
-
-```sql
-CREATE TABLE components (
-    id                              BIGINT PRIMARY KEY AUTO_INCREMENT,
-
-    -- Identity
-    team_key                        VARCHAR(50) NOT NULL,
-    fix_version                     VARCHAR(200) NOT NULL,   -- full format always
-    component_name                  VARCHAR(255) NOT NULL,
-    component_type                  VARCHAR(50) NOT NULL,    -- SERVICE | LIBRARY | HELM | SYSTEM
-
-    -- GitHub
-    repo_url                        VARCHAR(500) NULL,
-    override_repo_url               VARCHAR(500) NULL,       -- NEW: override if needed
-
-    -- Branch Resolution
-    release_branch                  VARCHAR(255) NULL,       -- resolved release branch
-    previous_branch                 VARCHAR(255) NULL,
-    production_branch               VARCHAR(255) NULL,
-    production_commit_anchor        VARCHAR(40) NULL,        -- keep as-is per user decision
-    resolution_source               VARCHAR(50) NULL,        -- NEW: absorbed from release_branches
-
-    -- NEW: Latest commit on release branch (populated during Generate Report)
-    release_branch_latest_commit_id VARCHAR(40) NULL,
-
-    -- Exclusion
-    exclusion_type                  VARCHAR(20) NOT NULL DEFAULT 'NONE',  -- NONE | SYSTEM | USER
-    exclusion_reason                TEXT NULL,
-
-    -- Associated Data (stored as JSON arrays or normalized — see note below)
-    scrum_teams                     TEXT NULL,               -- JSON array of team names
-    stories                         TEXT NULL,               -- JSON array of story IDs
-
-    -- Audit
-    created_by                      VARCHAR(255) NOT NULL,
-    created_date                    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_by                      VARCHAR(255) NOT NULL,
-    updated_date                    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-> **Note on `scrum_teams` and `stories` storage:**
-> Currently stored as some code-based format. Standardize to JSON arrays (e.g., `["Team Alpha", "Team Beta"]`) for consistency. If the application ever needs to query by scrum team, consider a normalized `component_teams` junction table. For now, JSON is sufficient.
-
-### Composite Unique Key for `components`
-
-```sql
--- A component is unique per team + fix version + component name
-ALTER TABLE components
-ADD CONSTRAINT uq_components_identity
-UNIQUE (team_key, fix_version, component_name);
-```
+Database should always represent the latest validated deployment state.
 
 ---
 
-## 4.2 `deployment_readiness` — Column Review & Naming
+# 11. Display Component Refresh Timestamp
 
-This is the table added in Bundle 1 to store per-environment, per-component K8s validation results.
+Add a deployment metadata section on the Release Readiness page.
 
-### Issue: K8s Timestamps Must Be Environment-Scoped
+Location:
 
-Since this table already has `environment` and `namespace` as columns (and part of the composite key), the K8s sync timestamp here is implicitly scoped. **This is the correct place for K8s timestamps — not the components table.**
+Top-right corner of the page.
 
-### Recommended `deployment_readiness` Table Structure
-
-```sql
-CREATE TABLE deployment_readiness (
-    id                          BIGINT PRIMARY KEY AUTO_INCREMENT,
-
-    -- Composite Key Fields
-    team_key                    VARCHAR(50) NOT NULL,
-    fix_version                 VARCHAR(200) NOT NULL,
-    environment                 VARCHAR(50) NOT NULL,        -- Test3 | Test4 | Stage-West | Production-East | Production-West
-    namespace                   VARCHAR(200) NOT NULL,       -- com-att-oc-fmo-test3
-    component_name              VARCHAR(255) NOT NULL,
-
-    -- Branch Data
-    release_branch              VARCHAR(255) NULL,           -- expected release branch (from components table)
-    k8s_branch_raw              VARCHAR(255) NULL,           -- raw K8s label: release-26-07-28-rel
-    k8s_branch_normalized       VARCHAR(255) NULL,           -- canonical: release/26.07.28.rel
-
-    -- Commit Data
-    k8s_commit_id               VARCHAR(40) NULL,            -- full SHA from K8s
-    latest_release_commit_id    VARCHAR(40) NULL,            -- from components.release_branch_latest_commit_id
-
-    -- Validation Results
-    deployment_status           VARCHAR(50) NULL,            -- VALID | OLDER_BRANCH | NEEDS_REDEPLOYMENT | BRANCH_VALID_COMMIT_UNVERIFIED | UNABLE_TO_VALIDATE | USER_EXCLUDED
-    validation_message          TEXT NULL,                   -- human-readable status message
-    tooltip_message             TEXT NULL,                   -- detailed tooltip content
-
-    -- Environment-Scoped K8s Sync Timestamps
-    -- Named explicitly per environment type for clarity
-    last_validated_at           TIMESTAMP NULL,              -- when this record was last refreshed
-    k8s_sync_source             VARCHAR(50) NULL,            -- REFRESH | FORCE_REFRESH
-
-    -- Audit
-    created_by                  VARCHAR(255) NOT NULL,
-    created_date                TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_by                  VARCHAR(255) NOT NULL,
-    updated_date                TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    -- Composite Unique Key
-    CONSTRAINT uq_deployment_readiness
-        UNIQUE (team_key, fix_version, environment, namespace, component_name)
-);
-```
-
-> **Regarding K8s timestamp naming (user request):**
-> Since each row in `deployment_readiness` already has `environment` (e.g., "Production-East") and `namespace` columns, the `last_validated_at` timestamp is implicitly environment-specific. A record for "Production-East" / "com-att-oc-fmo-prod-east" has its own `last_validated_at`. This is cleaner than having separate `prod_east_sync_timestamp` and `prod_west_sync_timestamp` columns. The environment name in the row makes it self-documenting.
+Do not consume significant screen space.
 
 ---
 
-## 4.3 `commits` — Minor Review
+### Display
 
-### Current State
-Stores GitHub commit data per component / fix version. This is correct.
+Example:
 
-### Recommended Columns
+**Components Last Refreshed**
 
-```sql
-CREATE TABLE commits (
-    id                  BIGINT PRIMARY KEY AUTO_INCREMENT,
-    team_key            VARCHAR(50) NOT NULL,
-    fix_version         VARCHAR(200) NOT NULL,
-    component_name      VARCHAR(255) NOT NULL,
-    commit_sha          VARCHAR(40) NOT NULL,
-    commit_message      TEXT NULL,
-    author_name         VARCHAR(255) NULL,
-    author_email        VARCHAR(255) NULL,
-    committed_at        TIMESTAMP NULL,
-    is_merge_commit     BOOLEAN NOT NULL DEFAULT FALSE,
-    branch_name         VARCHAR(255) NULL,
-    source              VARCHAR(50) NULL,            -- RELEASE_BRANCH | MASTER | PRODUCTION
-    created_by          VARCHAR(255) NOT NULL,
-    created_date        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+15-Aug-2026 11:42:18 AM IST
 
-    CONSTRAINT uq_commits UNIQUE (team_key, fix_version, component_name, commit_sha)
-);
-```
+03:12:18 AM CDT
 
-### Note
-The `is_merge_commit` flag is important — it allows the application to filter merge commits in Review Commits analysis without re-parsing the commit message each time.
+Show both:
+
+- IST
+- CDT
+
+Use a readable date/time format.
 
 ---
 
-## 4.4 `commit_comments` — Minor Review
+# 12. Meaning of Components Refresh Timestamp
 
-### Current State
-Stores commit messages/comments. Purpose: preserve commit text for display and analysis.
+This timestamp represents:
 
-### Analysis
-This overlaps with `commits.commit_message`. If the commit message is already in the `commits` table, a separate `commit_comments` table adds unnecessary complexity.
+The most recent time the Components table was populated from the Generate Report workflow for the selected:
 
-### Recommendation
-**Merge into `commits` table.** The `commit_message TEXT` column in `commits` serves this purpose. If extended commit metadata (e.g., PR description, review comments) is needed in future, add separate columns then.
+- Team
+- Fix Version
 
-### Code Impact
-- Search for: `commit_comments`, `CommitComment`, `CommitCommentRepository`
-- Move any commit comment reads/writes to `commits.commit_message`
-- Remove entity, repository, table
+This is **not** the deployment refresh timestamp.
+
+It specifically indicates when the component metadata was last refreshed.
 
 ---
 
-## 4.5 `itrack_stories` — Minor Review
+# 13. Timestamp Storage
 
-The `itrack_stories` table is confirmed as useful. Minor changes only:
+Review the existing schema.
 
-```sql
--- Ensure these columns exist and are correct:
-ADD COLUMN created_by   VARCHAR(255) NOT NULL DEFAULT 'system',   -- fix: use logged-in user
-ADD COLUMN updated_by   VARCHAR(255) NOT NULL DEFAULT 'system',   -- fix: use logged-in user
-ADD COLUMN updated_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
-```
+If necessary, introduce a metadata table to store refresh history.
 
----
+Suggested fields:
 
-## 4.6 `fixed_versions` — Minor Review
+- Team Key
+- Fix Version
+- Components Refresh Timestamp
+- Last Updated By
+- Created Timestamp
+- Updated Timestamp
 
-The user has confirmed this table should be kept (OC-level fixed versions are loaded here). Minor changes:
+One record should exist for each Team + Fix Version combination.
 
-```sql
--- Ensure fix_version is always stored in FULL format:
--- "26.7.4 (July 26 – August 1, 2026)"  ← correct
--- NOT "26.7.4" ← never store abbreviated form
-
--- Ensure these audit columns exist:
-ADD COLUMN created_by   VARCHAR(255) NOT NULL DEFAULT 'system',
-ADD COLUMN updated_by   VARCHAR(255) NOT NULL DEFAULT 'system',
-ADD COLUMN updated_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
-```
+Design the schema appropriately instead of duplicating timestamps across multiple component records.
 
 ---
 
----
+# 14. Display Timestamp Per Team and Fix Version
 
-# 5. Tables — KEEP As-Is
+When the user changes:
 
-| Table | Status | Notes |
-|---|---|---|
-| `itrack_stories` | ✅ Keep | Minor audit column fix needed |
-| `fixed_versions` | ✅ Keep | Keep for OC-level version loading |
-| `search_results` | ✅ Keep | Not populating currently but retain — no cleanup needed |
-| `commits` | ✅ Keep (restructured) | Merge commit_comments into this table |
+- Team
+- Fix Version
+
+The displayed Components Refresh Timestamp should automatically update to reflect that specific combination.
 
 ---
 
----
+# 15. Time Zone Display
 
-# 6. Cross-Cutting: `created_by` / `updated_by` — Logged-In User Fix
+Display timestamps in both:
 
-## Problem
-Every table has `created_by` and `updated_by` columns, but they always contain `"system"` regardless of who is logged in. This makes audit tracking useless.
+- IST (Indian Standard Time)
+- CDT (Central Daylight Time)
 
-## Root Cause
-The authenticated user identity is not being propagated through the request context when entities are saved. The Spring Security context has the user, but the JPA save operations are not reading from it.
+Format example:
 
-## Solution Design
+15-Aug-2026 11:42:18 AM IST
 
-### Backend: UserContext Propagation
+15-Aug-2026 01:12:18 AM CDT
 
-```java
-// UserContextHolder — single source of truth for current user
-@Component
-public class UserContextHolder {
-
-    private static final ThreadLocal<String> currentUser =
-        new ThreadLocal<>();
-
-    public static void setCurrentUser(String username) {
-        currentUser.set(username);
-    }
-
-    public static String getCurrentUser() {
-        String user = currentUser.get();
-        return (user != null && !user.isBlank()) ? user : "system";
-    }
-
-    public static void clear() {
-        currentUser.remove();
-    }
-}
-
-// RequestFilter — populate at every request entry point
-@Component
-public class UserContextFilter implements Filter {
-
-    @Override
-    public void doFilter(ServletRequest request,
-                         ServletResponse response,
-                         FilterChain chain) throws IOException, ServletException {
-        try {
-            Authentication auth =
-                SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.isAuthenticated()) {
-                // Use display name or preferred username from principal
-                String username = resolveUsername(auth);
-                UserContextHolder.setCurrentUser(username);
-                MDC.put("userId", username);  // for structured logging
-            }
-            chain.doFilter(request, response);
-        } finally {
-            UserContextHolder.clear();
-            MDC.remove("userId");
-        }
-    }
-
-    private String resolveUsername(Authentication auth) {
-        // Adjust based on actual principal type used (JWT, Azure AD, etc.)
-        Object principal = auth.getPrincipal();
-        if (principal instanceof UserDetails ud) {
-            return ud.getUsername();
-        }
-        return auth.getName();
-    }
-}
-```
-
-### JPA: BaseEntity with Auto-Population
-
-```java
-@MappedSuperclass
-@EntityListeners(AuditingEntityListener.class)
-public abstract class BaseAuditEntity {
-
-    @CreatedBy
-    @Column(name = "created_by", updatable = false)
-    private String createdBy;
-
-    @CreatedDate
-    @Column(name = "created_date", updatable = false)
-    private LocalDateTime createdDate;
-
-    @LastModifiedBy
-    @Column(name = "updated_by")
-    private String updatedBy;
-
-    @LastModifiedDate
-    @Column(name = "updated_date")
-    private LocalDateTime updatedDate;
-}
-
-// AuditorAware — tells Spring Data JPA who the current user is
-@Component
-public class AuditorAwareImpl implements AuditorAware<String> {
-
-    @Override
-    public Optional<String> getCurrentAuditor() {
-        return Optional.of(UserContextHolder.getCurrentUser());
-    }
-}
-```
-
-### Enable JPA Auditing
-
-```java
-@Configuration
-@EnableJpaAuditing(auditorAwareRef = "auditorAwareImpl")
-public class JpaAuditingConfig {}
-```
-
-### All Entities Must Extend BaseAuditEntity
-
-Every entity class must:
-1. Extend `BaseAuditEntity`
-2. Remove any manual `createdBy = "system"` assignments
-3. Remove any manual `updatedBy = "system"` assignments
-
-## Dev User Display Fix
-
-Currently the UI shows "Welcome Dev User" or similar placeholder. The logged-in username must be shown here.
-
-- The username resolved from the security context (same as above) must be returned in the `/api/auth/me` or user-info endpoint
-- The UI must display this username in the welcome message and user profile section
-- Until Azure Auth is integrated, the dev profile name from the current auth setup must be used
-
-## Acceptance Criteria for created_by / updated_by Fix
-
-```
-AC-6.1
-GIVEN a user is logged in with username "john.doe"
-WHEN any DB record is created
-THEN created_by = "john.doe"
-AND created_date = current timestamp
-
-AC-6.2
-GIVEN a user is logged in with username "jane.smith"
-WHEN any DB record is updated
-THEN updated_by = "jane.smith"
-AND updated_date = current timestamp
-
-AC-6.3
-GIVEN no user is authenticated (background job / scheduled task)
-WHEN a DB record is created or updated
-THEN created_by / updated_by = "system" (fallback only for non-user contexts)
-
-AC-6.4
-GIVEN the user logs in
-WHEN the UI header renders
-THEN the welcome message shows the actual logged-in username
-AND NOT "Dev User" or any placeholder
-```
+Ensure formatting is consistent across the application.
 
 ---
 
----
+# 16. UI Improvements
 
-# 7. New Columns Required
+The metadata section should be compact and visually aligned with the existing page layout.
 
-## Summary of All New Columns
+Avoid introducing large cards or banners.
 
-| Table | Column | Type | Purpose |
-|---|---|---|---|
-| `components` | `release_branch_latest_commit_id` | `VARCHAR(40) NULL` | Latest commit SHA on release branch (including merge commits). Populated during Generate Report. Used by Refresh. |
-| `components` | `resolution_source` | `VARCHAR(50) NULL` | How release branch was resolved: `PRODUCTION_K8S` / `GITHUB` / `MANUAL` |
-| `components` | `override_repo_url` | `VARCHAR(500) NULL` | Optional GitHub repo URL override per component |
-| `commits` | `is_merge_commit` | `BOOLEAN NOT NULL DEFAULT FALSE` | Flags merge commits for fast filtering without message re-parsing |
-| `scan_jobs` (merged) | `environment` | `VARCHAR(50) NULL` | Scopes job to specific environment (Test3, Stage-West, etc.) |
-| `scan_jobs` (merged) | `namespace` | `VARCHAR(200) NULL` | Scopes job to specific K8s namespace |
-| `scan_jobs` (merged) | `job_type` | `VARCHAR(50) NOT NULL` | GENERATE_REPORT / REFRESH / FORCE_REFRESH / REVIEW_COMMITS |
-| `scan_jobs` (merged) | `duration_ms` | `BIGINT NULL` | Computed job duration in milliseconds |
+Use subtle typography that complements the existing AT&T-themed UI.
 
 ---
 
----
+# 17. Backend Logging
 
-# 8. Index Recommendations
+Add INFO logs for:
 
-## `components` Table
+- Deployment refresh started
+- Environment selected
+- Kubernetes validation started
+- Deployment refresh completed
+- Database updated
+- UI refresh completed
 
-```sql
--- Primary lookup: team + fix version (most common query pattern)
-CREATE INDEX idx_components_team_fix
-    ON components(team_key, fix_version);
+Add DEBUG logs for:
 
--- Exclusion filter (used in Refresh and Generate Report)
-CREATE INDEX idx_components_exclusion
-    ON components(team_key, fix_version, exclusion_type);
+- Kubernetes responses
+- Deployment parsing
+- Namespace resolution
+- Deployment comparison
+- Timestamp updates
 
--- Component type filter (Library, Helm, Service)
-CREATE INDEX idx_components_type
-    ON components(team_key, fix_version, component_type);
-```
-
-## `deployment_readiness` Table
-
-```sql
--- Primary lookup: team + fix version + environment + namespace
-CREATE INDEX idx_dr_team_fix_env
-    ON deployment_readiness(team_key, fix_version, environment, namespace);
-
--- Status-based queries (for filtering)
-CREATE INDEX idx_dr_status
-    ON deployment_readiness(team_key, fix_version, environment, deployment_status);
-
--- Last validated at (for stale data detection)
-CREATE INDEX idx_dr_validated_at
-    ON deployment_readiness(team_key, fix_version, environment, last_validated_at);
-```
-
-## `commits` Table
-
-```sql
--- Primary commit lookup per component
-CREATE INDEX idx_commits_component
-    ON commits(team_key, fix_version, component_name);
-
--- Merge commit filter
-CREATE INDEX idx_commits_merge
-    ON commits(team_key, fix_version, component_name, is_merge_commit);
-
--- Branch-scoped commit history
-CREATE INDEX idx_commits_branch
-    ON commits(team_key, fix_version, component_name, branch_name);
-```
-
-## `scan_jobs` Table (Merged)
-
-```sql
--- Job polling by ID
-CREATE UNIQUE INDEX idx_scan_jobs_job_id ON scan_jobs(job_id);
-
--- Status polling (UI polls for IN_PROGRESS jobs)
-CREATE INDEX idx_scan_jobs_status ON scan_jobs(status, team_key);
-
--- History by team + fix version
-CREATE INDEX idx_scan_jobs_team_fix ON scan_jobs(team_key, fix_version);
-
--- Per-environment job lookup
-CREATE INDEX idx_scan_jobs_env
-    ON scan_jobs(team_key, fix_version, environment, namespace);
-```
-
-## `itrack_stories` Table
-
-```sql
--- Stories by team + fix version (most common lookup)
-CREATE INDEX idx_stories_team_fix
-    ON itrack_stories(team_key, fix_version);
-
--- Story status filter
-CREATE INDEX idx_stories_status
-    ON itrack_stories(team_key, fix_version, status);
-```
-
-## `fixed_versions` Table
-
-```sql
--- Lookup by team
-CREATE INDEX idx_fixed_versions_team
-    ON fixed_versions(team_key);
-```
+Use MDC to include the authenticated username in all logs.
 
 ---
 
----
+# 18. Performance Optimisation
 
-# 9. Primary Key & Foreign Key Design
+Reduce unnecessary Kubernetes calls by:
 
-## Current State
-The application uses H2 in-memory DB with simple auto-increment PKs. Foreign key enforcement is likely relaxed or disabled in H2 mode.
+- Skipping Helm repositories
+- Refreshing only the selected environment
+- Avoiding duplicate controller invocations
+- Reusing database state during initial page load
 
-## Recommendations for Future PostgreSQL Migration
-
-> ⚠️ Do NOT add FK constraints in H2 yet. Define them now in the entity model so they are ready for PostgreSQL migration.
-
-### Composite Unique Key Summary
-
-| Table | Composite Unique Key |
-|---|---|
-| `components` | `(team_key, fix_version, component_name)` |
-| `deployment_readiness` | `(team_key, fix_version, environment, namespace, component_name)` |
-| `commits` | `(team_key, fix_version, component_name, commit_sha)` |
-| `itrack_stories` | `(team_key, fix_version, story_id)` |
-| `scan_jobs` | `(job_id)` — UUID or formatted string |
-
-### Logical Foreign Key Relationships (Enforce at PostgreSQL)
-
-```
-itrack_stories.team_key + fix_version
-    → (no FK needed — team/fix comes from YAML/iTrack, not another table)
-
-deployment_readiness.team_key + fix_version + component_name
-    → components(team_key, fix_version, component_name)
-
-commits.team_key + fix_version + component_name
-    → components(team_key, fix_version, component_name)
-```
-
-### PK Strategy Going Forward
-
-For tables where records are referenced by external systems (e.g., `scan_jobs`), consider using **UUID as the public identifier** while keeping a BIGINT surrogate PK for internal performance:
-
-```sql
--- scan_jobs: public-facing ID is the job_id (UUID format)
--- internal PK remains BIGINT for join performance
-job_id VARCHAR(100) UNIQUE  -- e.g., "JOB-20260728-001" or UUID
-id     BIGINT AUTO_INCREMENT PRIMARY KEY  -- internal only
-```
+Only Refresh should perform live Kubernetes validation.
 
 ---
 
----
+# 19. Validation Checklist
 
-# 10. Migration Plan & Execution Order
+Before marking this phase complete, verify:
 
-> ⚠️ Execute migrations in this exact order. Each step must be verified before proceeding.
-
-## Phase 1 — Safe Additions (No Risk)
-
-```
-Step 1.1  Add release_branch_latest_commit_id to components (NULL default — backward safe)
-Step 1.2  Add resolution_source to components (NULL default)
-Step 1.3  Add override_repo_url to components (NULL default)
-Step 1.4  Add is_merge_commit to commits (DEFAULT FALSE — backward safe)
-Step 1.5  Add environment + namespace + job_type to scan_jobs (NULL defaults initially)
-Step 1.6  Fix created_by/updated_by — deploy UserContextFilter + AuditorAware
-Step 1.7  Verify created_by/updated_by populates with real usernames in all tables
-```
-
-## Phase 2 — Merge Operations
-
-```
-Step 2.1  Create new unified scan_jobs table (with all merged columns)
-Step 2.2  Migrate data from old scan_jobs → new scan_jobs
-Step 2.3  Migrate data from scan_runs → new scan_jobs (with job_type mapping)
-Step 2.4  Update all code references to use new unified scan_jobs
-Step 2.5  Verify job polling, progress messaging, status updates work correctly
-Step 2.6  Drop old scan_runs table
-Step 2.7  Merge commit_comments data into commits.commit_message
-Step 2.8  Update code — redirect commit comment reads to commits.commit_message
-Step 2.9  Drop commit_comments table
-```
-
-## Phase 3 — Table Removals (Highest Risk — Verify Code First)
-
-```
-For each table in removal list:
-  Step A:  Search codebase for ALL references (entity, repository, service, controller, query)
-  Step B:  Verify no active usage (or redirect usage as needed)
-  Step C:  Update/remove code references
-  Step D:  Deploy code change first — verify application runs
-  Step E:  Only then drop the table
-
-Removal order:
-  3.1   excluded_components (redirect to components.exclusion_type)
-  3.2   release_branches (redirect to components.release_branch)
-  3.3   repo_overrides (no active usage — safe to drop)
-  3.4   commit_validations (no data, no active usage — safe to drop)
-  3.5   audit_logs (no active usage — safe to drop)
-  3.6   project_keys (redirect to YAML config)
-  3.7   team_configurations / team_configs (redirect to YAML config)
-  3.8   itrack_field_configs (redirect to YAML config)
-  3.9   team_kubernetes_connections / team_k8s_configs (redirect to YAML / session)
-```
-
-## Phase 4 — Column Cleanup in `components`
-
-```
-Step 4.1  Verify active_deployment is unused in all queries and code
-Step 4.2  Remove active_deployment column
-Step 4.3  Verify cluster_environment is always null and unused
-Step 4.4  Remove cluster_environment column
-Step 4.5  Verify overlay_status is unused
-Step 4.6  Remove overlay_status column
-Step 4.7  Verify gh_error is unused (or move to deployment_readiness if needed)
-Step 4.8  Remove gh_error column from components
-Step 4.9  Move K8s timestamp reference from components to deployment_readiness
-          (verify components has no K8s-specific timestamp columns)
-```
-
-## Phase 5 — Index Creation
-
-```
-Step 5.1  Create all indexes listed in Section 8
-Step 5.2  Verify query plans using EXPLAIN for main query patterns
-Step 5.3  Adjust indexes if query plan reveals issues
-```
+- Refresh updates UI for every environment.
+- No environment silently fails after refresh.
+- Background progress message is displayed correctly.
+- All Deployment TODO items have been reviewed.
+- Helm repositories are skipped.
+- Force Refresh functionality is completely removed.
+- Only one Refresh action remains.
+- Initial page load reads from the database.
+- Refresh always performs live Kubernetes validation.
+- Database is updated after every refresh.
+- Components Last Refreshed timestamp is displayed.
+- Timestamp updates correctly for each Team + Fix Version.
+- IST and CDT are displayed correctly.
+- Existing deployment functionality continues to work without regression.
 
 ---
 
----
+## Non-Functional Requirement
 
-# 11. Code Impact Summary
-
-## High Impact (Many Files)
-
-| Change | Files Affected |
-|---|---|
-| `created_by` / `updated_by` fix | ALL entity classes + new Filter + AuditorAware config |
-| `scan_jobs` + `scan_runs` merge | ScanJobService, ScanRunService, JobPollingService, JobController, UI polling |
-| `commit_comments` merge into `commits` | CommitCommentRepository, CommitService, commit display components |
-| `excluded_components` removal | ExclusionService, ComponentFilterService, Generate Report flow |
-
-## Medium Impact
-
-| Change | Files Affected |
-|---|---|
-| `release_branches` table removal | ReleaseBranchService, BranchResolutionService, ComponentService |
-| `project_keys` table removal | ProjectKeyRepository, YAML config loader, any project-key-based queries |
-| `team_configurations` removal | TeamConfigService → must be 100% YAML-driven after this |
-| New `release_branch_latest_commit_id` column | GenerateReport flow (write), Refresh flow (read), ComponentRepository |
-| `is_merge_commit` flag on commits | Commit fetch service, Review Commits analysis (simplifies filter logic) |
-
-## Low Impact (Isolated Changes)
-
-| Change | Files Affected |
-|---|---|
-| `audit_logs` removal | AuditLogRepository (if exists), any AuditLogService calls |
-| `repo_overrides` removal | RepoOverrideRepository (if exists) |
-| `commit_validations` removal | CommitValidationRepository (if exists) |
-| `itrack_field_configs` removal | ItrackFieldConfigRepository (if exists) — replace with YAML loader |
-| Column removals from `components` | ComponentEntity JPA class, any queries referencing removed columns |
-
-## Zero Impact (Already Correct)
-
-- `itrack_stories` — only audit column fix needed
-- `fixed_versions` — only audit column fix needed
-- `search_results` — no changes
-- `deployment_readiness` — already designed correctly per Bundle 1
-
----
-
----
-
-# 12. Definition of Done
-
-## Tables Removed
-- [ ] `audit_logs` dropped (after verifying zero code usage)
-- [ ] `commit_validations` dropped
-- [ ] `excluded_components` dropped (exclusion logic confirmed in `components`)
-- [ ] `commit_comments` dropped (data merged into `commits.commit_message`)
-- [ ] `team_configurations` / `team_configs` dropped (YAML confirmed as sole source)
-- [ ] `itrack_field_configs` dropped (YAML confirmed as sole source)
-- [ ] `project_keys` dropped (YAML confirmed as sole source)
-- [ ] `team_kubernetes_connections` / `team_k8s_configs` dropped
-- [ ] `repo_overrides` dropped
-- [ ] `release_branches` standalone table dropped (data confirmed in `components`)
-
-## Tables Merged
-- [ ] `scan_jobs` and `scan_runs` merged into single unified `scan_jobs` table
-- [ ] All job polling, status update, and progress messaging code updated
-- [ ] Old `scan_runs` table dropped
-
-## Columns Added
-- [ ] `components.release_branch_latest_commit_id VARCHAR(40) NULL` added
-- [ ] `components.resolution_source VARCHAR(50) NULL` added
-- [ ] `components.override_repo_url VARCHAR(500) NULL` added
-- [ ] `commits.is_merge_commit BOOLEAN NOT NULL DEFAULT FALSE` added
-- [ ] `scan_jobs.environment`, `namespace`, `job_type`, `duration_ms` added
-
-## Columns Removed from `components`
-- [ ] `active_deployment` removed (code verified unused)
-- [ ] `cluster_environment` removed (always null, code verified unused)
-- [ ] `overlay_status` removed (code verified unused)
-- [ ] `gh_error` removed from `components` (moved or removed per code audit)
-- [ ] K8s-specific timestamps removed from `components` (confirmed in `deployment_readiness`)
-
-## Audit Fix
-- [ ] `UserContextFilter` deployed — propagates authenticated user to `UserContextHolder`
-- [ ] `AuditorAwareImpl` deployed — reads from `UserContextHolder`
-- [ ] `JpaAuditingConfig` enabled with `@EnableJpaAuditing`
-- [ ] All entities extend `BaseAuditEntity`
-- [ ] All manual `createdBy = "system"` assignments removed from code
-- [ ] `created_by` and `updated_by` in all tables now reflect actual logged-in user
-- [ ] Welcome message in UI shows actual logged-in username
-
-## Indexes
-- [ ] All indexes from Section 8 created
-- [ ] Query plans verified for primary access patterns
-
-## Data Integrity
-- [ ] Composite unique keys added to `components`, `deployment_readiness`, `commits`, `itrack_stories`
-- [ ] FK relationships documented for future PostgreSQL migration
-- [ ] FK constraints NOT added to H2 yet (to avoid dev friction)
-
-## No Regressions
-- [ ] Generate Report flow works end-to-end
-- [ ] Review Commits flow works end-to-end
-- [ ] Deployment Refresh flow works end-to-end
-- [ ] Branch Cut Validation works end-to-end
-- [ ] Settings page works end-to-end
-- [ ] Fixed Versions loading works correctly
-- [ ] iTrack Stories loading works correctly
-- [ ] All existing job tracking and polling continues to work via merged `scan_jobs`
-
----
-
-## Final Table Inventory (Post-Restructure)
-
-| Table | Status | Purpose |
-|---|---|---|
-| `components` | ✅ Restructured | Core component metadata per team + fix version |
-| `deployment_readiness` | ✅ Clean (Bundle 1) | Per-environment K8s validation results |
-| `commits` | ✅ Restructured | GitHub commit history per component |
-| `itrack_stories` | ✅ Minor fix | iTrack story data per team + fix version |
-| `fixed_versions` | ✅ Minor fix | OC-level fix versions |
-| `scan_jobs` | ✅ Merged | Unified async job tracking |
-| `search_results` | ✅ Keep | Search result cache (not yet populating — retain) |
-
-**Total: 7 clean, purposeful tables** (down from 15–18 tables currently)
-
----
-
-*Document Version: 1.0 — For Review & Approval by Sai Before Implementation*
-*Do NOT implement until Sai confirms approval of this plan.*
+This phase is primarily a **stability, usability, and maintainability improvement**. Existing business logic should remain unchanged except for the explicitly requested refresh workflow changes. All changes should be fully backward compatible.
