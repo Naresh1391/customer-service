@@ -1,459 +1,384 @@
-Phase 11 – Data Refresh Simplification & Cache Removal
+Phase 12 – Export Center (Excel Report Generator)
 
-Generate Report / Fetch Stories / Load Components / Deployment Readiness Enhancements
-
-⸻
+Settings Page Enhancement – Multi-Sheet Excel Export
 
 Objective
 
-This phase simplifies the entire report generation workflow by removing unnecessary cache options and ensuring that every operation always retrieves the latest source data from external systems.
+Introduce a centralized Export Center within the Settings page that allows users to generate a comprehensive Excel report for a selected Team and Fix Version.
 
-The application should no longer depend on previously cached Stories or Components during manual execution.
+The generated workbook should consolidate all release analysis information currently available throughout the application into a single downloadable Excel file with multiple worksheets.
 
-Instead:
-
-* Fetch Stories → Always from iTrack
-* Load Components → Always from GitHub/Kubernetes
-* Generate Report → Always use freshly loaded data
-* Deployment Refresh → Always refresh Deployment Readiness records
-
-This ensures that release analysis is always based on the latest information.
+The purpose is to provide Release Managers, Technical Leads, and Leadership with an offline report that can be shared, reviewed, archived, or attached to release documentation.
 
 ⸻
 
-Feature 1 – Remove Story Cache Option
+Business Value
 
-Existing Behavior
+Currently, information is distributed across multiple application pages:
 
-The Fetch Stories section currently provides:
+* Review Commits
+* Story Status
+* Branch Cut Validation
+* Deployment Readiness
+* Commit Analysis
+* Future SAST Reports
 
-* Fetch Stories
-* Use Cache Data From Database
-* Force Fetch From iTrack
+Users must navigate between screens to gather release information.
 
-This introduces unnecessary complexity and stale data.
+This enhancement provides:
+
+* One-click export
+* Offline review
+* Leadership-ready reports
+* Easy sharing
+* Historical snapshots
+* Release audit documentation
 
 ⸻
 
-New Requirement
+UI Enhancement – Settings Page
 
-Remove the cache option completely.
+Create a new section in the Settings page named:
 
-Only one action should remain:
+Export Center
 
-Fetch Stories
+or
 
-Every execution must retrieve stories directly from iTrack.
+Release Report Export
+
+(Choose the most appropriate title consistent with the application’s design language.)
+
+The section should follow the existing AT&T-themed UI and remain clean and intuitive.
+
+⸻
+
+Filters
+
+Provide mandatory filters:
+
+* Team
+* Fix Version
+
+The export should always be generated based on these two selections.
+
+Project Key must not be used anywhere.
+
+Only Team Key and Fix Version shall drive report generation.
+
+⸻
+
+Report Selection
+
+Provide checkbox-based report selection.
+
+Users can select one or multiple reports before downloading.
+
+Suggested layout:
+
+Commit Reports
+
+☐ Review Commits
+
+☐ Review Commit Violations Only
+
+☐ Commit Analysis Summary
+
+⸻
+
+Release Readiness
+
+☐ Story Status
+
+☐ Branch Cut Validation
+
+⸻
+
+Deployment Readiness
+
+☐ Test-3 Deployment
+
+☐ Test-4 Deployment
+
+☐ Stage West Deployment
+
+☐ Production East Deployment
+
+☐ Production West Deployment
+
+⸻
+
+Security
+
+☐ SAST Report
+
+(Currently optional. If data is unavailable, the sheet should still be generated with a “Not Available” message or be disabled until implemented.)
+
+⸻
+
+Download Action
+
+Provide a single button:
+
+Download Excel Report
+
+or
+
+Generate Excel Report
+
+Upon clicking:
+
+* Validate Team selection
+* Validate Fix Version selection
+* Read requested datasets from the database
+* Generate a single Excel workbook
+* Download the workbook
+
+No additional navigation should be required.
+
+⸻
+
+Excel Workbook Structure
+
+The workbook should contain one worksheet for each selected report.
+
+⸻
+
+Sheet 1 – Review Commits
+
+Contains the complete Review Commit data currently displayed in the UI.
+
+Include all review commit columns that are useful for release analysis.
+
+⸻
+
+Sheet 2 – Review Commit Violations
+
+This sheet contains only failed or actionable review commit records.
+
+Examples include:
+
+* Missing Release Commit
+* Cherry Pick Required
+* Branch Cut Missing
+* Compliance Violations
+* Other failed validations
+
+Successful commits should not appear on this sheet.
+
+This sheet is intended for Release Managers to focus only on pending work.
+
+⸻
+
+Sheet 3 – Story Status
+
+Contains the Release Readiness Story Status information.
+
+Include:
+
+* Story
+* Status
+* Assignee
+* Reporter
+* Team
+* Component Count
+* Other useful metadata
+
+⸻
+
+Sheet 4 – Branch Cut Validation
+
+Contains Branch Cut Validation details.
+
+Suggested columns:
+
+* Component
+* Previous Branch
+* Current Branch
+* Resolution Source
+* Branch Cut Status
+* Teams
+* Stories
+* User Excluded
+* Validation Result
+
+⸻
+
+Sheet 5 – Test-3 Deployment
+
+Deployment Readiness data for Test-3.
+
+Include all deployment validation details currently available.
+
+⸻
+
+Sheet 6 – Test-4 Deployment
+
+Deployment Readiness data for Test-4.
+
+⸻
+
+Sheet 7 – Stage West Deployment
+
+Deployment Readiness data for Stage West.
+
+⸻
+
+Sheet 8 – Production East Deployment
+
+Deployment Readiness data for Production East.
+
+⸻
+
+Sheet 9 – Production West Deployment
+
+Deployment Readiness data for Production West.
+
+⸻
+
+Sheet 10 – Commit Analysis Summary
+
+Contains component-level commit analysis metadata.
+
+Suggested columns include:
+
+* Component
+* Stories
+* Teams
+* Total Commits
+* Violations
+* Cherry Picks
+* Reverted Commits
+* Missing Commits
+* Compliance Status
+* Analysis Result
+* Remarks
+
+Use the existing Commit Analysis metadata table as the primary data source.
+
+⸻
+
+Sheet 11 – SAST Report (Future)
+
+If implemented:
+
+Include:
+
+* Component
+* Security Score
+* Critical
+* High
+* Medium
+* Low
+* Status
+
+If not implemented:
+
+Display a simple message indicating that SAST integration is not yet available.
+
+⸻
+
+Data Source
+
+The export must use existing database tables.
+
+The export should not call external systems such as:
+
+* GitHub
+* Kubernetes
+* iTrack
+
+The purpose of the export is to package already-generated analysis data.
+
+⸻
+
+Performance Requirements
+
+The export should:
+
+* Read only the selected datasets
+* Avoid unnecessary queries
+* Generate worksheets only for selected checkboxes
+* Skip unselected reports entirely
+
+This minimizes processing time for large releases.
+
+⸻
+
+UI/UX Recommendations
+
+Design the Export Center using a clean card layout.
+
+Suggested flow:
+
+1. Select Team
+2. Select Fix Version
+3. Choose report sections using checkboxes
+4. Click Download Excel Report
+
+Enhancements:
+
+* “Select All” checkbox
+* “Clear All” button
+* Group checkboxes by category
+* Show total selected reports
+* Disable unavailable reports
+* Display a loading indicator while generating the workbook
+
+⸻
+
+Excel Formatting
+
+The generated workbook should be presentation-ready.
+
+Recommendations:
+
+* Bold headers
+* Frozen header row
+* Auto-sized columns
+* Filter enabled on all sheets
+* Consistent date formatting
+* Wrapped text where necessary
+* Preserve logical column ordering
+
+The workbook should require minimal manual formatting after download.
 
 ⸻
 
 Acceptance Criteria
 
-* Remove “Use Cache Data From Database” option from UI.
-* Remove cache selection dropdown.
-* Remove all backend cache-related logic.
-* Remove cache-specific controller/service methods.
-* Remove cache validation logic.
-* Always fetch directly from iTrack.
-* Existing functionality must continue without regression.
-
-⸻
-
-Feature 2 – Refresh iTrack Stories Before Saving
-
-Requirement
-
-Whenever Fetch Stories is invoked:
-
-Before fetching data from iTrack,
-
-Delete all existing records for:
-
-* Team Key
-* Fix Version
-
-from the iTrack Stories table.
-
-Then insert the latest records.
-
-Never merge with old records.
-
-⸻
-
-Reason
-
-Stories may change during the release window.
-
-Keeping old records can result in:
-
-* stale stories
-* removed stories remaining
-* modified stories not updated
-
-Every execution should represent the latest iTrack state.
-
-⸻
-
-Acceptance Criteria
-
-Controller Flow
-
-1. Receive Fetch Stories request.
-2. Delete existing records using:
-    * Team Key
-    * Fix Version
-3. Fetch latest stories from iTrack.
-4. Save latest records.
-5. Return latest response.
-
-⸻
-
-Database Changes
-
-Replace every Project Key reference with Team Key.
-
-Primary logical key:
-
-* Team Key
-* Fix Version
-* Story Number
-
-⸻
-
-Performance Requirement
-
-Do not delete records individually.
-
-Use repository bulk delete operations.
-
-Example:
-
-Delete By TeamKey And FixVersion
-
-Avoid unnecessary database calls.
-
-⸻
-
-Feature 3 – Remove Project Key Usage
-
-This applies to Fetch Stories.
-
-⸻
-
-UI
-
-Do not send Project Key.
-
-Send only:
-
-* Team Key
-* Fix Version
-
-⸻
-
-Backend
-
-Do not use Project Key.
-
-Replace every usage with Team Key.
-
-⸻
-
-Database
-
-Rename:
-
-ProjectKey
-
-to
-
-TeamKey
-
-where applicable.
-
-⸻
-
-Feature 4 – Remove Component Cache
-
-Existing
-
-Load Components currently supports:
-
-* Use Cache Data
-* Force Load
-
-⸻
-
-New Requirement
-
-Remove cache functionality completely.
-
-Only one button:
-
-Load Components
-
-Every execution loads directly from GitHub/Kubernetes.
-
-⸻
-
-Acceptance Criteria
-
-Remove:
-
-* cache dropdown
-* cache APIs
-* cache service methods
-* cache repository logic
-
-Always load latest component data.
-
-⸻
-
-Feature 5 – Refresh Components Table
-
-Whenever Load Components starts:
-
-Delete all Components for:
-
-* Team Key
-* Fix Version
-
-Then load latest components.
-
-Store fresh records.
-
-Never merge with previous records.
-
-⸻
-
-Reason
-
-Story-to-component mapping changes during release.
-
-Keeping stale components causes incorrect Release Readiness.
-
-⸻
-
-Acceptance Criteria
-
-Flow
-
-Delete existing components
-
-↓
-
-Load latest components
-
-↓
-
-Store new records
-
-↓
-
-Display Preview
-
-⸻
-
-Feature 6 – Generate Report Cleanup
-
-Before Generate Report starts:
-
-Delete existing Commit records for:
-
-* Team Key
-* Fix Version
-
-Then regenerate complete analysis.
-
-Never append.
-
-⸻
-
-Acceptance Criteria
-
-Generate Report Flow
-
-Start
-
-↓
-
-Delete existing Commit records
-
-↓
-
-Run analysis
-
-↓
-
-Store latest Commit records
-
-↓
-
-Complete Job
-
-⸻
-
-Feature 7 – Deployment Readiness Refresh
-
-Whenever Deployment Refresh is executed:
-
-Delete Deployment Readiness records for:
-
-* Team Key
-* Fix Version
-
-Then perform fresh Deployment Validation.
-
-Store latest records.
-
-Never merge.
-
-⸻
-
-Acceptance Criteria
-
-Deployment Refresh Flow
-
-Delete Deployment Readiness
-
-↓
-
-Refresh Kubernetes
-
-↓
-
-Validate Deployment
-
-↓
-
-Store latest records
-
-↓
-
-Update UI
-
-⸻
-
-Feature 8 – Repository Optimization
-
-All cleanup operations must use bulk repository methods.
-
-Avoid:
-
-Looping through records
-
-Delete one by one
-
-Multiple repository calls
-
-Preferred approach:
-
-Single repository delete operation using Team Key and Fix Version.
-
-⸻
-
-Feature 9 – Last Component Refresh Timestamp UI
-
-Current implementation is technically correct but visually weak.
-
-Improve visibility.
-
-⸻
-
-UI Improvements
-
-Display timestamp using an informational badge/card.
-
-Recommended layout:
-
-Last Component Refresh
-
-08 Aug 2026 10:42 AM IST
-
-07 Aug 2026 11:12 PM CST
-
-Suggested improvements:
-
-* Light information background
-* Calendar/clock icon
-* Better spacing
-* Better typography
-* Small informational card
-* Read-only appearance
-* Professional styling
-* Consistent with AT&T design language
-
-Avoid bright or distracting colors.
-
-The timestamp should provide visibility without dominating the page.
-
-⸻
-
-Feature 10 – Reduce Header Height
-
-Current Release Readiness page header occupies excessive vertical space.
-
-The section:
-
-“Comprehensive Release Validation Dashboard”
-
-should be compressed.
-
-⸻
-
-Requirement
-
-Reduce:
-
-* top padding
-* bottom padding
-* vertical spacing
-* unnecessary margins
-
-Maintain:
-
-* font size
-* readability
-* branding consistency
-
-Target height should be similar to:
-
-SOX Compliance Release Commit Tracker header.
-
-This improves usable screen space for actual release data.
+* Add a new Export Center section in the Settings page.
+* Export is driven only by Team Key and Fix Version.
+* Remove all Project Key dependency from the export flow.
+* Provide checkbox-based report selection.
+* Support downloading a single workbook with multiple worksheets.
+* Generate worksheets only for selected reports.
+* Review Commit report exports all review commit records.
+* Review Commit Violations exports only actionable/failed records.
+* Story Status exports release readiness story information.
+* Branch Cut Validation exports complete branch validation details.
+* Deployment Readiness exports separate worksheets for Test-3, Test-4, Stage West, Production East, and Production West.
+* Commit Analysis Summary exports metadata from the Commit Analysis table.
+* SAST worksheet supports future integration without requiring redesign.
+* Export uses database records only and does not call GitHub, Kubernetes, or iTrack.
+* Workbook formatting is clean, readable, and suitable for leadership presentations.
+* Display progress while the workbook is being generated.
+* Preserve existing application functionality without regression.
 
 ⸻
 
 Definition of Done
 
-All cache-related UI options removed.
-
-Project Key completely replaced by Team Key.
-
-Fetch Stories always retrieves live iTrack data.
-
-Load Components always retrieves latest GitHub/Kubernetes data.
-
-Existing Stories are deleted before refresh.
-
-Existing Components are deleted before refresh.
-
-Existing Commit records are deleted before Generate Report.
-
-Existing Deployment Readiness records are deleted before Deployment Refresh.
-
-Bulk repository delete methods are used everywhere.
-
-No record-by-record deletion logic remains.
-
-Last Component Refresh timestamp redesigned with improved UI.
-
-Release Readiness header height reduced.
-
-No regression in existing functionality.
-
-No stale data remains after refresh operations.
-
-Database always reflects the latest external source state after each execution.
-
-Code is cleaned up by removing obsolete cache-related services, controller methods, repository methods, DTO fields, and UI components that are no longer required.
+* Export Center is available in the Settings page.
+* Team and Fix Version are mandatory inputs.
+* Report selection is checkbox-based.
+* “Select All” and “Clear All” options are available.
+* Workbook generation is successful for any valid selection.
+* Each selected report generates a separate worksheet.
+* Review Commit Violations contains only failed/actionable records.
+* Deployment worksheets correctly reflect the selected environment data.
+* Commit Analysis worksheet is populated from the Commit Analysis metadata table.
+* SAST worksheet supports future expansion.
+* Workbook formatting follows a professional reporting standard.
+* No external API calls are made during export.
+* Export performance remains acceptable for large releases.
+* Existing application functionality remains unaffected.
