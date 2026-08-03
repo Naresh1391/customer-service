@@ -1,23 +1,37 @@
-# AIFO (AIDLC) Migration Planning Document
-## Release Compliance Tracker → AIFO Portal Migration
+# Release Tracker Migration Planning
+## Migration from Java Spring Boot to Python within AFO (AADLC)
 
 # Objective
 
-This task is NOT to start implementation immediately.
+The existing Release Compliance Tracker has reached a mature state and contains significant business logic that should be preserved.
 
-The first objective is to perform a complete architectural analysis of both projects and produce a migration plan before modifying any code.
+The objective is NOT to merge this application into the existing AFO Release Activities pages.
 
-The existing Release Compliance Tracker project is feature-complete (or close to feature-complete) and contains significant business logic that must be preserved.
+Instead, create a brand-new tool inside the existing AFO Tools section called:
 
-The target platform is the existing AIFO (AIDLC) portal.
+# Release Tracker
 
-The migration must preserve business functionality while adopting the AIFO architecture, technology stack, UI conventions, authentication model, and coding standards.
+This tool will become another first-class tool inside AFO, similar to the other existing tools.
+
+The complete Release Tracker application should remain functionally independent while leveraging the common AFO platform capabilities (authentication, hosting, database standards, etc.).
 
 ---
 
-# Source Project
+# IMPORTANT
 
-Release Compliance Tracker
+Do NOT begin implementation immediately.
+
+The first phase is architecture analysis and migration planning.
+
+Only after the migration plan is reviewed should implementation begin.
+
+---
+
+# Final Target Architecture
+
+## Frontend
+
+Reuse the existing Release Tracker frontend almost as-is.
 
 Technology
 
@@ -25,296 +39,273 @@ Technology
 - TypeScript
 - Vite
 - Tailwind CSS
+
+The current frontend is already polished and production-quality.
+
+Do NOT rewrite it into Streamlit.
+
+Instead, integrate it into the AFO platform as a standalone React-based tool.
+
+Existing UI should be reused wherever possible.
+
+Existing CSS should remain unchanged unless integration requires small adjustments.
+
+---
+
+## Backend
+
+Completely migrate backend from Java Spring Boot to Python.
+
+Current
+
 - Java 17
 - Spring Boot 3.x
-- H2 Database
-- GitHub APIs
-- iTrack APIs
-- Kubernetes APIs
-- Veracode APIs
-- CompletableFuture
-- Custom Async Executors
+
+Target
+
+Python backend following existing AFO project conventions.
+
+Business logic should remain identical.
+
+Only language/framework changes are expected.
 
 ---
 
-# Target Project
+## Database
 
-AIFO (AIDLC)
+Reuse the same database strategy already used by AFO.
 
-Technology
+Development
 
-Frontend
+SQLite
 
-- Streamlit
-- Python
-- Single page application
-- Streamlit page navigation
-- Streamlit widgets
+Production
 
-Backend
+PostgreSQL (existing AFO standard)
 
-- Python
-- Streamlit Server
-- Utility-based architecture
-- No dedicated REST backend
-- Business logic inside utility modules
+Reuse existing database access patterns wherever possible.
 
-Database
+Migrate all Release Tracker tables into the Python database layer.
 
-- SQLite (development)
-- PostgreSQL Azure (production)
-
-Current DB layer
-
-AIFO_DB.py
-
-Approximately 118 KB monolithic database layer.
-
-Hosting
-
-- Azure App Service
-- Single container
-- Nginx
-- Supervisor
-
-Authentication
-
-Azure Entra ID
-
-Shared Portal Authentication
-
-Existing AIFO roles should be analyzed before introducing new roles.
-
-Existing API Clients
-
-- GitHub
-- iTrack
-- REST wrappers
+Do not redesign the data model unless absolutely necessary.
 
 ---
 
-# IMPORTANT
+## Authentication
 
-Do NOT immediately implement.
+Reuse existing Azure Entra ID authentication.
 
-Phase 1 is analysis only.
+No separate login.
 
-The output of Phase 1 must be a complete migration plan.
-
-Implementation starts only after the plan is reviewed.
+No duplicate authentication.
 
 ---
 
-# Phase 1
+## Authorization
 
-## Analyze both projects completely
+Every actionable UI button must validate user authorization.
 
-Analyze:
-
-- folder structure
-- modules
-- navigation
-- architecture
-- UI
-- database
-- authentication
-- authorization
-- caching
-- async execution
-- background jobs
-- API clients
-- utility classes
-- reusable components
-
----
-
-## Produce a Feature Mapping Document
-
-For every Release Tracker feature identify
-
-Current Location
-
-↓
-
-Target Location inside AIFO
-
-↓
-
-Migration Strategy
-
-↓
-
-Dependencies
-
-↓
-
-Risk
-
-↓
-
-Estimated Complexity
-
----
-
-# UI Migration
-
-The Release Tracker currently contains
-
-- Dashboard
+Examples include:
 
 - Generate Report
+- Refresh Deployment Status
+- Send Teams Notification
+- Download Reports
+- Settings Updates
+- Any write operation
 
+Developer role
+
+- Read-only operations
+- View dashboards
+- View reports
+- View readiness
+
+Admin role
+
+- Generate reports
+- Refresh deployment
+- Send Teams notifications
+- Configuration changes
+- Administrative operations
+
+If AFO already contains appropriate authorization roles, reuse them.
+
+Otherwise introduce
+
+- Admin
+- Developer
+
+using Azure AD Groups.
+
+---
+
+# Application Placement
+
+Do NOT merge into existing Release Activities pages.
+
+Instead
+
+AFO
+
+└── Tools
+
+  ├── Existing Tool 1
+
+  ├── Existing Tool 2
+
+  ├── ...
+
+  └── Release Tracker
+
+Release Tracker should launch independently from the Tools section.
+
+Internally it will contain
+
+- Dashboard
+- Generate Report
 - Review Commits
-
 - Release Readiness
-
 - Scan History
-
 - Settings
 
-Every page must be migrated.
-
-Nothing should be skipped.
+exactly as today.
 
 ---
 
-# Navigation
+# UI Expectations
 
-Analyze existing AIFO navigation.
+Maintain the existing Release Tracker UI.
 
-Release Activities already exists.
-
-Branch Cut Compliance already exists.
-
-Determine where the new Release Compliance pages should be placed.
-
-Follow existing navigation style.
-
-Do NOT redesign AIFO.
-
-Follow AIFO UX.
-
----
-
-# UI Guidelines
-
-Maintain AIFO look and feel.
+Do not redesign.
 
 Reuse
 
-- colors
-- typography
-- spacing
-- cards
-- widgets
-- layouts
+- React pages
+- Tailwind components
+- CSS
+- Layouts
+- Statistics cards
+- Charts
+- Tables
+- Filters
 
-wherever possible.
-
-If equivalent Streamlit widgets exist,
-reuse them.
-
-Only introduce custom CSS when absolutely necessary.
+Only adapt navigation so it launches correctly inside AFO.
 
 ---
 
-# Functional Migration
+# Backend Migration
 
-Every feature from Release Tracker must be migrated.
+Every Java service must be migrated into Python.
 
 Examples include
 
-Generate Report
+- Services
+- Controllers
+- Utility classes
+- API clients
+- Database repositories
+- Background jobs
+- Validation logic
+- Business rules
 
-Review Commits
-
-Release Readiness
-
-Story Status
-
-Branch Cut Validation
-
-Deployment Readiness
-
-Commit Analysis
-
-Settings
-
-History
-
-Export
-
-Filters
-
-Search
-
-Sorting
-
-Pagination
-
-Statistics
-
-Admin controls
-
-Everything.
-
-No functionality should be intentionally dropped.
+Business behavior must remain identical.
 
 ---
 
-# Business Logic
+# Parallel Processing
 
-Business logic must remain identical.
+Performance is a major requirement.
 
-Do NOT rewrite algorithms unless required by Python syntax.
+The current Java implementation uses
 
-Existing behavior must remain exactly the same.
+- CompletableFuture
+- ExecutorService
+- Parallel processing
+- Independent GitHub requests
 
-This includes
+Equivalent Python concurrency must be implemented.
 
-Commit lifecycle
+Analyze the best approach using existing AFO conventions.
 
-Violation detection
+Possible options include
 
-Cherry-pick detection
+- concurrent.futures.ThreadPoolExecutor
+- asyncio
+- background workers
+- existing AFO async framework
 
-Direct release commit detection
+The final recommendation should maximize throughput while remaining maintainable.
 
-Deployment validation
+Independent GitHub calls must execute in parallel.
 
-Branch comparison
+Examples include
 
-Previous release detection
+- Commit loading
+- Branch comparisons
+- Deployment validation
+- Kubernetes checks
+- Repository analysis
 
-Latest SHA comparison
+Sequential execution should be avoided wherever safe.
 
-Story validation
+---
 
-Branch cut validation
+# Existing Business Logic
 
-Component refresh
+Business logic must NOT change.
 
-Metadata
+Preserve
 
-Everything.
+- Commit lifecycle analysis
+- Violation detection
+- Cherry-pick detection
+- Direct release detection
+- Deployment readiness
+- Branch cut validation
+- Story validation
+- Release readiness
+- Commit analysis
+- Component refresh
+- Metadata generation
+
+No business rules should be lost.
+
+---
+
+# API Clients
+
+Reuse AFO infrastructure whenever possible.
+
+GitHub
+
+iTrack
+
+Kubernetes
+
+Veracode
+
+REST wrappers
+
+Avoid duplicate implementations.
+
+If Release Tracker contains better implementations, migrate or merge them into reusable Python utilities.
 
 ---
 
 # Database Migration
 
-Current H2 tables must be mapped into SQLite.
+Create a mapping document.
 
-Produce mapping.
-
-Old Table
+Every H2 table
 
 ↓
 
-New SQLite Table
+Equivalent SQLite table
 
 ↓
 
-Migration Notes
+Production PostgreSQL mapping
 
 ↓
 
@@ -326,338 +317,87 @@ Primary Keys
 
 ↓
 
-Foreign Keys
+Relationships
 
-Do NOT lose metadata.
+↓
 
----
-
-# Authentication
-
-Analyze AIFO authentication.
-
-Reuse existing Azure Entra login.
-
-Do NOT introduce new login flow.
+Migration notes
 
 ---
 
-# Authorization
+# Performance Goals
 
-Every clickable action must support authorization.
+The migrated application should maintain or improve existing response times.
 
 Examples
 
-Generate Report
+Parallel GitHub processing
 
-Refresh Deployment
+Parallel Kubernetes validation
 
-Send Teams Notification
+Batch database writes
 
-Download Reports
+Minimal redundant API calls
 
-Settings
-
-Any admin operation
-
-must verify user role.
-
-Developer role
-
-Read-only where appropriate.
-
-Admin role
-
-Generate
-
-Refresh
-
-Update
-
-Notifications
-
-Settings
-
-If AIFO already has roles
-
-Reuse them.
-
-Otherwise introduce
-
-Developer
-
-Admin
-
-using Azure AD Groups.
+Efficient caching where appropriate
 
 ---
 
-# Async Execution
-
-Release Tracker currently uses
-
-CompletableFuture
-
-Custom Executors
-
-This behavior must be preserved.
-
-Design equivalent asynchronous execution in Python.
-
-Avoid blocking Streamlit UI.
-
-Analyze best Python approach.
-
-Examples
-
-ThreadPoolExecutor
-
-asyncio
-
-background workers
-
-or existing AIFO approach.
-
-Provide recommendation before implementation.
-
----
-
-# API Clients
-
-Reuse existing AIFO API wrappers wherever possible.
-
-Avoid duplicate clients.
-
-If Release Tracker contains better implementations
-
-merge them.
-
-Do not duplicate code.
-
----
-
-# Kubernetes
-
-Deployment validation must migrate.
-
-Test3
-
-Test4
-
-Stage West
-
-Production East
-
-Production West
-
-Refresh logic
-
-Status
-
-Latest SHA comparison
-
-Validation
-
-Deployment messages
-
-Everything.
-
----
-
-# GitHub
-
-Reuse AIFO GitHub wrapper where possible.
-
-Otherwise merge Release Tracker logic.
-
-Preserve
-
-parallel processing
-
-commit analysis
-
-branch analysis
-
-SHA comparison
-
-prefetch optimizations
-
----
-
-# iTrack
-
-Reuse existing iTrack wrapper.
-
-Preserve
-
-story loading
-
-component loading
-
-metadata
-
-team key usage
-
-fixed version logic
-
----
-
-# Veracode
-
-Preserve
-
-SAST integration
-
-future roadmap
-
-reporting
-
----
-
-# Export
-
-Excel export functionality must migrate.
-
-Review
-
-Violations
-
-Stories
-
-Branch Cut
-
-Deployments
-
-Commit Analysis
-
-Everything.
-
----
-
-# Teams Notification
-
-Keep notification framework.
-
-Even if currently incomplete,
-preserve architecture.
-
----
-
-# CSS
-
-Current Release Tracker UI is visually polished.
-
-If Streamlit supports equivalent appearance,
-
-reuse.
-
-Otherwise
-
-create minimal CSS additions.
-
-Avoid excessive customization.
-
----
-
-# Performance
-
-Current Release Tracker contains multiple optimizations.
-
-Identify them.
-
-Examples
-
-parallel GitHub calls
-
-cached metadata
-
-batch processing
-
-optimized DB writes
-
-Reuse equivalent approaches.
-
----
-
-# Deliverables (Phase 1)
+# Deliverables (Planning Phase)
 
 Produce the following documents.
 
-## 1
+1. Architecture comparison
 
-Architecture comparison
+2. Feature mapping
 
-## 2
+3. Frontend migration plan
 
-Feature comparison
+4. Backend migration plan
 
-## 3
+5. Database migration plan
 
-Missing feature matrix
+6. Authentication and authorization plan
 
-## 4
+7. Async execution strategy
 
-Database migration plan
+8. API integration strategy
 
-## 5
+9. Risks and trade-offs
 
-UI migration plan
-
-## 6
-
-Backend migration plan
-
-## 7
-
-Authorization plan
-
-## 8
-
-Async execution plan
-
-## 9
-
-API integration plan
-
-## 10
-
-Implementation roadmap
+10. Complete implementation roadmap
 
 ---
 
-# Implementation Strategy
-
-Implementation should happen in phases.
-
-Suggested phases
+# Implementation Phases
 
 Phase 1
 
-Analysis
+Architecture Analysis
 
 Phase 2
 
-Database
+React Integration into AFO Tools
 
 Phase 3
 
-Backend utilities
+Python Backend Foundation
 
 Phase 4
 
-UI
+Database Migration
 
 Phase 5
 
-Authentication
+API Client Migration
 
 Phase 6
 
-Deployment Validation
+Business Logic Migration
 
 Phase 7
 
-Testing
+Deployment Readiness
 
 Phase 8
 
@@ -665,62 +405,70 @@ Performance Optimization
 
 Phase 9
 
+Authorization
+
+Phase 10
+
+Testing
+
+Phase 11
+
 Documentation
 
 ---
 
 # Acceptance Criteria
 
-- No Release Tracker functionality is lost.
+- New standalone Release Tracker tool appears under AFO Tools.
 
-- Business logic remains identical.
+- Existing React frontend is reused with minimal changes.
 
-- UI follows AIFO conventions.
+- No Streamlit UI rewrite.
 
-- Uses Streamlit architecture.
+- Backend fully migrated to Python.
 
-- Uses Python architecture.
+- SQLite used for development.
 
-- Uses SQLite initially.
+- PostgreSQL compatibility maintained.
 
-- Compatible with PostgreSQL.
+- Existing Azure authentication reused.
 
-- Uses existing Azure authentication.
+- Role-based authorization enforced for every actionable UI button.
 
-- Uses authorization for privileged actions.
+- Existing Release Tracker functionality preserved.
 
-- Preserves async behavior.
+- Parallel execution implemented using Python concurrency.
 
-- Preserves deployment validation.
+- Existing UI retained.
 
-- Preserves commit analysis.
+- Existing business logic retained.
 
-- Preserves release readiness.
+- Existing APIs reused where possible.
 
-- Produces implementation roadmap before coding.
+- Performance equal to or better than the Java implementation.
 
 ---
 
 # Definition of Done
 
-✓ Both projects analyzed completely.
+✓ Architecture fully analyzed.
 
-✓ Every Release Tracker feature mapped.
+✓ Migration roadmap completed.
 
-✓ Every backend module mapped.
+✓ React integration strategy documented.
 
-✓ Every UI page mapped.
+✓ Python backend design completed.
 
-✓ Database migration completed on paper.
+✓ Database migration documented.
 
-✓ Authorization plan completed.
+✓ Async strategy finalized.
 
-✓ Async strategy documented.
+✓ Authorization strategy finalized.
 
-✓ API reuse strategy documented.
+✓ API reuse documented.
 
-✓ Risks identified.
+✓ Risks documented.
 
-✓ Implementation phases prepared.
+✓ Feature mapping completed.
 
-✓ No coding begins until migration plan is approved.
+✓ No implementation starts until the migration plan is reviewed and approved.
