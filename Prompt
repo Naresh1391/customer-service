@@ -1,384 +1,347 @@
-Phase 12 – Export Center (Excel Report Generator)
+# Phase Enhancement – Commit Scrum Team Enrichment & Review Commits Optimization
 
-Settings Page Enhancement – Multi-Sheet Excel Export
+## Overview
 
-Objective
+This enhancement improves the Review Commits module by enriching commit metadata with Scrum Team information directly inside the `commits` table instead of resolving it dynamically every time.
 
-Introduce a centralized Export Center within the Settings page that allows users to generate a comprehensive Excel report for a selected Team and Fix Version.
+The objective is to eliminate unnecessary table joins, improve performance, simplify backend queries, and ensure every commit permanently contains its corresponding Scrum Team.
 
-The generated workbook should consolidate all release analysis information currently available throughout the application into a single downloadable Excel file with multiple worksheets.
+---
 
-The purpose is to provide Release Managers, Technical Leads, and Leadership with an offline report that can be shared, reviewed, archived, or attached to release documentation.
+# Problem Statement
 
-⸻
+Currently, after Generate Report completes:
 
-Business Value
+- Commit analysis is performed successfully.
+- All commits are stored in the `commits` table.
+- Review Commits page displays Scrum Team information.
 
-Currently, information is distributed across multiple application pages:
+However, the Scrum Team is **not actually stored inside the commits table**.
 
-* Review Commits
-* Story Status
-* Branch Cut Validation
-* Deployment Readiness
-* Commit Analysis
-* Future SAST Reports
+Instead, the Review Commits API appears to derive Scrum Team by joining with the iTrack Stories table during runtime.
 
-Users must navigate between screens to gather release information.
+This introduces multiple problems:
 
-This enhancement provides:
+- Additional database joins
+- More processing for every UI load
+- Difficult future reporting
+- Some commits do not receive Scrum Team because their stories are outside the selected Fix Version.
 
-* One-click export
-* Offline review
-* Leadership-ready reports
-* Easy sharing
-* Historical snapshots
-* Release audit documentation
+---
 
-⸻
+# Root Cause
 
-UI Enhancement – Settings Page
+Generate Report only knows stories that belong to the selected Fix Version.
 
-Create a new section in the Settings page named:
+However, commit analysis discovers commits that may belong to:
 
-Export Center
+- Previous Fix Version
+- Future Fix Version
+- Different release
+- Missing Fix Version
+- Invalid Story
+- Story not available in local iTrack cache
 
-or
+Since these stories are not part of the selected Fix Version cache, Scrum Team cannot always be resolved.
 
-Release Report Export
+---
 
-(Choose the most appropriate title consistent with the application’s design language.)
+# Enhancement
 
-The section should follow the existing AT&T-themed UI and remain clean and intuitive.
+## 1. Extend Commits Table
 
-⸻
+Add a new column.
 
-Filters
+```
+scrum_team
+```
 
-Provide mandatory filters:
+Every commit should permanently store its Scrum Team.
 
-* Team
-* Fix Version
+This removes the need to repeatedly query other tables.
 
-The export should always be generated based on these two selections.
+---
 
-Project Key must not be used anywhere.
+# 2. Populate Scrum Team During Generate Report
 
-Only Team Key and Fix Version shall drive report generation.
+After the complete commit analysis is finished (towards the end of ReportService), execute an enrichment step.
 
-⸻
+Process:
 
-Report Selection
+```
+Query commits table
+WHERE
 
-Provide checkbox-based report selection.
+Team Key
+AND
+Fix Version
+```
 
-Users can select one or multiple reports before downloading.
+Load every commit generated for this report.
 
-Suggested layout:
+---
 
-Commit Reports
+# 3. Identify Missing Scrum Teams
 
-☐ Review Commits
+For every commit:
 
-☐ Review Commit Violations Only
+If
 
-☐ Commit Analysis Summary
-
-⸻
-
-Release Readiness
-
-☐ Story Status
-
-☐ Branch Cut Validation
-
-⸻
-
-Deployment Readiness
-
-☐ Test-3 Deployment
-
-☐ Test-4 Deployment
-
-☐ Stage West Deployment
-
-☐ Production East Deployment
-
-☐ Production West Deployment
-
-⸻
-
-Security
-
-☐ SAST Report
-
-(Currently optional. If data is unavailable, the sheet should still be generated with a “Not Available” message or be disabled until implemented.)
-
-⸻
-
-Download Action
-
-Provide a single button:
-
-Download Excel Report
+```
+scrum_team == NULL
+```
 
 or
 
-Generate Excel Report
+```
+scrum_team is empty
+```
 
-Upon clicking:
+perform enrichment.
 
-* Validate Team selection
-* Validate Fix Version selection
-* Read requested datasets from the database
-* Generate a single Excel workbook
-* Download the workbook
+Do NOT overwrite already populated values.
 
-No additional navigation should be required.
+---
 
-⸻
+# 4. Resolve Scrum Team
 
-Excel Workbook Structure
+Every commit already contains:
 
-The workbook should contain one worksheet for each selected report.
+- Story Number
 
-⸻
+Use Story Number to fetch Story details from iTrack.
 
-Sheet 1 – Review Commits
+Use the iTrack Client.
 
-Contains the complete Review Commit data currently displayed in the UI.
+Do NOT use cached stories.
 
-Include all review commit columns that are useful for release analysis.
+Fetch directly from iTrack whenever Scrum Team is missing.
 
-⸻
+Extract
 
-Sheet 2 – Review Commit Violations
+```
+Scrum Team
+```
 
-This sheet contains only failed or actionable review commit records.
+Populate
 
-Examples include:
+```
+Commit.scrum_team
+```
 
-* Missing Release Commit
-* Cherry Pick Required
-* Branch Cut Missing
-* Compliance Violations
-* Other failed validations
+Persist the update.
 
-Successful commits should not appear on this sheet.
+---
 
-This sheet is intended for Release Managers to focus only on pending work.
+# 5. Existing Lifecycle Logic
 
-⸻
+No changes required.
 
-Sheet 3 – Story Status
+The following logic is already working correctly:
 
-Contains the Release Readiness Story Status information.
+- Compliance
+- Non-compliance
+- Lifecycle Status
+- Validation Status
+- Override Logic
+- Commit Classification
 
-Include:
+Do not modify any of these.
 
-* Story
-* Status
-* Assignee
-* Reporter
-* Team
-* Component Count
-* Other useful metadata
+---
 
-⸻
+# 6. Review Commits API Optimization
 
-Sheet 4 – Branch Cut Validation
+Currently Review Commits appears to combine multiple tables to determine Scrum Team.
 
-Contains Branch Cut Validation details.
+Since Scrum Team will now exist inside the commits table,
 
-Suggested columns:
+simplify the API.
 
-* Component
-* Previous Branch
-* Current Branch
-* Resolution Source
-* Branch Cut Status
-* Teams
-* Stories
-* User Excluded
-* Validation Result
+Instead of joining additional tables,
 
-⸻
+read Scrum Team directly from
 
-Sheet 5 – Test-3 Deployment
+```
+commits.scrum_team
+```
 
-Deployment Readiness data for Test-3.
+This reduces:
 
-Include all deployment validation details currently available.
+- Database joins
+- Processing
+- Response time
 
-⸻
+---
 
-Sheet 6 – Test-4 Deployment
+# 7. Verify Existing Query
 
-Deployment Readiness data for Test-4.
+Review the existing API.
 
-⸻
+Likely endpoint:
 
-Sheet 7 – Stage West Deployment
+```
+GET Review Commits
+```
 
-Deployment Readiness data for Stage West.
+Current filters:
 
-⸻
+- Team Key
+- Fix Version
 
-Sheet 8 – Production East Deployment
+Verify whether additional joins are occurring.
 
-Deployment Readiness data for Production East.
+If yes,
 
-⸻
+remove unnecessary joins after Scrum Team is available inside commits table.
 
-Sheet 9 – Production West Deployment
+---
 
-Deployment Readiness data for Production West.
+# Implementation Flow
 
-⸻
+Generate Report
 
-Sheet 10 – Commit Analysis Summary
+↓
 
-Contains component-level commit analysis metadata.
+Commit Analysis
 
-Suggested columns include:
+↓
 
-* Component
-* Stories
-* Teams
-* Total Commits
-* Violations
-* Cherry Picks
-* Reverted Commits
-* Missing Commits
-* Compliance Status
-* Analysis Result
-* Remarks
+Save Commits
 
-Use the existing Commit Analysis metadata table as the primary data source.
+↓
 
-⸻
+Commit Analysis Completed
 
-Sheet 11 – SAST Report (Future)
+↓
 
-If implemented:
+Query Commits by
 
-Include:
+- Team Key
+- Fix Version
 
-* Component
-* Security Score
-* Critical
-* High
-* Medium
-* Low
-* Status
+↓
 
-If not implemented:
+Find commits where Scrum Team is empty
 
-Display a simple message indicating that SAST integration is not yet available.
+↓
 
-⸻
+Call iTrack using Story Number
 
-Data Source
+↓
 
-The export must use existing database tables.
+Extract Scrum Team
 
-The export should not call external systems such as:
+↓
 
-* GitHub
-* Kubernetes
-* iTrack
+Update Commit
 
-The purpose of the export is to package already-generated analysis data.
+↓
 
-⸻
+Finish Report
 
-Performance Requirements
+---
 
-The export should:
+# Database Changes
 
-* Read only the selected datasets
-* Avoid unnecessary queries
-* Generate worksheets only for selected checkboxes
-* Skip unselected reports entirely
+## Commits Table
 
-This minimizes processing time for large releases.
+Add
 
-⸻
+```
+scrum_team
+```
 
-UI/UX Recommendations
+No other schema changes required.
 
-Design the Export Center using a clean card layout.
+---
 
-Suggested flow:
+# Performance Benefits
 
-1. Select Team
-2. Select Fix Version
-3. Choose report sections using checkboxes
-4. Click Download Excel Report
+Advantages:
 
-Enhancements:
+- No runtime Scrum Team lookup
+- Faster Review Commits page
+- Simpler queries
+- Cleaner reporting
+- Easier future Excel exports
+- Better metadata persistence
 
-* “Select All” checkbox
-* “Clear All” button
-* Group checkboxes by category
-* Show total selected reports
-* Disable unavailable reports
-* Display a loading indicator while generating the workbook
+---
 
-⸻
+# Acceptance Criteria
 
-Excel Formatting
+### Database
 
-The generated workbook should be presentation-ready.
+- Scrum Team column added to commits table.
 
-Recommendations:
+- Existing commits remain compatible.
 
-* Bold headers
-* Frozen header row
-* Auto-sized columns
-* Filter enabled on all sheets
-* Consistent date formatting
-* Wrapped text where necessary
-* Preserve logical column ordering
+---
 
-The workbook should require minimal manual formatting after download.
+### Generate Report
 
-⸻
+After commit generation,
 
-Acceptance Criteria
+system enriches missing Scrum Teams.
 
-* Add a new Export Center section in the Settings page.
-* Export is driven only by Team Key and Fix Version.
-* Remove all Project Key dependency from the export flow.
-* Provide checkbox-based report selection.
-* Support downloading a single workbook with multiple worksheets.
-* Generate worksheets only for selected reports.
-* Review Commit report exports all review commit records.
-* Review Commit Violations exports only actionable/failed records.
-* Story Status exports release readiness story information.
-* Branch Cut Validation exports complete branch validation details.
-* Deployment Readiness exports separate worksheets for Test-3, Test-4, Stage West, Production East, and Production West.
-* Commit Analysis Summary exports metadata from the Commit Analysis table.
-* SAST worksheet supports future integration without requiring redesign.
-* Export uses database records only and does not call GitHub, Kubernetes, or iTrack.
-* Workbook formatting is clean, readable, and suitable for leadership presentations.
-* Display progress while the workbook is being generated.
-* Preserve existing application functionality without regression.
+---
 
-⸻
+### Scrum Team Resolution
 
-Definition of Done
+If Scrum Team already exists,
 
-* Export Center is available in the Settings page.
-* Team and Fix Version are mandatory inputs.
-* Report selection is checkbox-based.
-* “Select All” and “Clear All” options are available.
-* Workbook generation is successful for any valid selection.
-* Each selected report generates a separate worksheet.
-* Review Commit Violations contains only failed/actionable records.
-* Deployment worksheets correctly reflect the selected environment data.
-* Commit Analysis worksheet is populated from the Commit Analysis metadata table.
-* SAST worksheet supports future expansion.
-* Workbook formatting follows a professional reporting standard.
-* No external API calls are made during export.
-* Export performance remains acceptable for large releases.
-* Existing application functionality remains unaffected.
+do not call iTrack again.
+
+If Scrum Team is missing,
+
+fetch directly from iTrack.
+
+---
+
+### Review Commits
+
+Review Commits page reads Scrum Team directly from commits table.
+
+No unnecessary joins should remain.
+
+---
+
+### Existing Functionality
+
+No regressions in:
+
+- Lifecycle
+- Compliance
+- Override
+- Commit Classification
+- Review Commit Filters
+- Report Generation
+
+---
+
+# Definition of Done
+
+- Scrum Team column added.
+
+- Generate Report enriches missing Scrum Teams.
+
+- iTrack lookup implemented.
+
+- Commits updated successfully.
+
+- Review Commits API simplified.
+
+- Existing lifecycle logic unchanged.
+
+- Existing UI behavior unchanged.
+
+- Existing reports unchanged.
+
+- Performance verified.
+
+- No regression in Generate Report.
+
+- No regression in Review Commits.
+
+- Code reviewed and tested successfully.
