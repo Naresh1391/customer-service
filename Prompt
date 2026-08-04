@@ -1,281 +1,308 @@
-# Release Tracker Migration Planning
-## Migration from Java Spring Boot to Python within AFO (AADLC)
+# Release Tracker Python Backend Migration Validation & Parity Analysis
 
-# Objective
+## Objective
 
-The existing Release Compliance Tracker has reached a mature state and contains significant business logic that should be preserved.
+The React frontend migration is largely complete and is considered approximately 99% aligned with the original Release Tracker application.
 
-The objective is NOT to merge this application into the existing AFO Release Activities pages.
+The remaining work is the Python backend.
 
-Instead, create a brand-new tool inside the existing AFO Tools section called:
+During initial review, it appears that the Python implementation does **not** faithfully replicate the Java Spring Boot backend.
 
-# Release Tracker
+The purpose of this task is **NOT** to immediately modify code.
 
-This tool will become another first-class tool inside AFO, similar to the other existing tools.
+The first objective is to perform a complete backend parity analysis between the original Java implementation and the new Python implementation, identify every deviation, and produce a detailed implementation plan.
 
-The complete Release Tracker application should remain functionally independent while leveraging the common AFO platform capabilities (authentication, hosting, database standards, etc.).
-
----
-
-# IMPORTANT
-
-Do NOT begin implementation immediately.
-
-The first phase is architecture analysis and migration planning.
-
-Only after the migration plan is reviewed should implementation begin.
+Only after this analysis is complete should implementation begin.
 
 ---
 
-# Final Target Architecture
+# Primary Goal
 
-## Frontend
+The Python backend must behave exactly like the Java backend.
 
-Reuse the existing Release Tracker frontend almost as-is.
+This is a behavioral migration, not a redesign.
 
-Technology
+Business logic, validations, request flow, response flow, asynchronous behavior, error handling, and database updates should remain functionally identical.
 
-- React 18
-- TypeScript
-- Vite
-- Tailwind CSS
+The programming language changes.
 
-The current frontend is already polished and production-quality.
-
-Do NOT rewrite it into Streamlit.
-
-Instead, integrate it into the AFO platform as a standalone React-based tool.
-
-Existing UI should be reused wherever possible.
-
-Existing CSS should remain unchanged unless integration requires small adjustments.
+The business behavior does not.
 
 ---
 
-## Backend
+# Scope
 
-Completely migrate backend from Java Spring Boot to Python.
+Compare the complete backend implementation.
 
-Current
+Source
 
 - Java 17
-- Spring Boot 3.x
+- Spring Boot
+- Original Release Tracker
 
 Target
 
-Python backend following existing AFO project conventions.
-
-Business logic should remain identical.
-
-Only language/framework changes are expected.
+- Python backend
+- AFO Release Tracker
 
 ---
 
-## Database
+# Mandatory Analysis
 
-Reuse the same database strategy already used by AFO.
+## 1. Controller Analysis
 
-Development
+Analyze every controller.
 
-SQLite
+Do not skip any controller.
 
-Production
+For every controller:
 
-PostgreSQL (existing AFO standard)
+- API endpoint
+- HTTP method
+- Request mapping
+- Authentication
+- Authorization
+- Request parameters
+- Request body
+- Validation
+- Response model
+- HTTP status codes
+- Exception handling
+- Logging
+- Async execution
+- Service invocation
 
-Reuse existing database access patterns wherever possible.
+Compare everything against Python.
 
-Migrate all Release Tracker tables into the Python database layer.
-
-Do not redesign the data model unless absolutely necessary.
-
----
-
-## Authentication
-
-Reuse existing Azure Entra ID authentication.
-
-No separate login.
-
-No duplicate authentication.
-
----
-
-## Authorization
-
-Every actionable UI button must validate user authorization.
-
-Examples include:
-
-- Generate Report
-- Refresh Deployment Status
-- Send Teams Notification
-- Download Reports
-- Settings Updates
-- Any write operation
-
-Developer role
-
-- Read-only operations
-- View dashboards
-- View reports
-- View readiness
-
-Admin role
-
-- Generate reports
-- Refresh deployment
-- Send Teams notifications
-- Configuration changes
-- Administrative operations
-
-If AFO already contains appropriate authorization roles, reuse them.
-
-Otherwise introduce
-
-- Admin
-- Developer
-
-using Azure AD Groups.
+Produce a comparison report.
 
 ---
 
-# Application Placement
+## 2. API Comparison
 
-Do NOT merge into existing Release Activities pages.
+Every REST API must be compared.
 
-Instead
+For every API document
 
-AFO
+### Java
 
-└── Tools
+- Endpoint
+- Inputs
+- Outputs
+- Request DTO
+- Response DTO
+- Validation
+- Side effects
 
-  ├── Existing Tool 1
+### Python
 
-  ├── Existing Tool 2
+- Endpoint
+- Inputs
+- Outputs
+- Request parsing
+- Response
+- Validation
 
-  ├── ...
+Then identify
 
-  └── Release Tracker
-
-Release Tracker should launch independently from the Tools section.
-
-Internally it will contain
-
-- Dashboard
-- Generate Report
-- Review Commits
-- Release Readiness
-- Scan History
-- Settings
-
-exactly as today.
-
----
-
-# UI Expectations
-
-Maintain the existing Release Tracker UI.
-
-Do not redesign.
-
-Reuse
-
-- React pages
-- Tailwind components
-- CSS
-- Layouts
-- Statistics cards
-- Charts
-- Tables
-- Filters
-
-Only adapt navigation so it launches correctly inside AFO.
+- Missing logic
+- Additional logic
+- Incorrect logic
+- Missing validations
+- Missing fields
+- Wrong response
+- Wrong execution order
 
 ---
 
-# Backend Migration
+## 3. Method-by-Method Comparison
 
-Every Java service must be migrated into Python.
+Every public method.
 
-Examples include
+Every private helper.
 
-- Services
-- Controllers
-- Utility classes
-- API clients
-- Database repositories
-- Background jobs
-- Validation logic
-- Business rules
+Every utility.
 
-Business behavior must remain identical.
+Every service.
 
----
+Every repository interaction.
 
-# Parallel Processing
+Compare line by line.
 
-Performance is a major requirement.
+Do not compare only method names.
 
-The current Java implementation uses
-
-- CompletableFuture
-- ExecutorService
-- Parallel processing
-- Independent GitHub requests
-
-Equivalent Python concurrency must be implemented.
-
-Analyze the best approach using existing AFO conventions.
-
-Possible options include
-
-- concurrent.futures.ThreadPoolExecutor
-- asyncio
-- background workers
-- existing AFO async framework
-
-The final recommendation should maximize throughput while remaining maintainable.
-
-Independent GitHub calls must execute in parallel.
-
-Examples include
-
-- Commit loading
-- Branch comparisons
-- Deployment validation
-- Kubernetes checks
-- Repository analysis
-
-Sequential execution should be avoided wherever safe.
+Compare actual behavior.
 
 ---
 
-# Existing Business Logic
+## 4. Line-by-Line Behavioral Analysis
 
-Business logic must NOT change.
+For every Java method
 
-Preserve
+Analyze
 
-- Commit lifecycle analysis
-- Violation detection
-- Cherry-pick detection
-- Direct release detection
-- Deployment readiness
-- Branch cut validation
-- Story validation
-- Release readiness
-- Commit analysis
-- Component refresh
-- Metadata generation
+- execution sequence
+- conditions
+- loops
+- branching
+- API calls
+- database writes
+- exception handling
+- logging
+- return values
 
-No business rules should be lost.
+Compare against Python implementation.
+
+Every logical branch must exist.
+
+If Java contains
+
+```
+if
+else
+switch
+for
+while
+parallel execution
+```
+
+The equivalent logic must exist in Python.
+
+No logical branches should be missing.
 
 ---
 
-# API Clients
+## 5. Service Layer Comparison
 
-Reuse AFO infrastructure whenever possible.
+Analyze every service.
+
+Compare
+
+- method signatures
+- business rules
+- validation logic
+- orchestration
+- ordering
+- side effects
+
+---
+
+## 6. Utility Classes
+
+Compare all utility classes.
+
+Examples
+
+- GitHub utilities
+- Kubernetes utilities
+- iTrack utilities
+- Veracode utilities
+- Helper methods
+- Parsing methods
+
+Ensure identical behavior.
+
+---
+
+## 7. Database Operations
+
+Compare
+
+Insert
+
+Update
+
+Delete
+
+Query
+
+Transaction order
+
+Batch operations
+
+Filtering
+
+Sorting
+
+Grouping
+
+Repository logic
+
+Nothing should be skipped.
+
+---
+
+## 8. Async Execution
+
+The Java project uses parallel execution extensively.
+
+Examples
+
+CompletableFuture
+
+ExecutorService
+
+Parallel GitHub requests
+
+Parallel deployment validation
+
+Parallel branch analysis
+
+Analyze whether Python preserves this behavior.
+
+If not,
+
+identify exactly where sequential execution exists.
+
+Recommend equivalent Python implementation.
+
+---
+
+## 9. Error Handling
+
+Compare
+
+try/catch
+
+custom exceptions
+
+logging
+
+error responses
+
+fallback logic
+
+retry logic
+
+Python should preserve the same behavior.
+
+---
+
+## 10. Logging
+
+Ensure logging behavior matches.
+
+Compare
+
+INFO
+
+DEBUG
+
+WARN
+
+ERROR
+
+MDC/context information
+
+Operation tracking
+
+Execution timing
+
+---
+
+## 11. API Clients
+
+Compare
 
 GitHub
 
@@ -285,190 +312,263 @@ Kubernetes
 
 Veracode
 
-REST wrappers
+Ensure
 
-Avoid duplicate implementations.
+request
 
-If Release Tracker contains better implementations, migrate or merge them into reusable Python utilities.
+response
 
----
+headers
 
-# Database Migration
+pagination
 
-Create a mapping document.
+timeouts
 
-Every H2 table
+retry
 
-↓
+rate limiting
 
-Equivalent SQLite table
-
-↓
-
-Production PostgreSQL mapping
-
-↓
-
-Indexes
-
-↓
-
-Primary Keys
-
-↓
-
-Relationships
-
-↓
-
-Migration notes
+match Java behavior.
 
 ---
 
-# Performance Goals
+## 12. Data Models
 
-The migrated application should maintain or improve existing response times.
+Compare
 
-Examples
+DTOs
 
-Parallel GitHub processing
+Entities
 
-Parallel Kubernetes validation
+Database models
 
-Batch database writes
+Response models
 
-Minimal redundant API calls
+Request models
 
-Efficient caching where appropriate
+Enums
 
----
+Constants
 
-# Deliverables (Planning Phase)
+Field names
 
-Produce the following documents.
+Optional values
 
-1. Architecture comparison
+Null handling
 
-2. Feature mapping
-
-3. Frontend migration plan
-
-4. Backend migration plan
-
-5. Database migration plan
-
-6. Authentication and authorization plan
-
-7. Async execution strategy
-
-8. API integration strategy
-
-9. Risks and trade-offs
-
-10. Complete implementation roadmap
+Everything.
 
 ---
 
-# Implementation Phases
+# Detailed Deliverables
+
+Produce a document containing
+
+## 1
+
+Controller Comparison Matrix
+
+Java Controller
+
+↓
+
+Python Controller
+
+↓
+
+Status
+
+↓
+
+Missing Logic
+
+↓
+
+Priority
+
+---
+
+## 2
+
+API Comparison Matrix
+
+Every endpoint
+
+Input comparison
+
+Output comparison
+
+Validation comparison
+
+Behavior comparison
+
+---
+
+## 3
+
+Method Comparison Matrix
+
+Every service method
+
+Java
+
+↓
+
+Python
+
+↓
+
+Parity
+
+↓
+
+Required Fix
+
+---
+
+## 4
+
+Missing Logic Report
+
+Every missing
+
+if
+
+loop
+
+validation
+
+API call
+
+DB write
+
+exception
+
+logging
+
+should be documented.
+
+---
+
+## 5
+
+Incorrect Logic Report
+
+Identify
+
+Incorrect execution
+
+Incorrect ordering
+
+Incorrect conditions
+
+Incorrect filtering
+
+Incorrect updates
+
+Incorrect API usage
+
+---
+
+## 6
+
+Performance Analysis
+
+Identify
+
+Sequential code
+
+that should remain
+
+Parallel.
+
+Recommend improvements.
+
+---
+
+## 7
+
+Implementation Plan
+
+Implementation should happen controller-by-controller.
+
+Do NOT randomly modify files.
+
+Suggested approach
 
 Phase 1
 
-Architecture Analysis
+Controller parity
 
 Phase 2
 
-React Integration into AFO Tools
+Service parity
 
 Phase 3
 
-Python Backend Foundation
+Utility parity
 
 Phase 4
 
-Database Migration
+Repository parity
 
 Phase 5
 
-API Client Migration
+Async parity
 
 Phase 6
 
-Business Logic Migration
-
-Phase 7
-
-Deployment Readiness
-
-Phase 8
-
-Performance Optimization
-
-Phase 9
-
-Authorization
-
-Phase 10
-
 Testing
 
-Phase 11
+---
 
-Documentation
+# Rules
+
+Do NOT redesign the backend.
+
+Do NOT simplify business logic.
+
+Do NOT remove validations.
+
+Do NOT change execution sequence unless there is a proven defect.
+
+The objective is behavioral parity.
 
 ---
 
 # Acceptance Criteria
 
-- New standalone Release Tracker tool appears under AFO Tools.
-
-- Existing React frontend is reused with minimal changes.
-
-- No Streamlit UI rewrite.
-
-- Backend fully migrated to Python.
-
-- SQLite used for development.
-
-- PostgreSQL compatibility maintained.
-
-- Existing Azure authentication reused.
-
-- Role-based authorization enforced for every actionable UI button.
-
-- Existing Release Tracker functionality preserved.
-
-- Parallel execution implemented using Python concurrency.
-
-- Existing UI retained.
-
-- Existing business logic retained.
-
-- Existing APIs reused where possible.
-
-- Performance equal to or better than the Java implementation.
+- Every Java controller analyzed.
+- Every Python controller analyzed.
+- Every API compared.
+- Every request object compared.
+- Every response object compared.
+- Every service method compared.
+- Every utility method compared.
+- Every repository interaction compared.
+- Every database write compared.
+- Every database read compared.
+- Every validation compared.
+- Every conditional branch compared.
+- Every loop compared.
+- Every async operation compared.
+- Every exception handling block compared.
+- Every logging statement reviewed.
+- Every API client reviewed.
+- Every missing behavior documented.
+- Every deviation documented.
+- Every implementation task linked back to the original Java source.
 
 ---
 
 # Definition of Done
 
-✓ Architecture fully analyzed.
-
-✓ Migration roadmap completed.
-
-✓ React integration strategy documented.
-
-✓ Python backend design completed.
-
-✓ Database migration documented.
-
-✓ Async strategy finalized.
-
-✓ Authorization strategy finalized.
-
-✓ API reuse documented.
-
-✓ Risks documented.
-
-✓ Feature mapping completed.
-
-✓ No implementation starts until the migration plan is reviewed and approved.
+- A complete backend parity analysis has been completed.
+- No controller remains unanalyzed.
+- No REST API remains unanalyzed.
+- No service remains unanalyzed.
+- No utility remains unanalyzed.
+- Every Java behavior has an equivalent Python implementation or an identified gap.
+- A detailed implementation roadmap has been created.
+- All deviations are documented before any code changes begin.
+- The migration plan is approved before implementation starts.
