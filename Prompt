@@ -1,574 +1,513 @@
-# Release Tracker Python Backend Migration Validation & Parity Analysis
+# Release Tracker Migration Validation & Parity Verification Plan
+## Java (Spring Boot) → Python Backend + React UI Validation
 
 ## Objective
 
-The React frontend migration is largely complete and is considered approximately 99% aligned with the original Release Tracker application.
+The current Java Release Tracker application is the functional baseline and is considered the source of truth.
 
-The remaining work is the Python backend.
+The Python implementation must behave **exactly the same**.
 
-During initial review, it appears that the Python implementation does **not** faithfully replicate the Java Spring Boot backend.
+This task is **NOT** to add new features.
 
-The purpose of this task is **NOT** to immediately modify code.
+This task is to perform a **100% parity validation** between:
 
-The first objective is to perform a complete backend parity analysis between the original Java implementation and the new Python implementation, identify every deviation, and produce a detailed implementation plan.
+- Java Backend
+- Python Backend
+- React UI
 
-Only after this analysis is complete should implementation begin.
+and ensure there are **zero functional differences**.
 
 ---
 
 # Primary Goal
 
-The Python backend must behave exactly like the Java backend.
+Create a detailed implementation plan before modifying any code.
 
-This is a behavioral migration, not a redesign.
+Do NOT immediately start coding.
 
-Business logic, validations, request flow, response flow, asynchronous behavior, error handling, and database updates should remain functionally identical.
+First perform a complete comparison.
 
-The programming language changes.
+Then produce a detailed gap analysis.
 
-The business behavior does not.
-
----
-
-# Scope
-
-Compare the complete backend implementation.
-
-Source
-
-- Java 17
-- Spring Boot
-- Original Release Tracker
-
-Target
-
-- Python backend
-- AFO Release Tracker
+Only after the plan is approved should implementation begin.
 
 ---
 
-# Mandatory Analysis
+# Phase 1 — Complete UI Analysis
 
-## 1. Controller Analysis
+Analyze every React page.
 
-Analyze every controller.
+For every page identify:
 
-Do not skip any controller.
-
-For every controller:
-
-- API endpoint
-- HTTP method
-- Request mapping
-- Authentication
-- Authorization
-- Request parameters
-- Request body
-- Validation
-- Response model
-- HTTP status codes
-- Exception handling
-- Logging
-- Async execution
-- Service invocation
-
-Compare everything against Python.
-
-Produce a comparison report.
-
----
-
-## 2. API Comparison
-
-Every REST API must be compared.
-
-For every API document
-
-### Java
-
-- Endpoint
-- Inputs
-- Outputs
-- Request DTO
-- Response DTO
-- Validation
-- Side effects
-
-### Python
-
-- Endpoint
-- Inputs
-- Outputs
-- Request parsing
-- Response
-- Validation
-
-Then identify
-
-- Missing logic
-- Additional logic
-- Incorrect logic
-- Missing validations
-- Missing fields
-- Wrong response
-- Wrong execution order
-
----
-
-## 3. Method-by-Method Comparison
-
-Every public method.
-
-Every private helper.
-
-Every utility.
-
-Every service.
-
-Every repository interaction.
-
-Compare line by line.
-
-Do not compare only method names.
-
-Compare actual behavior.
-
----
-
-## 4. Line-by-Line Behavioral Analysis
-
-For every Java method
-
-Analyze
-
-- execution sequence
-- conditions
-- loops
-- branching
-- API calls
-- database writes
-- exception handling
-- logging
-- return values
-
-Compare against Python implementation.
-
-Every logical branch must exist.
-
-If Java contains
-
-```
-if
-else
-switch
-for
-while
-parallel execution
-```
-
-The equivalent logic must exist in Python.
-
-No logical branches should be missing.
-
----
-
-## 5. Service Layer Comparison
-
-Analyze every service.
-
-Compare
-
-- method signatures
-- business rules
-- validation logic
-- orchestration
-- ordering
-- side effects
-
----
-
-## 6. Utility Classes
-
-Compare all utility classes.
-
-Examples
-
-- GitHub utilities
-- Kubernetes utilities
-- iTrack utilities
-- Veracode utilities
-- Helper methods
-- Parsing methods
-
-Ensure identical behavior.
-
----
-
-## 7. Database Operations
-
-Compare
-
-Insert
-
-Update
-
-Delete
-
-Query
-
-Transaction order
-
-Batch operations
-
-Filtering
-
-Sorting
-
-Grouping
-
-Repository logic
+- Buttons
+- Dropdowns
+- Tables
+- Search filters
+- Pagination
+- Tooltips
+- Dialogs
+- Popups
+- Refresh actions
+- Download actions
+- Toggle buttons
+- Checkboxes
 
 Nothing should be skipped.
 
 ---
 
-## 8. Async Execution
+# Phase 2 — API Mapping
 
-The Java project uses parallel execution extensively.
+For every clickable UI action identify:
 
-Examples
+- Which backend API is called
+- HTTP method
+- URL
+- Request payload
+- Response payload
+- Error responses
+- Async job handling
+- Loading behavior
+- Refresh behavior
 
-CompletableFuture
-
-ExecutorService
-
-Parallel GitHub requests
-
-Parallel deployment validation
-
-Parallel branch analysis
-
-Analyze whether Python preserves this behavior.
-
-If not,
-
-identify exactly where sequential execution exists.
-
-Recommend equivalent Python implementation.
+Prepare a complete UI → API mapping document.
 
 ---
 
-## 9. Error Handling
+# Phase 3 — Controller Comparison
 
-Compare
+Compare every Java controller with the corresponding Python endpoint.
 
-try/catch
+For every endpoint verify:
 
-custom exceptions
+- Route
+- HTTP method
+- Request validation
+- Input parameters
+- DTOs
+- Request models
+- Response models
+- HTTP status codes
+- Error handling
+- Logging
+- Authentication
+- Authorization
 
-logging
-
-error responses
-
-fallback logic
-
-retry logic
-
-Python should preserve the same behavior.
-
----
-
-## 10. Logging
-
-Ensure logging behavior matches.
-
-Compare
-
-INFO
-
-DEBUG
-
-WARN
-
-ERROR
-
-MDC/context information
-
-Operation tracking
-
-Execution timing
+Nothing should be omitted.
 
 ---
 
-## 11. API Clients
+# Phase 4 — Business Logic Comparison
 
-Compare
+For every API compare the complete implementation.
 
-GitHub
+Line-by-line verify:
 
-iTrack
+- Branching logic
+- Loops
+- Parallel execution
+- Helper methods
+- Utility classes
+- Validation rules
+- Repository calls
+- API integrations
+- Exception handling
 
-Kubernetes
+The Python implementation must preserve the same behavior.
 
-Veracode
+Language may change.
 
-Ensure
-
-request
-
-response
-
-headers
-
-pagination
-
-timeouts
-
-retry
-
-rate limiting
-
-match Java behavior.
+Logic must not change.
 
 ---
 
-## 12. Data Models
+# Phase 5 — Async Execution Validation
 
-Compare
+The Java implementation uses asynchronous processing extensively.
 
-DTOs
+Examples include:
 
-Entities
+- CompletableFuture
+- ExecutorService
+- Parallel processing
+- Background jobs
+- Concurrent GitHub requests
+- Concurrent Kubernetes requests
+- Concurrent Veracode requests
 
-Database models
+Verify every async workflow.
 
-Response models
+Equivalent Python implementation should use appropriate concurrency such as:
 
-Request models
+- concurrent.futures
+- ThreadPoolExecutor
+- asyncio (only where appropriate)
 
-Enums
+The behavior must remain identical.
 
-Constants
-
-Field names
-
-Optional values
-
-Null handling
-
-Everything.
+No unnecessary sequential processing should exist.
 
 ---
 
-# Detailed Deliverables
+# Phase 6 — Database Comparison
 
-Produce a document containing
+Compare every table.
 
-## 1
+Verify:
 
-Controller Comparison Matrix
+- Table names
+- Column names
+- Data types
+- Constraints
+- Primary keys
+- Composite keys
+- Foreign keys (if any)
+- Default values
+- Indexes
 
-Java Controller
+Nothing should differ without a valid reason.
+
+---
+
+# Phase 7 — Database Lifecycle Validation
+
+Verify every workflow that deletes and recreates data.
+
+Examples include:
+
+## Fetch Stories
+
+Before fetching:
+
+Delete existing stories for:
+
+- Team Key
+- Fix Version
+
+Then insert fresh data.
+
+---
+
+## Load Components
+
+Before loading:
+
+Delete existing components for:
+
+- Team Key
+- Fix Version
+
+Reload everything.
+
+---
+
+## Generate Report
+
+Before generation:
+
+Delete previous generated data for:
+
+- Team Key
+- Fix Version
+
+Then regenerate.
+
+---
+
+## Deployment Refresh
+
+Before refresh:
+
+Delete deployment readiness records for:
+
+- Team Key
+- Fix Version
+
+Reload fresh deployment data.
+
+---
+
+Ensure Python follows the exact lifecycle.
+
+---
+
+# Phase 8 — Fix Version Validation
+
+Very Important
+
+Never modify Fix Version.
+
+Never:
+
+- Trim spaces
+- Remove spaces
+- Shorten names
+- Convert formatting
+- Truncate values
+
+Always preserve the exact Fix Version string received from the UI.
+
+---
+
+# Phase 9 — Team Key Validation
+
+The system must consistently use **Team Key**.
+
+Project Key should not be used except where explicitly required by external integrations (such as iTrack).
+
+Verify every:
+
+- API
+- Repository
+- Database query
+- Entity
+- DTO
+- Service
+
+Replace incorrect Project Key usage with Team Key where applicable.
+
+---
+
+# Phase 10 — Logging Review
+
+Ensure comprehensive logging exists.
+
+Include:
+
+## INFO Logs
+
+- API start
+- API completion
+- Background job start/end
+- External API calls
+- Major processing milestones
+- Database save/delete operations
+
+## DEBUG Logs
+
+- Request payloads
+- Response summaries
+- Decision branches
+- Filters
+- Async task execution
+- GitHub processing
+- Kubernetes processing
+- Story mapping
+- Commit classification
+
+Debug logging should be enabled by default for local development.
+
+---
+
+# Phase 11 — Settings Validation
+
+Verify Settings page supports:
+
+- Log Level (INFO / DEBUG)
+- Proper persistence
+- Runtime usage by backend logging
+
+---
+
+# Phase 12 — External Integration Validation
+
+Compare every integration.
+
+Including:
+
+- GitHub
+- iTrack
+- Kubernetes
+- Veracode
+
+Verify:
+
+- Requests
+- Authentication
+- Responses
+- Retry behavior
+- Error handling
+- Timeouts
+
+---
+
+# Phase 13 — Repository Comparison
+
+Compare every repository/data access layer.
+
+Verify:
+
+- Queries
+- Filters
+- Ordering
+- Paging
+- Deletes
+- Updates
+- Inserts
+- Batch operations
+
+---
+
+# Phase 14 — UI Behaviour Validation
+
+Verify identical behavior for:
+
+- Loading indicators
+- Refresh indicators
+- Disabled buttons
+- Admin-only buttons
+- Role-based visibility
+- Error banners
+- Success messages
+- Progress indicators
+- Background job polling
+
+---
+
+# Phase 15 — Role Validation
+
+Verify every action requires the correct role.
+
+Admin-only examples include:
+
+- Generate Report
+- Refresh Deployment Status
+- Send Teams Notifications
+- Any destructive operation
+
+Developer users should have read-only capabilities where appropriate.
+
+Ensure role validation exists in both UI and backend.
+
+---
+
+# Phase 16 — API Contract Validation
+
+Every API must have identical:
+
+## Inputs
+
+- Query parameters
+- Path parameters
+- Request body
+- Headers
+
+## Outputs
+
+- Success response
+- Error response
+- Response model
+- Status code
+
+No deviations are allowed.
+
+---
+
+# Phase 17 — End-to-End Flow Validation
+
+For every page validate the complete flow.
+
+Example:
+
+UI Button
 
 ↓
 
-Python Controller
+React Request
 
 ↓
 
-Status
+Python Endpoint
 
 ↓
 
-Missing Logic
+Service
 
 ↓
 
-Priority
-
----
-
-## 2
-
-API Comparison Matrix
-
-Every endpoint
-
-Input comparison
-
-Output comparison
-
-Validation comparison
-
-Behavior comparison
-
----
-
-## 3
-
-Method Comparison Matrix
-
-Every service method
-
-Java
+Utilities
 
 ↓
 
-Python
+Database
 
 ↓
 
-Parity
+External APIs
 
 ↓
 
-Required Fix
+Processing
+
+↓
+
+Database Updates
+
+↓
+
+Response
+
+↓
+
+UI Rendering
+
+Compare this flow with Java.
 
 ---
 
-## 4
+# Deliverables
 
-Missing Logic Report
+Produce the following documents before implementation:
 
-Every missing
-
-if
-
-loop
-
-validation
-
-API call
-
-DB write
-
-exception
-
-logging
-
-should be documented.
-
----
-
-## 5
-
-Incorrect Logic Report
-
-Identify
-
-Incorrect execution
-
-Incorrect ordering
-
-Incorrect conditions
-
-Incorrect filtering
-
-Incorrect updates
-
-Incorrect API usage
-
----
-
-## 6
-
-Performance Analysis
-
-Identify
-
-Sequential code
-
-that should remain
-
-Parallel.
-
-Recommend improvements.
-
----
-
-## 7
-
-Implementation Plan
-
-Implementation should happen controller-by-controller.
-
-Do NOT randomly modify files.
-
-Suggested approach
-
-Phase 1
-
-Controller parity
-
-Phase 2
-
-Service parity
-
-Phase 3
-
-Utility parity
-
-Phase 4
-
-Repository parity
-
-Phase 5
-
-Async parity
-
-Phase 6
-
-Testing
-
----
-
-# Rules
-
-Do NOT redesign the backend.
-
-Do NOT simplify business logic.
-
-Do NOT remove validations.
-
-Do NOT change execution sequence unless there is a proven defect.
-
-The objective is behavioral parity.
+1. UI Comparison Report
+2. API Mapping Report
+3. Controller Comparison Report
+4. Business Logic Gap Analysis
+5. Async Processing Comparison
+6. Database Schema Comparison
+7. Database Lifecycle Comparison
+8. External Integration Comparison
+9. Logging Review
+10. Role & Authorization Review
+11. Risk Assessment
+12. Detailed Migration Plan
+13. Implementation Order
+14. Validation Checklist
+15. Regression Test Checklist
 
 ---
 
 # Acceptance Criteria
 
-- Every Java controller analyzed.
-- Every Python controller analyzed.
-- Every API compared.
-- Every request object compared.
-- Every response object compared.
-- Every service method compared.
-- Every utility method compared.
-- Every repository interaction compared.
-- Every database write compared.
-- Every database read compared.
-- Every validation compared.
-- Every conditional branch compared.
-- Every loop compared.
-- Every async operation compared.
-- Every exception handling block compared.
-- Every logging statement reviewed.
-- Every API client reviewed.
-- Every missing behavior documented.
-- Every deviation documented.
-- Every implementation task linked back to the original Java source.
+- Every UI action mapped to its backend API.
+- Every Java API has a corresponding Python API.
+- Every endpoint has identical inputs and outputs.
+- Business logic matches Java behavior.
+- Parallel execution behavior preserved.
+- Database schema validated.
+- Delete-and-regenerate workflows preserved.
+- Team Key usage validated throughout.
+- Fix Version preserved exactly.
+- Logging implemented consistently.
+- Role validation implemented.
+- External integrations behave identically.
+- No functional regressions introduced.
+- Existing Java behavior remains the source of truth.
 
 ---
 
 # Definition of Done
 
-- A complete backend parity analysis has been completed.
-- No controller remains unanalyzed.
-- No REST API remains unanalyzed.
-- No service remains unanalyzed.
-- No utility remains unanalyzed.
-- Every Java behavior has an equivalent Python implementation or an identified gap.
-- A detailed implementation roadmap has been created.
-- All deviations are documented before any code changes begin.
-- The migration plan is approved before implementation starts.
+The migration is complete only when:
+
+- 100% of Java APIs are represented in Python.
+- 100% of UI interactions behave identically.
+- 100% of database operations match Java behavior.
+- 100% of async execution paths are preserved.
+- 100% of request/response contracts match.
+- 100% of Team Key handling is validated.
+- Fix Version remains unchanged across all layers.
+- Logging is comprehensive and configurable.
+- Role-based authorization is enforced.
+- End-to-end regression testing passes.
+- No known functional gaps remain between the Java and Python implementations.
