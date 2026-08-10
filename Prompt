@@ -1,945 +1,1058 @@
-AIDLC Portal Architecture, Deployment & RBAC Analysis + Release Tracker Integration Plan
+Release Tracker — Java-to-Python Migration Gap Analysis & Fix Plan
 
 1. Objective
 
-Perform a deep, code-level analysis of the existing AIDLC (AI-Driven Lifecycle) portal and understand exactly how the portal:
+The Release Tracker Java application is the working and approved reference implementation.
 
-1. Runs locally.
-2. Builds and packages applications/tools.
-3. Builds Docker images and containers.
-4. Deploys to Azure App Service.
-5. Hosts multiple tools/applications within the same portal.
-6. Uses reverse proxying or routing to expose individual tools.
-7. Configures ports for individual tools.
-8. Starts/stops individual tools.
-9. Handles frontend and backend execution for Python-based tools.
-10. Handles authentication through Azure/Entra ID SSO.
-11. Determines the logged-in user’s roles.
-12. Displays the user’s name, role, and other identity information.
-13. Applies authorization to individual pages, buttons, actions, and APIs.
+The Python application is the migrated implementation and currently has multiple functional gaps in both the frontend and backend.
 
-The purpose of this analysis is to understand the existing architecture before integrating the Release Tracker application.
+The objective of this task is:
 
-Critical instruction
+Compare the Java implementation and the Python implementation feature-by-feature, page-by-page, API-by-API, and fix the Python application so that it behaves the same as the Java application.
 
-DO NOT MODIFY CODE DURING THIS ANALYSIS PHASE.
+The Java application’s existing business logic, UI behavior, data flow, API behavior, database behavior, filtering, asynchronous processing, and validations must be treated as the source of truth.
 
-First inspect the complete AIDLC project and generate documentation and an implementation plan.
+Critical Rule
 
-The existing AIDLC implementation is the source of truth for:
+This is a migration correction task, not a redesign or feature-development task.
 
-* Deployment architecture
-* App startup
-* Docker/container behavior
-* Reverse proxy
-* Tool registration
-* Port configuration
-* SSO
-* Role resolution
-* Authorization
-* Existing tool integration patterns
+Do NOT introduce new business logic unless it is required to reproduce the existing Java behavior.
 
-Do not assume how anything works. Trace it through the actual source code and configuration.
+Do NOT simplify, redesign, remove, or reinterpret existing Java logic.
+
+The expected difference is primarily:
+
+* Java → Python backend implementation
+* Existing React/TypeScript frontend behavior must remain equivalent
+* Existing database behavior must remain equivalent
+* Existing API inputs/outputs must remain equivalent
+* Existing asynchronous/parallel behavior must remain equivalent
 
 ⸻
 
-2. Analyze the Complete AIDLC Architecture
+2. Mandatory Approach
 
-Analyze the complete AIDLC repository, including:
+Before modifying code:
 
-* Frontend
-* Backend
-* Tool implementations
-* Configuration files
-* Dockerfiles
-* Docker Compose files, if any
-* Nginx configuration
-* Reverse proxy configuration
-* Azure configuration
-* App Service configuration
-* Startup scripts
-* Shell scripts
-* Python entry points
-* Package configuration
-* Environment configuration
-* Authentication configuration
-* Authorization configuration
-* Role configuration
-* Tool registration/configuration
-* Port configuration
-* Health checks
-* Logging
-* CI/CD configuration
-* Deployment scripts
-* Infrastructure configuration
-* Any workflow/configuration used for deployment
+1. Analyze the complete Java implementation.
+2. Analyze the corresponding Python implementation.
+3. Identify the Java UI flow.
+4. Identify the API calls triggered by each UI action.
+5. Compare request parameters.
+6. Compare response structures.
+7. Compare backend business logic.
+8. Compare database queries and persistence.
+9. Compare filtering behavior.
+10. Compare error handling.
+11. Compare asynchronous/parallel execution.
+12. Compare page navigation and routing.
+13. Compare data-loading lifecycle.
+14. Document the differences.
+15. Create a detailed implementation plan.
+16. Only after the analysis and plan are complete, implement the fixes.
+17. Re-test every affected flow against the Java application’s behavior.
 
-Do not limit the investigation to obvious files.
+Do not blindly copy Python code from the existing implementation.
 
-Search the complete repository for references to:
-
-* Docker
-* container
-* Azure
-* App Service
-* nginx
-* reverse proxy
-* proxy
-* port
-* tool
-* tools
-* startup
-* entrypoint
-* deployment
-* authentication
-* authorization
-* Entra
-* Azure AD
-* SSO
-* role
-* roles
-* group
-* claims
-* token
-* JWT
-* cookie
-* session
-* user
-* admin
-* developer
-* permissions
+The existing Python implementation contains incorrect/incomplete migrated logic in several areas and must be corrected based on the Java implementation.
 
 ⸻
 
-3. Understand the AIDLC Tool Architecture
+3. Reference Implementation
 
-AIDLC already contains approximately 13–14 tools/applications.
+Use:
 
-Determine exactly how those tools are represented.
+Java Release Tracker = Source of Truth
 
-Identify:
+Python Release Tracker = Target Implementation
 
-* Where tools are registered.
-* How a new tool is added.
-* What configuration identifies a tool.
-* Whether each tool has its own port.
-* Where the port is configured.
-* How the portal knows which application/tool to launch.
-* How the portal routes requests to the individual tool.
-* Whether Nginx performs the routing.
-* Whether another reverse proxy component performs the routing.
-* How URLs/routes are generated.
-* How frontend requests reach the correct tool.
-* How backend requests reach the correct tool.
-* Whether tools run as separate processes.
-* Whether tools run as separate containers.
-* Whether all tools run inside the same container.
-* Whether each tool has its own Python process.
-* How multiple tools coexist inside Azure App Service.
+For every affected feature, answer:
 
-Create an explicit architecture diagram in Markdown showing:
-
-User
-  |
-  v
-Azure App Service
-  |
-  v
-AIDLC Portal
-  |
-  +---- Tool 1
-  |
-  +---- Tool 2
-  |
-  +---- Tool 3
-  |
-  +---- ...
-  |
-  +---- Release Tracker
-
-Replace the above conceptual representation with the actual architecture discovered from the code.
+* What does Java do?
+* Which UI action triggers it?
+* Which backend API/controller is invoked?
+* What request parameters are sent?
+* What validation happens?
+* What database queries are executed?
+* What processing happens?
+* What asynchronous operations occur?
+* What response is returned?
+* How does the UI consume the response?
+* What does the user see?
+* Does Python behave identically?
 
 ⸻
 
-4. Understand Docker Build and Deployment
+4. Important Migration Rule — Team Key and Fix Version
 
-Determine exactly what happens when AIDLC is deployed.
+Throughout the application, ensure the existing migration rules are preserved.
 
-Answer these questions from the code:
+Team Key
 
-Source code → Docker
+Use team key as the primary business identifier wherever applicable.
 
-1. Where does the build start?
-2. What command builds the application?
-3. Is there a frontend compilation/build step?
-4. Is Python compiled in any way?
-5. Is a virtual environment created?
-6. How are Python dependencies installed?
-7. What files are copied into the image?
-8. What Dockerfile is used?
-9. What is the base image?
-10. What is the final image structure?
-11. What is the entrypoint?
-12. What startup command is executed?
-13. Is Nginx started?
-14. How is Streamlit started?
-15. Are multiple processes started?
-16. Is Supervisor used?
-17. Is Gunicorn/Uvicorn/FastAPI used anywhere?
-18. How are ports exposed?
+Do not reintroduce unnecessary project-key dependency.
 
-Explain the complete lifecycle:
+Fix Version
 
-Developer Code
-     ↓
-Build
-     ↓
-Docker Image
-     ↓
-Container
-     ↓
-Azure Container/App Service
-     ↓
-Startup
-     ↓
-AIDLC Portal
-     ↓
-Individual Tools
-
-For every step, provide the actual file, configuration, command, or script responsible for it.
-
-⸻
-
-5. Python Runtime Analysis
-
-Explain how Python applications actually execute in AIDLC.
-
-Clarify:
-
-* Whether Python needs compilation.
-* What happens when Python starts.
-* How dependencies are installed.
-* How Streamlit starts.
-* How the Python process is managed.
-* How multiple applications are started.
-* Whether applications are long-running processes.
-* How ports are assigned.
-* How processes are supervised.
-* What happens when a process crashes.
-* Whether the container restarts.
-* How health checks work.
-
-Compare this conceptually with a Java application:
-
-Java:
-Source → Maven/Gradle → JAR → JVM → Spring Boot → Server
-Python:
-Source → dependency installation/package → Python runtime → application process
-
-But do not assume this comparison is accurate for AIDLC. Document the actual AIDLC implementation.
-
-⸻
-
-6. Azure App Service Deployment Analysis
-
-Determine exactly how AIDLC reaches Azure App Service.
-
-Identify:
-
-* Azure resource type.
-* App Service configuration.
-* Container configuration.
-* Image registry.
-* Image name/tagging strategy.
-* Deployment mechanism.
-* Environment variables.
-* Port configuration.
-* Startup command.
-* Health checks.
-* Scaling configuration if present.
-* Authentication configuration.
-* Networking configuration if relevant.
-* Secrets/configuration handling.
-* Logging configuration.
-
-Determine whether deployment is:
-
-Source → Docker Build → Container Registry → Azure App Service
-
-or another flow.
-
-Document the exact implementation.
-
-Also identify which files/scripts/configurations a developer would need to change if Release Tracker becomes another AIDLC tool.
-
-⸻
-
-7. Reverse Proxy / Routing Analysis
+The complete fix-version string must always be preserved.
 
 This is extremely important.
 
-Determine exactly how requests reach each tool.
+Do NOT:
 
-Analyze:
+* truncate the fix version
+* remove spaces
+* split the fix version incorrectly
+* normalize it incorrectly
+* remove words
+* alter its case unnecessarily
+* send only part of the fix version
 
-* Nginx configuration.
-* Reverse proxy configuration.
-* Route mapping.
-* Path prefixes.
-* Hostnames.
-* Ports.
-* Tool IDs.
-* Dynamic routing.
-* Static routing.
-* WebSocket support if applicable.
-* Streamlit-specific routing requirements.
-* Frontend asset routing.
-* API routing.
+The exact fix-version value selected by the user must travel through:
 
-For example, determine whether the architecture resembles:
+UI → API → Python service → database → queries → downstream processing
 
-https://portal/.../tool1
-https://portal/.../tool2
-https://portal/.../release-tracker
-
-and how each request is routed internally.
-
-Show the actual request flow:
-
-Browser
-   ↓
-AIDLC URL
-   ↓
-Reverse Proxy
-   ↓
-Tool Route
-   ↓
-Release Tracker Process
-   ↓
-React UI / Python Backend
-
-Again, this is only an example. Replace it with the actual architecture.
+and must match the Java implementation.
 
 ⸻
 
-8. Existing Authentication Analysis
+5. Issue 1 — Last Component Refresh Timestamp
 
-Analyze how authentication works today.
+Java Behavior
 
-The portal uses Azure/Entra ID SSO.
+In the Java application, the following pages display the latest component refresh timestamp at the top-right area:
 
-Determine:
+* Generate Report
+* Review Commits
+* Release Readiness
 
-* Where SSO is configured.
-* Which authentication library is used.
-* How authentication is initiated.
-* How the callback works.
-* Where the authenticated user is stored.
-* Whether cookies are used.
-* Whether tokens are used.
-* Which claims are extracted.
-* How the username is obtained.
-* How display name is obtained.
-* How email is obtained.
-* How roles/groups are obtained.
-* Whether roles come from Entra groups.
-* Whether roles come from application configuration.
-* Whether roles come from token claims.
-* Whether roles are hardcoded.
-* Whether roles are dynamically evaluated.
+When the user selects:
 
-Trace the complete flow:
+* Team
+* Fix Version
 
-User
- ↓
-Azure/Entra SSO
- ↓
-Authentication
- ↓
-Token/Claims/Cookie
- ↓
-AIDLC
- ↓
-User Identity
- ↓
-Role Resolution
- ↓
-Authorization
+the application automatically loads and displays the latest component refresh timestamp.
 
-Document every important source file and method involved.
+The timestamp is displayed on the right side near the top of the page.
 
-⸻
+Python Problem
 
-9. Existing Role Analysis
+The Python application currently does not correctly display this information.
 
-The AIDLC portal appears to have role-related functionality.
+The issue may exist in both:
 
-Determine:
+* frontend
+* backend
 
-1. What roles currently exist?
-2. Where are they defined?
-3. How are they assigned?
-4. How does the application know which role the user has?
-5. How is the role displayed in the UI?
-6. How are roles enforced?
-7. Is authorization enforced only in the UI?
-8. Is authorization also enforced in backend/API/business logic?
-9. Can a user bypass UI restrictions by directly calling an API?
-10. What happens when a user has no recognized role?
-11. Are Azure AD/Entra groups mapped to roles?
-12. Is there a default role?
+Required Fix
 
-Provide a role-resolution flow diagram.
+Analyze the Java implementation completely.
+
+Identify:
+
+* database/table used
+* query used
+* service/business logic
+* controller/API
+* request parameters
+* team-key handling
+* fix-version handling
+* timestamp retrieval
+* response structure
+* frontend state management
+* rendering logic
+
+Implement the equivalent behavior in Python.
+
+Expected Behavior
+
+When the user selects the team and fix version:
+
+1. UI sends the selected team key and complete fix version.
+2. Backend retrieves the appropriate component refresh metadata.
+3. Latest refresh timestamp is returned.
+4. UI displays it automatically.
+5. The timestamp must be shown in the same locations as Java.
+
+Do not create a separate inconsistent implementation.
+
+Use the same underlying business behavior as Java.
 
 ⸻
 
-10. Release Tracker Required RBAC Model
+6. Issue 2 — Release Readiness → Story Status
 
-Release Tracker must eventually support three effective access levels.
+Java Behavior
 
-Do not implement yet during this analysis.
+The Story Status section contains, for each story:
 
-First determine how these roles should map to the existing AIDLC authentication architecture.
+* Story details
+* Status
+* Reporter
 
-Role 1 — Admin
+Python Problem
 
-Admin users can:
+The Python Story Status page is missing:
 
-* Access Generate Report.
-* Generate reports.
-* Perform administrative refresh operations.
-* Refresh deployment status.
-* Send Teams notifications.
-* Perform other explicitly administrative/state-changing actions.
+* Status
+* Reporter
 
-Admin users can access all normal user functionality.
+These columns are not loading correctly.
 
-⸻
+Required Fix
 
-Role 2 — Developer
+Compare:
 
-Developer users can:
+Java
 
-* Access Review Commits.
-* Access Release Readiness.
-* Access Scan History.
-* Access other normal Release Tracker pages.
-* View report information.
-* Perform the allowed developer-level actions.
+* Story Status API
+* Controller
+* Service
+* DB query
+* DTO/response
+* UI table
+* column mapping
 
-Developer users must not:
+Python
 
-* Access Generate Report.
-* Perform admin-only refresh operations.
-* Perform admin-only report-generation operations.
-* Perform admin-only notification operations.
+* API/service
+* database query
+* response model
+* frontend table
+* column mapping
 
-Developer users may perform the Review Commit Override action if that action is explicitly intended for the developer role.
+Identify exactly where the information is lost.
 
-⸻
+Then fix the Python implementation.
 
-Role 3 — General Viewer / Unassigned User
+Acceptance Criteria
 
-A user who successfully authenticates through SSO but does not belong to the Admin or Developer role should still be able to access the general application.
+For every story displayed in Story Status:
 
-Viewer users can:
-
-* View normal pages.
-* View Release Readiness.
-* View Review Commits.
-* View Scan History.
-* View available reports/data.
-
-Viewer users must NOT:
-
-* Access Generate Report.
-* Use Review Commit Override.
-* Perform administrative refresh actions.
-* Send Teams notifications.
-* Perform other state-changing/admin operations.
+* Status must be populated exactly as Java.
+* Reporter must be populated exactly as Java.
+* Existing filters must continue working.
+* Existing story data must not be affected.
+* No unrelated fields should be removed.
+* Empty/null values should behave the same way as Java.
 
 ⸻
 
-11. Important Authorization Rule
+7. Issue 3 — Release Readiness → Branch Cut Validation
 
-Do not rely only on hiding buttons in React.
+Current Problem
 
-For every actionable UI operation:
+Opening Branch Cut Validation results in a blank/broken page.
 
-UI Button
-   ↓
-Authorization Check
-   ↓
-Backend/API Authorization Check
-   ↓
-Business Operation
+The application appears to navigate incorrectly or fail to load the required page.
 
-Authorization must be enforced at the appropriate backend/business-logic level as well.
+Required Analysis
 
-A user must not be able to bypass authorization by manually invoking an API.
+Compare Java and Python for:
 
-Document how this can be implemented using the existing AIDLC authorization architecture.
+* route/page registration
+* navigation
+* tab configuration
+* component/page loading
+* API invocation
+* API response
+* database retrieval
+* filtering
+* table rendering
+* error handling
+* frontend state management
 
-⸻
+Determine why the Python application becomes blank/corrupted.
 
-12. Release Tracker UI Expectations
+Do not simply hide the error.
 
-Release Tracker currently has these major pages:
+Fix the actual root cause.
 
-1. Dashboard
-2. Generate Report
-3. Review Commits
-4. Release Readiness
-5. Scan History
-6. Settings
+Expected Behavior
 
-The existing Release Tracker UI is React-based and should remain React-based.
+The Python Branch Cut Validation page must behave the same as Java.
 
-Expected technology:
+It must:
 
-* React 18
-* TypeScript
-* Vite
-* Tailwind CSS
-
-Do not redesign the existing UI unnecessarily.
-
-The objective is to integrate the existing Release Tracker functionality safely into the AIDLC ecosystem.
-
-⸻
-
-13. Release Tracker Integration Analysis
-
-Analyze what would be required to introduce Release Tracker as a new AIDLC tool.
-
-Determine:
-
-* Tool registration changes.
-* Port configuration.
-* Reverse proxy changes.
-* Startup changes.
-* Docker changes.
-* Environment variables.
-* Authentication integration.
-* Role integration.
-* Session/cookie integration.
-* API routing.
-* Static asset routing.
-* Health checks.
-* Logging.
-* Deployment configuration.
-* CI/CD changes.
-* Azure configuration.
-
-Determine whether Release Tracker should:
-
-* Run as a separate process.
-* Run as a separate container.
-* Run inside the existing container.
-* Use a dedicated port.
-* Be proxied through Nginx.
-* Follow an existing tool pattern.
-
-Do not guess. Identify the closest existing AIDLC tool and explain how Release Tracker should follow that pattern.
+* load successfully
+* display the expected data
+* display the expected filters
+* display branch-cut status
+* display pending/completed states
+* support the same user interactions
+* handle empty results correctly
+* handle backend errors correctly
 
 ⸻
 
-14. Local Development / Role Testing
+8. Issue 4 — Release Readiness → Deployment Section
 
-Document how a developer can test the three Release Tracker access levels locally.
+Java Behavior
 
-Determine how AIDLC currently handles local authentication.
+The Deployment section contains deployment-readiness information for multiple environments.
 
-If the existing project has a local-development authentication/mock mechanism, document it.
+The Python application must provide the same behavior and UI.
 
-The final documentation should explain how to simulate:
+Expected environments include:
 
-Admin
+* Test 3
+* Test 4
+* Stage
+* Production East
+* Production West
 
-User → Admin role → Release Tracker
+Required Comparison
 
-Expected:
+Compare Java and Python for:
 
-* Generate Report visible.
-* Generate Report executable.
-* Admin refresh actions available.
-* Teams notification actions available.
-* Review Commit Override available if applicable.
+Frontend
 
-Developer
+* environment tabs/cards
+* deployment status
+* deployment readiness
+* component information
+* commit IDs
+* latest release commit
+* deployed commit
+* behind/ahead status
+* validation messages
+* filters
+* loading state
+* refresh behavior
+* tooltip behavior
+* empty state
+* error state
 
-Expected:
+Backend
 
-* Generate Report hidden/inaccessible.
-* Review Commits visible.
-* Review Commit Override available.
-* Release Readiness visible.
-* Scan History visible.
-* Normal read operations available.
-* Admin operations unavailable.
+Compare:
 
-Viewer
+* deployment API
+* controller/service flow
+* Kubernetes calls
+* database queries
+* deployment-readiness table
+* team key
+* fix version
+* component lookup
+* commit comparison
+* refresh logic
+* asynchronous processing
+* response model
 
-Expected:
+Critical Requirement
 
-* Generate Report hidden/inaccessible.
-* Review Commits visible.
-* Override unavailable.
-* Release Readiness visible.
-* Scan History visible.
-* Normal read operations available.
-* Admin operations unavailable.
+The Python Deployment section must provide the same functional behavior as Java.
 
-Document the actual local mechanism available in AIDLC rather than inventing one.
+Do not implement a simplified deployment page.
 
-⸻
-
-15. Failure / Safety Analysis
-
-Because Release Tracker is being introduced into an existing production portal, analyze possible failure scenarios.
-
-At minimum investigate:
-
-* Invalid role.
-* Missing role.
-* Missing token claims.
-* Expired authentication.
-* Unauthorized API call.
-* Tool unavailable.
-* Tool process crash.
-* Reverse proxy misconfiguration.
-* Port conflict.
-* Container startup failure.
-* Nginx startup failure.
-* Python dependency failure.
-* React build failure.
-* Environment variable missing.
-* Authentication configuration mismatch.
-* Release Tracker unavailable while AIDLC remains healthy.
-
-Explain how the architecture should prevent a Release Tracker problem from breaking the existing AIDLC portal or other tools.
+All existing deployment-readiness logic must be migrated.
 
 ⸻
 
-16. Required Deliverables
+9. Deployment Filters
 
-Before making any code changes, create the following documents.
+Verify that the Python deployment section contains all applicable filters that exist in Java.
 
-Document 1 — AIDLC Architecture Analysis
+Compare:
 
-File:
+* team filter
+* fix-version filter
+* component filter
+* environment filter
+* status filter
+* any additional Java filters
 
-AIDLC_ARCHITECTURE_ANALYSIS.md
+The filter behavior must be equivalent.
 
-Must contain:
+Verify that filtering is correctly applied at the backend level where Java performs backend filtering.
 
-* Overall architecture.
-* Application startup flow.
-* Docker architecture.
-* Azure App Service architecture.
-* Reverse proxy architecture.
-* Tool architecture.
-* Port management.
-* Python execution model.
-* Frontend execution model.
-* Deployment flow.
-* Authentication flow.
-* Authorization flow.
-* Role resolution.
-* Existing tool integration pattern.
+Do not only filter the already-loaded UI data if Java performs database/backend filtering.
 
 ⸻
 
-Document 2 — AIDLC Deployment Guide
+10. Issue 5 — Scan History
 
-File:
+Java Behavior
 
-AIDLC_DEPLOYMENT_GUIDE.md
+Scan History displays previously created asynchronous jobs/report execution information.
 
-Must explain step-by-step:
+The generated job ID and related execution details must be available.
 
-Developer changes
-        ↓
-Build
-        ↓
-Docker image
-        ↓
-Container registry
-        ↓
-Azure App Service
-        ↓
-Container startup
-        ↓
-AIDLC startup
-        ↓
-Reverse proxy
-        ↓
-Individual tools
+Python Problem
 
-Include actual commands/configuration/file references wherever discoverable.
+Scan History is currently not displaying the expected scan/job information.
 
-⸻
+Required Analysis
 
-Document 3 — AIDLC RBAC Analysis
+Compare Java:
 
-File:
+* job creation
+* asynchronous job ID generation
+* job persistence
+* job status updates
+* scan history query
+* history API
+* frontend table
+* pagination/filtering if applicable
 
-AIDLC_RBAC_ANALYSIS.md
+Compare Python implementation.
 
-Must document:
+Identify where the data is lost.
 
-* Current roles.
-* Role source.
-* Entra groups/claims.
-* Authentication.
-* Authorization.
-* UI authorization.
-* Backend authorization.
-* Role display.
-* Default/unassigned behavior.
-* Existing examples from other tools.
+Important
 
-Then provide the recommended mapping for:
+Use the current intended job architecture.
 
-Admin
-Developer
-Viewer
+Do not reintroduce the obsolete duplicate Scan Job entity/job architecture if that was already removed from the Java application’s intended design.
 
-for Release Tracker.
+The current asynchronous job ID/status mechanism must be followed.
+
+Acceptance Criteria
+
+Scan History must show the same relevant information as Java, including:
+
+* Job ID
+* execution/status information
+* relevant team/fix-version information
+* timestamps
+* available report execution metadata
+
+The data must be retrieved from the correct database source.
 
 ⸻
 
-Document 4 — Release Tracker Integration Plan
+11. Issue 6 — Dashboard
 
-File:
+Current Problem
 
-RELEASE_TRACKER_AIDLC_INTEGRATION_PLAN.md
+The Python Dashboard is displaying:
 
-Must contain:
+* 0
+* 0
+* 0
 
-Phase 1
+for the statistics.
 
-AIDLC architecture integration.
+This strongly indicates a backend query, data mapping, or API integration problem.
 
-Phase 2
+Required Analysis
 
-Tool registration.
+Compare Java Dashboard completely.
 
-Phase 3
+Identify:
 
-Port configuration.
+* every dashboard metric
+* source table
+* SQL/query
+* aggregation logic
+* filters
+* team/fix-version dependency
+* API/controller
+* response structure
+* frontend mapping
+* default values
+* empty-state behavior
 
-Phase 4
+Then compare with Python.
 
-Reverse proxy.
+Required Fix
 
-Phase 5
+Do not hard-code values.
 
-Docker/container integration.
+Do not simply replace zero with another default value.
 
-Phase 6
+Fix the underlying backend/data retrieval issue.
 
-React application integration.
-
-Phase 7
-
-Python backend integration.
-
-Phase 8
-
-Authentication integration.
-
-Phase 9
-
-RBAC implementation.
-
-Phase 10
-
-API-level authorization.
-
-Phase 11
-
-Local role testing.
-
-Phase 12
-
-Integration testing.
-
-Phase 13
-
-Deployment validation.
-
-Phase 14
-
-Production-readiness validation.
+The Python Dashboard must display the same calculated values as Java for the same data.
 
 ⸻
 
-17. Critical Non-Regression Requirement
+12. Issue 7 — Settings → Export Center
 
-The integration must NOT break:
+Existing Feature
 
-* Existing AIDLC portal.
-* Existing tools.
-* Existing authentication.
-* Existing authorization.
-* Existing reverse proxy.
-* Existing tool routing.
-* Existing deployment process.
-* Existing Azure App Service behavior.
+The Settings page contains an Export Center where users can select report types and download an Excel report.
 
-Release Tracker must be isolated enough that:
+The Python UI currently appears reasonably close to Java.
 
-Release Tracker failure
-        ≠
-AIDLC portal failure
+However, the backend behavior is suspected to be incorrect/incomplete.
 
-and:
+Required Analysis
 
-Release Tracker deployment issue
-        ≠
-Existing tool outage
+Compare Java and Python for the complete export flow.
 
-unless the architecture inherently makes this impossible. If such a dependency exists, document it clearly.
+UI
 
-⸻
+Verify:
 
-18. Code-Level Evidence Requirement
+* checkbox/options
+* report selection
+* team selection
+* fix-version selection
+* download action
+* loading state
+* error handling
 
-Do not provide generic architectural assumptions.
+Backend
 
-For every major conclusion, identify:
+Verify:
 
-* File path.
-* Class/module.
-* Method/function.
-* Configuration property.
-* Relevant code flow.
+* selected report types
+* team key
+* complete fix version
+* DB queries
+* data aggregation
+* workbook generation
+* sheet creation
+* sheet naming
+* column ordering
+* row population
+* violation filtering
+* commit-analysis data
+* release-readiness data
+* branch-cut data
+* deployment data
+* output file generation
 
-For example:
+Important
 
-File:
-path/to/example.py
-Function:
-example_function()
-Purpose:
-Determines the user's role from ...
-Used by:
-...
+The Python export must contain the same information as the Java export for the same selected options.
 
-Do this especially for:
-
-* Startup.
-* Docker.
-* Nginx.
-* Reverse proxy.
-* Tool registration.
-* Port assignment.
-* Authentication.
-* Role resolution.
-* Authorization.
-* User identity display.
-* Azure deployment.
+Do not create an independent interpretation of the report.
 
 ⸻
 
-19. Final Analysis Summary
+13. Export Report Functional Requirements
 
-At the end, provide a concise executive summary answering:
+The existing Export Center supports multiple report selections.
 
-A. How does AIDLC run?
+Verify all supported report types against Java, including applicable reports such as:
 
-B. How does AIDLC get deployed to Azure App Service?
+* Review Commits
+* Review Commit Violations
+* Story Status
+* Branch Cut Validation
+* Test 3 Deployment
+* Test 4 Deployment
+* Stage Deployment
+* Production East Deployment
+* Production West Deployment
+* Commit Analysis
 
-C. How are Docker images created and deployed?
+Where Java generates multiple sheets for a selected report category, Python must do the same.
 
-D. How does the reverse proxy route traffic?
-
-E. How are individual tools started?
-
-F. How does Python execute?
-
-G. How does React execute?
-
-H. How does SSO work?
-
-I. How are roles determined?
-
-J. How are roles enforced?
-
-K. How should Release Tracker be registered as a new tool?
-
-L. How should Release Tracker use Admin/Developer/Viewer roles?
-
-M. What exact files/configurations must be changed?
-
-N. What could potentially break the existing AIDLC portal?
-
-O. What tests must be completed before deployment?
+For example, Review Commits must retain the expected separate detailed and violation-oriented outputs if that is the Java behavior.
 
 ⸻
 
-20. Implementation Rule
+14. Database Comparison
 
-DO NOT IMPLEMENT THE CHANGES YET.
+For every affected feature, compare the Java database behavior against Python.
 
-First:
+Verify:
 
-1. Analyze the complete AIDLC codebase.
-2. Analyze existing tool implementations.
-3. Analyze deployment architecture.
-4. Analyze authentication.
-5. Analyze roles.
-6. Analyze authorization.
-7. Analyze reverse proxy.
-8. Analyze Docker/container behavior.
-9. Analyze Azure App Service deployment.
-10. Create all required documentation.
-11. Create the Release Tracker integration plan.
-12. Identify risks and dependencies.
-13. Present the plan for review.
+* tables
+* columns
+* primary keys
+* indexes
+* foreign-key relationships where applicable
+* nullable fields
+* data types
+* insert logic
+* update logic
+* delete logic
+* query conditions
+* team-key usage
+* fix-version usage
+* timestamp handling
 
-Only after the plan is reviewed and approved should implementation begin.
+Critical Refresh/Delete-and-Repopulate Behavior
+
+The Java implementation has intentional flows where data for a particular:
+
+Team Key + Fix Version
+
+is removed before fresh data is loaded.
+
+This behavior must not be lost during migration.
+
+Verify this behavior for applicable operations, including:
+
+Fetch Stories
+
+Before fetching fresh iTrack stories:
+
+1. Identify Team Key + Fix Version.
+2. Delete existing corresponding iTrack story records.
+3. Fetch latest stories.
+4. Save the fresh records.
+
+Load Components
+
+Before loading components:
+
+1. Identify Team Key + Fix Version.
+2. Delete existing component records.
+3. Fetch latest components.
+4. Save fresh records.
+
+Generate Report
+
+Verify the Java behavior for clearing/rebuilding relevant data, including applicable:
+
+* components
+* iTrack stories
+* commits
+* commit analysis
+* release-readiness data
+* metadata
+
+Refresh Deployment Status
+
+Verify the Java behavior for:
+
+Team Key + Fix Version
+
+and ensure the deployment-readiness data is refreshed correctly.
+
+Do not accidentally remove this refresh lifecycle during migration.
 
 ⸻
 
-Definition of Done — Analysis Phase
+15. UI-to-Backend End-to-End Comparison
 
-* Complete AIDLC repository analyzed.
-* Existing tools analyzed.
-* Tool registration mechanism identified.
-* Port configuration identified.
-* Reverse proxy mechanism identified.
-* Nginx/proxy configuration analyzed.
-* Dockerfile(s) analyzed.
-* Container startup analyzed.
-* Python runtime analyzed.
-* React runtime/build process analyzed.
-* Azure App Service deployment analyzed.
-* Container registry/deployment mechanism identified.
-* Environment configuration analyzed.
-* Authentication flow traced end-to-end.
-* Entra ID/SSO configuration identified.
-* User identity resolution identified.
-* Existing role mechanism identified.
-* Existing authorization mechanism identified.
-* UI authorization analyzed.
-* Backend/API authorization analyzed.
-* Existing local authentication/testing mechanism identified.
-* Admin/Developer/Viewer Release Tracker model documented.
-* Release Tracker integration points identified.
-* Non-regression risks identified.
-* Required files/configurations identified.
-* Deployment process documented.
-* Architecture diagrams created.
-* All conclusions backed by actual code/configuration references.
-* No code changes made during the analysis phase.
-* Final implementation plan created and ready for review.
+For EVERY affected UI action, perform an end-to-end comparison.
 
-Final Rule
+Use this sequence:
 
-Do not guess. Do not infer architecture merely from filenames. Trace the actual execution flow through the code and configuration.
+UI Button/Action
+→ Frontend request
+→ API endpoint
+→ Request parameters
+→ Backend controller
+→ Service
+→ Business logic
+→ Database/external API
+→ Response
+→ Frontend state
+→ UI rendering
 
-The existing AIDLC codebase is the source of truth for understanding how the portal works.
+Perform this analysis for:
 
-The objective of this task is to give the development team a complete and trustworthy understanding of AIDLC before Release Tracker is integrated, especially around deployment, reverse proxying, tool lifecycle, authentication, RBAC, and production safety.
+* Team selection
+* Fix Version selection
+* Last Component Refresh loading
+* Story Status
+* Branch Cut Validation
+* Deployment tabs
+* Deployment refresh
+* Scan History
+* Dashboard
+* Export Center
+* Every report-selection checkbox
+* Excel download
+
+⸻
+
+16. API Contract Comparison
+
+For each API, compare Java and Python.
+
+Document:
+
+Area	Java	Python	Expected
+Endpoint	Verify	Verify	Equivalent
+HTTP method	Verify	Verify	Equivalent
+Request	Verify	Verify	Equivalent
+Team Key	Verify	Verify	Same
+Fix Version	Verify	Verify	Exact complete string
+Response	Verify	Verify	Equivalent
+Error handling	Verify	Verify	Equivalent
+DB operations	Verify	Verify	Equivalent
+Async processing	Verify	Verify	Equivalent
+
+The comparison must include every API used by the affected pages.
+
+⸻
+
+17. Async / Parallel Processing
+
+Where Java performs parallel processing using executor/completable-future patterns, Python must preserve equivalent behavior.
+
+Do not convert parallel operations into unnecessary sequential loops.
+
+For operations involving multiple components/API calls:
+
+* identify Java parallel execution
+* identify executor/thread-pool behavior
+* identify concurrency boundaries
+* identify error handling
+* identify result aggregation
+
+Implement equivalent Python concurrency using the appropriate Python mechanism, such as:
+
+* concurrent.futures.ThreadPoolExecutor
+* asyncio where appropriate
+* other suitable concurrency mechanisms where justified
+
+The objective is equivalent behavior and response performance, not merely equivalent syntax.
+
+⸻
+
+18. Logging Requirements
+
+While fixing these issues, ensure sufficient logging exists to troubleshoot future migration problems.
+
+Local Default
+
+Debug logging should be enabled by default for local execution.
+
+Info Logs
+
+Add meaningful INFO logs around major operations such as:
+
+* page/API request received
+* team/fix version selected
+* report generation started
+* stories refresh started/completed
+* components refresh started/completed
+* deployment refresh started/completed
+* export started/completed
+
+Debug Logs
+
+Add detailed DEBUG logging where useful for:
+
+* request parameters
+* selected team key
+* complete fix version
+* database query flow
+* record counts
+* API responses/status
+* component processing
+* deployment comparison
+* report generation
+* Excel sheet generation
+* filtering
+* asynchronous task execution
+
+Do not log secrets, credentials, tokens, cookies, or sensitive authentication information.
+
+⸻
+
+19. Required Plan Before Code Changes
+
+Before modifying the implementation, create a detailed plan document.
+
+The plan must contain:
+
+Phase 1 — Java Inventory
+
+Identify all affected:
+
+* pages
+* components
+* routes
+* APIs
+* controllers
+* services
+* repositories
+* database tables
+* external API integrations
+
+Phase 2 — Python Inventory
+
+Identify corresponding Python:
+
+* pages
+* components
+* APIs
+* service functions
+* DB functions
+* external API clients
+
+Phase 3 — Gap Matrix
+
+Create a matrix:
+
+Feature	Java Behavior	Python Behavior	Gap	Required Fix
+
+Phase 4 — UI Fixes
+
+Document exact frontend changes.
+
+Phase 5 — Backend Fixes
+
+Document exact Python backend changes.
+
+Phase 6 — Database Fixes
+
+Document schema/query/persistence differences.
+
+Phase 7 — Integration Fixes
+
+Verify:
+
+* GitHub
+* iTrack
+* Kubernetes
+* Veracode
+* database
+
+Phase 8 — Testing
+
+Create test cases for every affected flow.
+
+Only after this plan is reviewed should implementation begin.
+
+⸻
+
+20. Acceptance Criteria
+
+AC-01 — Last Component Refresh
+
+* Generate Report displays the last component refresh timestamp.
+* Review Commits displays the last component refresh timestamp.
+* Release Readiness displays the last component refresh timestamp.
+* Timestamp is retrieved from the correct backend/database source.
+* Team Key is correctly applied.
+* Complete Fix Version is correctly applied.
+* Frontend and backend behavior matches Java.
+
+AC-02 — Story Status
+
+* Story Status loads successfully.
+* Status column is populated.
+* Reporter column is populated.
+* Values match Java.
+* Existing filters continue working.
+
+AC-03 — Branch Cut Validation
+
+* Branch Cut Validation page no longer opens as blank/broken.
+* Correct backend API is invoked.
+* Correct data is loaded.
+* Filters work.
+* UI matches Java behavior.
+* Backend logic matches Java behavior.
+
+AC-04 — Deployment Readiness
+
+* Test 3 is displayed.
+* Test 4 is displayed.
+* Stage is displayed.
+* Production East is displayed.
+* Production West is displayed.
+* Deployment status is correct.
+* Commit comparison works.
+* Deployment readiness logic matches Java.
+* Filters work.
+* Refresh behavior matches Java.
+
+AC-05 — Scan History
+
+* Scan/job execution history loads.
+* Job IDs are displayed.
+* Job status is displayed.
+* Relevant metadata is displayed.
+* Data source matches Java.
+* No obsolete duplicate scan-job architecture is reintroduced.
+
+AC-06 — Dashboard
+
+* Dashboard metrics are no longer incorrectly displayed as zero.
+* Backend queries return correct data.
+* Aggregations match Java.
+* UI mappings match Java.
+* Team/fix-version filtering behaves correctly.
+
+AC-07 — Export Center
+
+* All supported export options are available.
+* Selected reports are correctly processed.
+* Team Key is correctly passed.
+* Complete Fix Version is preserved.
+* Database data is retrieved correctly.
+* Excel workbook is generated successfully.
+* Expected sheets are created.
+* Sheet contents match Java.
+* Review Commit report matches Java.
+* Review Commit Violation report matches Java.
+* Story Status report matches Java.
+* Branch Cut report matches Java.
+* Deployment reports match Java.
+* Commit Analysis report matches Java.
+
+AC-08 — Database Refresh Behavior
+
+* Fetch Stories clears existing Team Key + Fix Version data before refresh.
+* Load Components clears existing Team Key + Fix Version data before refresh.
+* Generate Report performs required cleanup/rebuild operations.
+* Deployment Refresh performs required cleanup/rebuild operations.
+* No stale records remain.
+* No duplicate records are unintentionally created.
+
+AC-09 — Fix Version Integrity
+
+* Complete fix-version string is preserved.
+* Spaces are preserved.
+* No truncation occurs.
+* No partial fix-version values are sent.
+* UI → backend → DB values remain consistent.
+
+AC-10 — API Compatibility
+
+* Every affected Java API has equivalent Python behavior.
+* HTTP/request behavior is equivalent.
+* Input parameters are equivalent.
+* Output fields are equivalent.
+* Error behavior is equivalent.
+* Database behavior is equivalent.
+
+AC-11 — Async Behavior
+
+* Java parallel execution patterns are identified.
+* Equivalent Python parallel processing is implemented.
+* Independent component operations can execute concurrently.
+* Exceptions are correctly handled.
+* Results are correctly aggregated.
+
+AC-12 — Logging
+
+* INFO logs exist for major operations.
+* DEBUG logs exist for troubleshooting.
+* Local debug logging is enabled by default.
+* Sensitive credentials/tokens are never logged.
+
+⸻
+
+21. Definition of Done
+
+The work is considered complete only when:
+
+Functional
+
+* All seven identified problem areas are fixed.
+* Java and Python behavior is equivalent.
+* No existing working functionality is broken.
+* No unrelated functionality is modified.
+
+Frontend
+
+* UI behavior matches Java.
+* All required pages load.
+* No blank pages.
+* No broken navigation.
+* Filters work.
+* Tables display all required columns.
+* Loading/error/empty states work.
+
+Backend
+
+* Every affected API has been compared.
+* Python logic matches Java.
+* Request/response contracts match.
+* Database operations match.
+* External integrations work.
+* Async behavior is preserved.
+
+Database
+
+* Schema is verified.
+* Queries are verified.
+* Delete-and-refresh behavior is verified.
+* Team Key + Fix Version filtering is correct.
+* No stale/duplicate data is introduced.
+
+Validation
+
+* Generate Report tested.
+* Review Commits tested.
+* Release Readiness tested.
+* Branch Cut Validation tested.
+* Deployment Readiness tested.
+* Scan History tested.
+* Dashboard tested.
+* Settings Export Center tested.
+
+Regression
+
+* Existing Java behavior has been used as the baseline.
+* No migration-related regression remains.
+* No fix-version truncation exists.
+* No team/project-key regression exists.
+* No asynchronous processing regression exists.
+
+⸻
+
+22. Final Validation Requirement
+
+Before declaring completion, perform a final end-to-end validation.
+
+For each affected feature:
+
+Java UI
+→ Java API
+→ Java backend
+→ Java DB/external service
+
+must be compared against:
+
+Python UI
+→ Python API
+→ Python backend
+→ Python DB/external service
+
+Prepare a final validation matrix:
+
+Feature	Java Verified	Python Verified	UI Match	API Match	Backend Match	DB Match	Status
+Component Refresh Timestamp							
+Story Status							
+Branch Cut Validation							
+Deployment Readiness							
+Scan History							
+Dashboard							
+Export Center							
+
+No feature should be marked complete until all relevant columns are verified.
+
+⸻
+
+23. Final Instruction to the Implementing Agent
+
+Do not assume that the current Python implementation is correct.
+
+The Java application is the authoritative working implementation.
+
+Analyze the Java code deeply and reproduce its behavior in Python.
+
+For every issue:
+
+1. Find the Java implementation.
+2. Trace the complete execution flow.
+3. Find the Python equivalent.
+4. Identify the behavioral difference.
+5. Fix the Python implementation.
+6. Verify the UI.
+7. Verify the API.
+8. Verify the backend.
+9. Verify the database.
+10. Verify external integrations.
+11. Verify asynchronous behavior.
+12. Run regression tests.
+
+Do not make unrelated improvements.
+
+Do not redesign the existing functionality.
+
+Do not remove existing business rules.
+
+Do not introduce shortcuts.
+
+Do not hard-code values merely to make the UI appear correct.
+
+The final Python Release Tracker must behave as closely as possible to the working Java Release Tracker, with the primary intentional change being the backend technology migration from Java/Spring Boot to Python.
+
+The goal is functional equivalence, not approximate similarity.
