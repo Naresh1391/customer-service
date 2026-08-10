@@ -1,447 +1,945 @@
-# Generate Report API - Java to Python Migration Validation & Reimplementation Plan
-
-## Objective
-
-The **Java Generate Report API** is the approved, production-ready implementation and is the **single source of truth** for business logic.
-
-The current Python implementation has deviated from the Java implementation by introducing unnecessary logic while missing required business logic. The objective of this task is to **re-analyze, redesign, and reimplement the Python Generate Report API** so that it behaves **identically** to the Java implementation.
-
-**Important Principle:**
-
-> Do not enhance, simplify, optimize, redesign, or reinterpret the Java logic. The Python implementation must faithfully reproduce the Java behavior. The only acceptable difference is the programming language.
-
----
-
-# Primary Goal
-
-Before modifying any code:
-
-1. Re-read the complete Java project.
-2. Re-read the complete Python project.
-3. Re-read the Java analysis document.
-4. Re-read the Python migration/analysis document.
-5. Build a detailed implementation plan.
-6. Only after completing the analysis should implementation begin.
-
-Do **not** directly modify the Python code without understanding the complete Java flow.
-
----
-
-# Source of Truth
-
-The following are the authoritative references, in order of priority:
-
-1. Java Release Tracker source code
-2. Existing Java analysis/design documentation
-3. Python migration analysis documents
-4. Python implementation (only as the target to be corrected)
-
-If any conflict exists:
-
-**Java implementation always wins.**
-
----
-
-# Scope
-
-This task applies **only** to the **Generate Report API** and every class directly involved in its execution.
-
-This includes:
-
-- Controller
-- Request DTOs
-- Response DTOs
-- Service layer
-- Helper services
-- Utility classes
-- Async execution
-- Database operations
-- External integrations
-- Job execution
-- Status updates
-- Logging
-- Error handling
-
----
-
-# Phase 1 - Complete API Flow Analysis
-
-Document the complete execution flow of the Java Generate Report API.
-
-Create an end-to-end sequence similar to:
-
-UI
-
-↓
-
-Controller
-
-↓
-
-Request Validation
-
-↓
-
-Job Creation
-
-↓
-
-Service Layer
-
-↓
-
-External API Calls
-
-↓
-
-Business Logic
-
-↓
-
-Database Updates
-
-↓
-
-Status Updates
-
-↓
-
-Response
-
-↓
-
-UI
-
-Every method invocation must be documented.
-
-Nothing should be skipped.
-
----
-
-# Phase 2 - Controller Comparison
-
-Compare Java Controller and Python Controller.
-
-Verify:
-
-- Endpoint URL
-- HTTP Method
-- Request object
-- Response object
-- Validation
-- Authentication
-- Authorization
-- Error handling
-- Status codes
-- Logging
-
-The Python endpoint must expose identical behaviour.
-
----
-
-# Phase 3 - Request and Response Validation
-
-Compare every field.
-
-Verify:
-
-## Request
-
-- Required fields
-- Optional fields
-- Validation
-- Defaults
-- Null handling
-
-## Response
-
-- Success payload
-- Failure payload
-- Progress response
-- Job status
-- Messages
-
-Every field must behave identically.
-
----
-
-# Phase 4 - Line-by-Line Business Logic Comparison
-
-This is the most important phase.
-
-Compare the Java implementation line-by-line.
-
-For every statement determine:
-
-- Why it exists
-- What business purpose it serves
-- Whether Python contains it
-- Whether Python behaves the same
-
-Nothing may be omitted.
-
-Nothing may be reinterpreted.
-
----
-
-# Phase 5 - Execution Order Validation
-
-The execution order is critical.
-
-The Python implementation must preserve:
-
-- Step ordering
-- Validation ordering
-- Async ordering
-- Database update ordering
-- External API ordering
-
-Do not reorder logic simply because Python allows it.
-
-Maintain Java execution semantics.
-
----
-
-# Phase 6 - Async Behaviour Comparison
-
-Java implementation uses asynchronous execution.
-
-Verify:
-
-- ExecutorService
-- CompletableFuture
-- Parallel execution
-- Future coordination
-- Completion handling
-- Error propagation
-
-Python must implement equivalent behaviour using:
-
-- ThreadPoolExecutor
-- Future
-- wait()
-- as_completed()
-
-Parallel operations must remain parallel.
-
-Do not accidentally serialize independent work.
-
----
-
-# Phase 7 - External API Validation
-
-Compare every integration.
-
-Including:
-
-- GitHub
-- iTrack
-- Kubernetes
-- Veracode
-
-For every API verify:
-
-- Request
-- Authentication
-- Headers
-- Retry behaviour
-- Error handling
-- Timeout
-- Parsing
-- Mapping
-
-Python must behave identically.
-
----
-
-# Phase 8 - Database Behaviour Validation
-
-Compare every database operation.
-
-Verify:
-
-- Insert
-- Update
-- Delete
-- Batch operations
-- Save order
-- Transactions
-- Repository calls
-
-Ensure every Java database operation exists in Python.
-
----
-
-# Phase 9 - Business Rule Validation
-
-Verify every business rule.
-
-Examples include:
-
-- Team Key usage
-- Fix Version handling
-- Story mapping
-- Component filtering
-- Excluded components
-- User exclusions
-- Commit analysis
-- Deployment readiness
-- Branch validation
-- Metadata generation
-- Report generation
-
-No business rule may be skipped.
-
----
-
-# Phase 10 - Remove Incorrect Python Logic
-
-Review the current Python implementation.
+AIDLC Portal Architecture, Deployment & RBAC Analysis + Release Tracker Integration Plan
+
+1. Objective
+
+Perform a deep, code-level analysis of the existing AIDLC (AI-Driven Lifecycle) portal and understand exactly how the portal:
+
+1. Runs locally.
+2. Builds and packages applications/tools.
+3. Builds Docker images and containers.
+4. Deploys to Azure App Service.
+5. Hosts multiple tools/applications within the same portal.
+6. Uses reverse proxying or routing to expose individual tools.
+7. Configures ports for individual tools.
+8. Starts/stops individual tools.
+9. Handles frontend and backend execution for Python-based tools.
+10. Handles authentication through Azure/Entra ID SSO.
+11. Determines the logged-in user’s roles.
+12. Displays the user’s name, role, and other identity information.
+13. Applies authorization to individual pages, buttons, actions, and APIs.
+
+The purpose of this analysis is to understand the existing architecture before integrating the Release Tracker application.
+
+Critical instruction
+
+DO NOT MODIFY CODE DURING THIS ANALYSIS PHASE.
+
+First inspect the complete AIDLC project and generate documentation and an implementation plan.
+
+The existing AIDLC implementation is the source of truth for:
+
+* Deployment architecture
+* App startup
+* Docker/container behavior
+* Reverse proxy
+* Tool registration
+* Port configuration
+* SSO
+* Role resolution
+* Authorization
+* Existing tool integration patterns
+
+Do not assume how anything works. Trace it through the actual source code and configuration.
+
+⸻
+
+2. Analyze the Complete AIDLC Architecture
+
+Analyze the complete AIDLC repository, including:
+
+* Frontend
+* Backend
+* Tool implementations
+* Configuration files
+* Dockerfiles
+* Docker Compose files, if any
+* Nginx configuration
+* Reverse proxy configuration
+* Azure configuration
+* App Service configuration
+* Startup scripts
+* Shell scripts
+* Python entry points
+* Package configuration
+* Environment configuration
+* Authentication configuration
+* Authorization configuration
+* Role configuration
+* Tool registration/configuration
+* Port configuration
+* Health checks
+* Logging
+* CI/CD configuration
+* Deployment scripts
+* Infrastructure configuration
+* Any workflow/configuration used for deployment
+
+Do not limit the investigation to obvious files.
+
+Search the complete repository for references to:
+
+* Docker
+* container
+* Azure
+* App Service
+* nginx
+* reverse proxy
+* proxy
+* port
+* tool
+* tools
+* startup
+* entrypoint
+* deployment
+* authentication
+* authorization
+* Entra
+* Azure AD
+* SSO
+* role
+* roles
+* group
+* claims
+* token
+* JWT
+* cookie
+* session
+* user
+* admin
+* developer
+* permissions
+
+⸻
+
+3. Understand the AIDLC Tool Architecture
+
+AIDLC already contains approximately 13–14 tools/applications.
+
+Determine exactly how those tools are represented.
 
 Identify:
 
-- Unnecessary logic
-- Invented logic
-- Behaviour not present in Java
-- Extra processing
-- Duplicate processing
-- Incorrect shortcuts
+* Where tools are registered.
+* How a new tool is added.
+* What configuration identifies a tool.
+* Whether each tool has its own port.
+* Where the port is configured.
+* How the portal knows which application/tool to launch.
+* How the portal routes requests to the individual tool.
+* Whether Nginx performs the routing.
+* Whether another reverse proxy component performs the routing.
+* How URLs/routes are generated.
+* How frontend requests reach the correct tool.
+* How backend requests reach the correct tool.
+* Whether tools run as separate processes.
+* Whether tools run as separate containers.
+* Whether all tools run inside the same container.
+* Whether each tool has its own Python process.
+* How multiple tools coexist inside Azure App Service.
 
-Remove every deviation.
+Create an explicit architecture diagram in Markdown showing:
 
-Python should not contain functionality that does not exist in Java unless explicitly approved.
+User
+  |
+  v
+Azure App Service
+  |
+  v
+AIDLC Portal
+  |
+  +---- Tool 1
+  |
+  +---- Tool 2
+  |
+  +---- Tool 3
+  |
+  +---- ...
+  |
+  +---- Release Tracker
 
----
+Replace the above conceptual representation with the actual architecture discovered from the code.
 
-# Phase 11 - Preserve Java Behaviour
+⸻
 
-The following must remain identical:
+4. Understand Docker Build and Deployment
 
-- Decision making
-- Validation rules
-- Filtering
-- Loop ordering
-- Async behaviour
-- Repository updates
-- API sequencing
-- Status updates
-- Progress reporting
+Determine exactly what happens when AIDLC is deployed.
 
----
+Answer these questions from the code:
 
-# Phase 12 - Logging Review
+Source code → Docker
 
-Ensure logging matches Java.
+1. Where does the build start?
+2. What command builds the application?
+3. Is there a frontend compilation/build step?
+4. Is Python compiled in any way?
+5. Is a virtual environment created?
+6. How are Python dependencies installed?
+7. What files are copied into the image?
+8. What Dockerfile is used?
+9. What is the base image?
+10. What is the final image structure?
+11. What is the entrypoint?
+12. What startup command is executed?
+13. Is Nginx started?
+14. How is Streamlit started?
+15. Are multiple processes started?
+16. Is Supervisor used?
+17. Is Gunicorn/Uvicorn/FastAPI used anywhere?
+18. How are ports exposed?
 
-Implement:
+Explain the complete lifecycle:
 
-## INFO Logs
+Developer Code
+     ↓
+Build
+     ↓
+Docker Image
+     ↓
+Container
+     ↓
+Azure Container/App Service
+     ↓
+Startup
+     ↓
+AIDLC Portal
+     ↓
+Individual Tools
 
-- API start
-- API completion
-- Job creation
-- Major milestones
-- External integrations
-- Completion summary
+For every step, provide the actual file, configuration, command, or script responsible for it.
 
-## DEBUG Logs
+⸻
 
-- Request payload
-- Filtering
-- Commit analysis
-- Component analysis
-- Async execution
-- Database updates
-- API responses
-- Decision branches
+5. Python Runtime Analysis
 
-Logging should make production troubleshooting straightforward.
+Explain how Python applications actually execute in AIDLC.
 
----
+Clarify:
 
-# Phase 13 - Error Handling
+* Whether Python needs compilation.
+* What happens when Python starts.
+* How dependencies are installed.
+* How Streamlit starts.
+* How the Python process is managed.
+* How multiple applications are started.
+* Whether applications are long-running processes.
+* How ports are assigned.
+* How processes are supervised.
+* What happens when a process crashes.
+* Whether the container restarts.
+* How health checks work.
 
-Compare every exception path.
+Compare this conceptually with a Java application:
 
-Ensure:
+Java:
+Source → Maven/Gradle → JAR → JVM → Spring Boot → Server
+Python:
+Source → dependency installation/package → Python runtime → application process
 
-- Same validation failures
-- Same retry behaviour
-- Same user messages
-- Same job status updates
-- Same logging
+But do not assume this comparison is accurate for AIDLC. Document the actual AIDLC implementation.
 
----
+⸻
 
-# Phase 14 - Performance Validation
+6. Azure App Service Deployment Analysis
 
-Do not introduce unnecessary work.
+Determine exactly how AIDLC reaches Azure App Service.
 
-Specifically verify:
+Identify:
 
-- Duplicate API calls
-- Duplicate database queries
-- Duplicate loops
-- Duplicate parsing
-- Repeated calculations
+* Azure resource type.
+* App Service configuration.
+* Container configuration.
+* Image registry.
+* Image name/tagging strategy.
+* Deployment mechanism.
+* Environment variables.
+* Port configuration.
+* Startup command.
+* Health checks.
+* Scaling configuration if present.
+* Authentication configuration.
+* Networking configuration if relevant.
+* Secrets/configuration handling.
+* Logging configuration.
 
-The Python implementation should match Java efficiency while preserving behaviour.
+Determine whether deployment is:
 
----
+Source → Docker Build → Container Registry → Azure App Service
 
-# Deliverables
+or another flow.
 
-Produce the following before implementation:
+Document the exact implementation.
 
-1. Complete Generate Report API flow diagram
-2. Java vs Python Controller comparison
-3. Request/Response comparison
-4. Method-by-method comparison
-5. Line-by-line business logic comparison
-6. Async execution comparison
-7. External API comparison
-8. Database operation comparison
-9. Gap analysis
-10. Detailed implementation plan
-11. Risk assessment
-12. Regression checklist
+Also identify which files/scripts/configurations a developer would need to change if Release Tracker becomes another AIDLC tool.
 
-Only after these deliverables are complete should implementation begin.
+⸻
 
----
+7. Reverse Proxy / Routing Analysis
 
-# Acceptance Criteria
+This is extremely important.
 
-- Java Generate Report API fully understood.
-- Python Generate Report API completely compared.
-- Every controller method verified.
-- Every service method verified.
-- Every helper method verified.
-- Every external integration verified.
-- Every database operation verified.
-- Every business rule migrated.
-- Async behaviour preserved.
-- Execution order preserved.
-- No unnecessary Python-only logic remains.
-- No Java logic omitted.
-- Logging implemented consistently.
-- Error handling matches Java.
-- Functional behaviour is identical.
+Determine exactly how requests reach each tool.
 
----
+Analyze:
 
-# Definition of Done
+* Nginx configuration.
+* Reverse proxy configuration.
+* Route mapping.
+* Path prefixes.
+* Hostnames.
+* Ports.
+* Tool IDs.
+* Dynamic routing.
+* Static routing.
+* WebSocket support if applicable.
+* Streamlit-specific routing requirements.
+* Frontend asset routing.
+* API routing.
 
-The Generate Report migration is complete only when:
+For example, determine whether the architecture resembles:
 
-- The Python Generate Report API behaves identically to Java.
-- All request and response contracts match.
-- All business rules match.
-- All database operations match.
-- All external integrations match.
-- All asynchronous processing matches.
-- All execution ordering matches.
-- No missing Java logic remains.
-- No additional Python-only logic remains.
-- End-to-end regression testing confirms identical results for the same inputs.
-- The Java implementation remains the functional baseline, and the Python implementation is a faithful migration with no business logic deviations.
+https://portal/.../tool1
+https://portal/.../tool2
+https://portal/.../release-tracker
+
+and how each request is routed internally.
+
+Show the actual request flow:
+
+Browser
+   ↓
+AIDLC URL
+   ↓
+Reverse Proxy
+   ↓
+Tool Route
+   ↓
+Release Tracker Process
+   ↓
+React UI / Python Backend
+
+Again, this is only an example. Replace it with the actual architecture.
+
+⸻
+
+8. Existing Authentication Analysis
+
+Analyze how authentication works today.
+
+The portal uses Azure/Entra ID SSO.
+
+Determine:
+
+* Where SSO is configured.
+* Which authentication library is used.
+* How authentication is initiated.
+* How the callback works.
+* Where the authenticated user is stored.
+* Whether cookies are used.
+* Whether tokens are used.
+* Which claims are extracted.
+* How the username is obtained.
+* How display name is obtained.
+* How email is obtained.
+* How roles/groups are obtained.
+* Whether roles come from Entra groups.
+* Whether roles come from application configuration.
+* Whether roles come from token claims.
+* Whether roles are hardcoded.
+* Whether roles are dynamically evaluated.
+
+Trace the complete flow:
+
+User
+ ↓
+Azure/Entra SSO
+ ↓
+Authentication
+ ↓
+Token/Claims/Cookie
+ ↓
+AIDLC
+ ↓
+User Identity
+ ↓
+Role Resolution
+ ↓
+Authorization
+
+Document every important source file and method involved.
+
+⸻
+
+9. Existing Role Analysis
+
+The AIDLC portal appears to have role-related functionality.
+
+Determine:
+
+1. What roles currently exist?
+2. Where are they defined?
+3. How are they assigned?
+4. How does the application know which role the user has?
+5. How is the role displayed in the UI?
+6. How are roles enforced?
+7. Is authorization enforced only in the UI?
+8. Is authorization also enforced in backend/API/business logic?
+9. Can a user bypass UI restrictions by directly calling an API?
+10. What happens when a user has no recognized role?
+11. Are Azure AD/Entra groups mapped to roles?
+12. Is there a default role?
+
+Provide a role-resolution flow diagram.
+
+⸻
+
+10. Release Tracker Required RBAC Model
+
+Release Tracker must eventually support three effective access levels.
+
+Do not implement yet during this analysis.
+
+First determine how these roles should map to the existing AIDLC authentication architecture.
+
+Role 1 — Admin
+
+Admin users can:
+
+* Access Generate Report.
+* Generate reports.
+* Perform administrative refresh operations.
+* Refresh deployment status.
+* Send Teams notifications.
+* Perform other explicitly administrative/state-changing actions.
+
+Admin users can access all normal user functionality.
+
+⸻
+
+Role 2 — Developer
+
+Developer users can:
+
+* Access Review Commits.
+* Access Release Readiness.
+* Access Scan History.
+* Access other normal Release Tracker pages.
+* View report information.
+* Perform the allowed developer-level actions.
+
+Developer users must not:
+
+* Access Generate Report.
+* Perform admin-only refresh operations.
+* Perform admin-only report-generation operations.
+* Perform admin-only notification operations.
+
+Developer users may perform the Review Commit Override action if that action is explicitly intended for the developer role.
+
+⸻
+
+Role 3 — General Viewer / Unassigned User
+
+A user who successfully authenticates through SSO but does not belong to the Admin or Developer role should still be able to access the general application.
+
+Viewer users can:
+
+* View normal pages.
+* View Release Readiness.
+* View Review Commits.
+* View Scan History.
+* View available reports/data.
+
+Viewer users must NOT:
+
+* Access Generate Report.
+* Use Review Commit Override.
+* Perform administrative refresh actions.
+* Send Teams notifications.
+* Perform other state-changing/admin operations.
+
+⸻
+
+11. Important Authorization Rule
+
+Do not rely only on hiding buttons in React.
+
+For every actionable UI operation:
+
+UI Button
+   ↓
+Authorization Check
+   ↓
+Backend/API Authorization Check
+   ↓
+Business Operation
+
+Authorization must be enforced at the appropriate backend/business-logic level as well.
+
+A user must not be able to bypass authorization by manually invoking an API.
+
+Document how this can be implemented using the existing AIDLC authorization architecture.
+
+⸻
+
+12. Release Tracker UI Expectations
+
+Release Tracker currently has these major pages:
+
+1. Dashboard
+2. Generate Report
+3. Review Commits
+4. Release Readiness
+5. Scan History
+6. Settings
+
+The existing Release Tracker UI is React-based and should remain React-based.
+
+Expected technology:
+
+* React 18
+* TypeScript
+* Vite
+* Tailwind CSS
+
+Do not redesign the existing UI unnecessarily.
+
+The objective is to integrate the existing Release Tracker functionality safely into the AIDLC ecosystem.
+
+⸻
+
+13. Release Tracker Integration Analysis
+
+Analyze what would be required to introduce Release Tracker as a new AIDLC tool.
+
+Determine:
+
+* Tool registration changes.
+* Port configuration.
+* Reverse proxy changes.
+* Startup changes.
+* Docker changes.
+* Environment variables.
+* Authentication integration.
+* Role integration.
+* Session/cookie integration.
+* API routing.
+* Static asset routing.
+* Health checks.
+* Logging.
+* Deployment configuration.
+* CI/CD changes.
+* Azure configuration.
+
+Determine whether Release Tracker should:
+
+* Run as a separate process.
+* Run as a separate container.
+* Run inside the existing container.
+* Use a dedicated port.
+* Be proxied through Nginx.
+* Follow an existing tool pattern.
+
+Do not guess. Identify the closest existing AIDLC tool and explain how Release Tracker should follow that pattern.
+
+⸻
+
+14. Local Development / Role Testing
+
+Document how a developer can test the three Release Tracker access levels locally.
+
+Determine how AIDLC currently handles local authentication.
+
+If the existing project has a local-development authentication/mock mechanism, document it.
+
+The final documentation should explain how to simulate:
+
+Admin
+
+User → Admin role → Release Tracker
+
+Expected:
+
+* Generate Report visible.
+* Generate Report executable.
+* Admin refresh actions available.
+* Teams notification actions available.
+* Review Commit Override available if applicable.
+
+Developer
+
+Expected:
+
+* Generate Report hidden/inaccessible.
+* Review Commits visible.
+* Review Commit Override available.
+* Release Readiness visible.
+* Scan History visible.
+* Normal read operations available.
+* Admin operations unavailable.
+
+Viewer
+
+Expected:
+
+* Generate Report hidden/inaccessible.
+* Review Commits visible.
+* Override unavailable.
+* Release Readiness visible.
+* Scan History visible.
+* Normal read operations available.
+* Admin operations unavailable.
+
+Document the actual local mechanism available in AIDLC rather than inventing one.
+
+⸻
+
+15. Failure / Safety Analysis
+
+Because Release Tracker is being introduced into an existing production portal, analyze possible failure scenarios.
+
+At minimum investigate:
+
+* Invalid role.
+* Missing role.
+* Missing token claims.
+* Expired authentication.
+* Unauthorized API call.
+* Tool unavailable.
+* Tool process crash.
+* Reverse proxy misconfiguration.
+* Port conflict.
+* Container startup failure.
+* Nginx startup failure.
+* Python dependency failure.
+* React build failure.
+* Environment variable missing.
+* Authentication configuration mismatch.
+* Release Tracker unavailable while AIDLC remains healthy.
+
+Explain how the architecture should prevent a Release Tracker problem from breaking the existing AIDLC portal or other tools.
+
+⸻
+
+16. Required Deliverables
+
+Before making any code changes, create the following documents.
+
+Document 1 — AIDLC Architecture Analysis
+
+File:
+
+AIDLC_ARCHITECTURE_ANALYSIS.md
+
+Must contain:
+
+* Overall architecture.
+* Application startup flow.
+* Docker architecture.
+* Azure App Service architecture.
+* Reverse proxy architecture.
+* Tool architecture.
+* Port management.
+* Python execution model.
+* Frontend execution model.
+* Deployment flow.
+* Authentication flow.
+* Authorization flow.
+* Role resolution.
+* Existing tool integration pattern.
+
+⸻
+
+Document 2 — AIDLC Deployment Guide
+
+File:
+
+AIDLC_DEPLOYMENT_GUIDE.md
+
+Must explain step-by-step:
+
+Developer changes
+        ↓
+Build
+        ↓
+Docker image
+        ↓
+Container registry
+        ↓
+Azure App Service
+        ↓
+Container startup
+        ↓
+AIDLC startup
+        ↓
+Reverse proxy
+        ↓
+Individual tools
+
+Include actual commands/configuration/file references wherever discoverable.
+
+⸻
+
+Document 3 — AIDLC RBAC Analysis
+
+File:
+
+AIDLC_RBAC_ANALYSIS.md
+
+Must document:
+
+* Current roles.
+* Role source.
+* Entra groups/claims.
+* Authentication.
+* Authorization.
+* UI authorization.
+* Backend authorization.
+* Role display.
+* Default/unassigned behavior.
+* Existing examples from other tools.
+
+Then provide the recommended mapping for:
+
+Admin
+Developer
+Viewer
+
+for Release Tracker.
+
+⸻
+
+Document 4 — Release Tracker Integration Plan
+
+File:
+
+RELEASE_TRACKER_AIDLC_INTEGRATION_PLAN.md
+
+Must contain:
+
+Phase 1
+
+AIDLC architecture integration.
+
+Phase 2
+
+Tool registration.
+
+Phase 3
+
+Port configuration.
+
+Phase 4
+
+Reverse proxy.
+
+Phase 5
+
+Docker/container integration.
+
+Phase 6
+
+React application integration.
+
+Phase 7
+
+Python backend integration.
+
+Phase 8
+
+Authentication integration.
+
+Phase 9
+
+RBAC implementation.
+
+Phase 10
+
+API-level authorization.
+
+Phase 11
+
+Local role testing.
+
+Phase 12
+
+Integration testing.
+
+Phase 13
+
+Deployment validation.
+
+Phase 14
+
+Production-readiness validation.
+
+⸻
+
+17. Critical Non-Regression Requirement
+
+The integration must NOT break:
+
+* Existing AIDLC portal.
+* Existing tools.
+* Existing authentication.
+* Existing authorization.
+* Existing reverse proxy.
+* Existing tool routing.
+* Existing deployment process.
+* Existing Azure App Service behavior.
+
+Release Tracker must be isolated enough that:
+
+Release Tracker failure
+        ≠
+AIDLC portal failure
+
+and:
+
+Release Tracker deployment issue
+        ≠
+Existing tool outage
+
+unless the architecture inherently makes this impossible. If such a dependency exists, document it clearly.
+
+⸻
+
+18. Code-Level Evidence Requirement
+
+Do not provide generic architectural assumptions.
+
+For every major conclusion, identify:
+
+* File path.
+* Class/module.
+* Method/function.
+* Configuration property.
+* Relevant code flow.
+
+For example:
+
+File:
+path/to/example.py
+Function:
+example_function()
+Purpose:
+Determines the user's role from ...
+Used by:
+...
+
+Do this especially for:
+
+* Startup.
+* Docker.
+* Nginx.
+* Reverse proxy.
+* Tool registration.
+* Port assignment.
+* Authentication.
+* Role resolution.
+* Authorization.
+* User identity display.
+* Azure deployment.
+
+⸻
+
+19. Final Analysis Summary
+
+At the end, provide a concise executive summary answering:
+
+A. How does AIDLC run?
+
+B. How does AIDLC get deployed to Azure App Service?
+
+C. How are Docker images created and deployed?
+
+D. How does the reverse proxy route traffic?
+
+E. How are individual tools started?
+
+F. How does Python execute?
+
+G. How does React execute?
+
+H. How does SSO work?
+
+I. How are roles determined?
+
+J. How are roles enforced?
+
+K. How should Release Tracker be registered as a new tool?
+
+L. How should Release Tracker use Admin/Developer/Viewer roles?
+
+M. What exact files/configurations must be changed?
+
+N. What could potentially break the existing AIDLC portal?
+
+O. What tests must be completed before deployment?
+
+⸻
+
+20. Implementation Rule
+
+DO NOT IMPLEMENT THE CHANGES YET.
+
+First:
+
+1. Analyze the complete AIDLC codebase.
+2. Analyze existing tool implementations.
+3. Analyze deployment architecture.
+4. Analyze authentication.
+5. Analyze roles.
+6. Analyze authorization.
+7. Analyze reverse proxy.
+8. Analyze Docker/container behavior.
+9. Analyze Azure App Service deployment.
+10. Create all required documentation.
+11. Create the Release Tracker integration plan.
+12. Identify risks and dependencies.
+13. Present the plan for review.
+
+Only after the plan is reviewed and approved should implementation begin.
+
+⸻
+
+Definition of Done — Analysis Phase
+
+* Complete AIDLC repository analyzed.
+* Existing tools analyzed.
+* Tool registration mechanism identified.
+* Port configuration identified.
+* Reverse proxy mechanism identified.
+* Nginx/proxy configuration analyzed.
+* Dockerfile(s) analyzed.
+* Container startup analyzed.
+* Python runtime analyzed.
+* React runtime/build process analyzed.
+* Azure App Service deployment analyzed.
+* Container registry/deployment mechanism identified.
+* Environment configuration analyzed.
+* Authentication flow traced end-to-end.
+* Entra ID/SSO configuration identified.
+* User identity resolution identified.
+* Existing role mechanism identified.
+* Existing authorization mechanism identified.
+* UI authorization analyzed.
+* Backend/API authorization analyzed.
+* Existing local authentication/testing mechanism identified.
+* Admin/Developer/Viewer Release Tracker model documented.
+* Release Tracker integration points identified.
+* Non-regression risks identified.
+* Required files/configurations identified.
+* Deployment process documented.
+* Architecture diagrams created.
+* All conclusions backed by actual code/configuration references.
+* No code changes made during the analysis phase.
+* Final implementation plan created and ready for review.
+
+Final Rule
+
+Do not guess. Do not infer architecture merely from filenames. Trace the actual execution flow through the code and configuration.
+
+The existing AIDLC codebase is the source of truth for understanding how the portal works.
+
+The objective of this task is to give the development team a complete and trustworthy understanding of AIDLC before Release Tracker is integrated, especially around deployment, reverse proxying, tool lifecycle, authentication, RBAC, and production safety.
