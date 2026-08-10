@@ -1,298 +1,388 @@
-Release Tracker — Java-to-Python Migration Gap Analysis & Fix Plan
+AIFO + Release Tracker — Unified React Migration & Integration Assessment
 
-1. Objective
+Objective
 
-The Release Tracker Java application is the working and approved reference implementation.
+Perform a complete architectural and technical assessment of the existing AIFO (AI Fueled Operations) application and the existing Release Tracker application.
 
-The Python application is the migrated implementation and currently has multiple functional gaps in both the frontend and backend.
+The final goal is to:
 
-The objective of this task is:
-
-Compare the Java implementation and the Python implementation feature-by-feature, page-by-page, API-by-API, and fix the Python application so that it behaves the same as the Java application.
-
-The Java application’s existing business logic, UI behavior, data flow, API behavior, database behavior, filtering, asynchronous processing, and validations must be treated as the source of truth.
-
-Critical Rule
-
-This is a migration correction task, not a redesign or feature-development task.
-
-Do NOT introduce new business logic unless it is required to reproduce the existing Java behavior.
-
-Do NOT simplify, redesign, remove, or reinterpret existing Java logic.
-
-The expected difference is primarily:
-
-* Java → Python backend implementation
-* Existing React/TypeScript frontend behavior must remain equivalent
-* Existing database behavior must remain equivalent
-* Existing API inputs/outputs must remain equivalent
-* Existing asynchronous/parallel behavior must remain equivalent
+1. Migrate the existing AIFO UI from Streamlit to React 18 + TypeScript + Vite + Tailwind CSS.
+2. Preserve all existing AIFO functionality and business behavior.
+3. Integrate the complete Release Tracker functionality into AIFO.
+4. Do not maintain Release Tracker as a separate tool, application, or folder.
+5. Create one unified AIFO application containing both the existing AIFO capabilities and the complete Release Tracker capabilities.
+6. Ensure that no existing AIFO functionality is broken or lost.
+7. Ensure that the Release Tracker functionality is migrated without changing its existing business logic.
+8. Before implementing anything, thoroughly analyze both codebases and create a detailed implementation plan.
 
 ⸻
 
-2. Mandatory Approach
+1. Important Instruction — Analyze Before Implementing
 
-Before modifying code:
+Do not immediately start modifying code.
 
-1. Analyze the complete Java implementation.
-2. Analyze the corresponding Python implementation.
-3. Identify the Java UI flow.
-4. Identify the API calls triggered by each UI action.
-5. Compare request parameters.
-6. Compare response structures.
-7. Compare backend business logic.
-8. Compare database queries and persistence.
-9. Compare filtering behavior.
-10. Compare error handling.
-11. Compare asynchronous/parallel execution.
-12. Compare page navigation and routing.
-13. Compare data-loading lifecycle.
-14. Document the differences.
-15. Create a detailed implementation plan.
-16. Only after the analysis and plan are complete, implement the fixes.
-17. Re-test every affected flow against the Java application’s behavior.
+First perform a complete analysis of:
 
-Do not blindly copy Python code from the existing implementation.
+* Existing AIFO project
+* Existing Release Tracker project
+* Existing AIFO UI
+* Existing AIFO backend/business logic
+* Existing Release Tracker React UI
+* Existing Release Tracker Java backend
+* Existing database structures
+* Existing authentication/authorization
+* Existing API clients
+* Existing deployment architecture
+* Existing routing/navigation
+* Existing configuration
+* Existing logging
+* Existing asynchronous processing
+* Existing GitHub/iTrack/Kubernetes/Veracode integrations
+* Existing tests
 
-The existing Python implementation contains incorrect/incomplete migrated logic in several areas and must be corrected based on the Java implementation.
+The existing Release Tracker Java application is considered the working/reference implementation for Release Tracker functionality.
 
-⸻
+The existing AIFO application is the target host application.
 
-3. Reference Implementation
-
-Use:
-
-Java Release Tracker = Source of Truth
-
-Python Release Tracker = Target Implementation
-
-For every affected feature, answer:
-
-* What does Java do?
-* Which UI action triggers it?
-* Which backend API/controller is invoked?
-* What request parameters are sent?
-* What validation happens?
-* What database queries are executed?
-* What processing happens?
-* What asynchronous operations occur?
-* What response is returned?
-* How does the UI consume the response?
-* What does the user see?
-* Does Python behave identically?
+Create a detailed assessment and implementation plan before making code changes.
 
 ⸻
 
-4. Important Migration Rule — Team Key and Fix Version
+2. Target Architecture
 
-Throughout the application, ensure the existing migration rules are preserved.
+The desired final architecture is:
 
-Team Key
+AIFO
+ |
+ +-- Existing AIFO functionality
+ |
+ +-- Existing AIFO tabs/features
+ |
+ +-- Release Tracker functionality
+ |
+ +-- Unified React frontend
+ |
+ +-- Existing/appropriate AIFO backend architecture
+ |
+ +-- Unified authentication/authorization
+ |
+ +-- Unified deployment
 
-Use team key as the primary business identifier wherever applicable.
+There must NOT be:
 
-Do not reintroduce unnecessary project-key dependency.
+AIFO
+Release Tracker
 
-Fix Version
+as two separate applications.
 
-The complete fix-version string must always be preserved.
+Instead:
 
-This is extremely important.
+AIFO
+ ├── Existing AIFO features
+ └── Release Tracker features
 
-Do NOT:
-
-* truncate the fix version
-* remove spaces
-* split the fix version incorrectly
-* normalize it incorrectly
-* remove words
-* alter its case unnecessarily
-* send only part of the fix version
-
-The exact fix-version value selected by the user must travel through:
-
-UI → API → Python service → database → queries → downstream processing
-
-and must match the Java implementation.
+must exist as one unified application.
 
 ⸻
 
-5. Issue 1 — Last Component Refresh Timestamp
+3. AIFO Current-State Analysis
 
-Java Behavior
+First understand exactly what AIFO currently is.
 
-In the Java application, the following pages display the latest component refresh timestamp at the top-right area:
+Document:
 
-* Generate Report
-* Review Commits
-* Release Readiness
+* What AIFO stands for
+* Purpose of AIFO
+* Business objectives
+* Current users
+* Current workflows
+* Current navigation
+* Existing tabs
+* Existing tools
+* Existing dashboards
+* Existing release-related functionality
+* Existing quality-gate functionality
+* Existing adoption functionality
+* Existing settings functionality
+* Existing integrations
+* Existing authentication
+* Existing authorization
+* Existing deployment architecture
 
-When the user selects:
+Identify every existing AIFO page/tab and explain:
+
+* Purpose
+* UI components
+* Backend logic
+* APIs/functions used
+* Database tables
+* External integrations
+* Authentication requirements
+* Authorization requirements
+
+Do not assume anything.
+
+Read the actual code.
+
+⸻
+
+4. Existing AIFO Technology Stack
+
+Determine the actual technology stack from the source code.
+
+Expected areas to investigate include:
+
+Frontend
+
+Current AIFO is believed to use:
+
+* Streamlit
+* Python
+* Single-page application/page navigation
+* Streamlit widgets
+
+Verify this from the actual code.
+
+Backend
+
+Expected:
+
+* Python
+* Streamlit server
+* Python utility/business-logic modules
+* No conventional separate REST API layer in many areas
+
+Verify the actual architecture.
+
+Database
+
+Expected:
+
+* SQLite for local development
+* PostgreSQL/Azure for production
+
+There may be a central database module such as:
+
+AIFO_DB.py
+
+Analyze the actual database implementation.
+
+Hosting
+
+Expected:
+
+* Azure App Service
+* Container-based deployment
+* Nginx/reverse proxy
+* Supervisor/process management
+
+Verify the actual implementation.
+
+Authentication
+
+Expected:
+
+* Microsoft Entra ID / Azure SSO
+* Shared portal authentication/cookie
+* Role information
+
+Analyze the actual implementation.
+
+⸻
+
+5. AIFO UI Migration to React
+
+The requirement is to migrate the complete AIFO UI from Streamlit to:
+
+* React 18
+* TypeScript
+* Vite
+* Tailwind CSS
+
+The existing Release Tracker already has a React-based UI using:
+
+* React 18
+* TypeScript
+* Vite
+* Tailwind CSS
+
+Use the Release Tracker UI architecture and reusable components where appropriate.
+
+However:
+
+Important
+
+Do not blindly replace AIFO UI.
+
+First understand:
+
+* Existing AIFO navigation
+* Existing widgets
+* Existing forms
+* Existing dashboards
+* Existing state management
+* Existing filters
+* Existing tables
+* Existing dialogs
+* Existing notifications
+* Existing role-based UI behavior
+* Existing loading/error states
+
+Then design the React equivalent.
+
+The migrated React UI must preserve the existing AIFO behavior.
+
+⸻
+
+6. Existing AIFO Navigation
+
+Identify all current AIFO navigation items.
+
+Expected examples may include:
+
+* Release Activities
+* Quality Gates
+* Adoption
+* Settings
+* Other existing tools/pages
+
+Document every one.
+
+For each page:
+
+Page
+ ├── Purpose
+ ├── Existing UI
+ ├── Existing backend
+ ├── Existing data source
+ ├── Existing integrations
+ ├── Authentication
+ ├── Authorization
+ └── React migration approach
+
+⸻
+
+7. Release Tracker Integration
+
+The complete Release Tracker functionality must be integrated into AIFO.
+
+Do NOT create a separate:
+
+release-tracker/
+
+application.
+
+Do NOT create a separate deployable application.
+
+Do NOT create a separate tool entry unless explicitly required by the existing AIFO architecture.
+
+The Release Tracker functionality must become part of AIFO.
+
+⸻
+
+8. Release Tracker Functionality That Must Be Preserved
+
+The following functionality must be completely migrated.
+
+Dashboard
+
+Preserve:
+
+* Release-level statistics
+* Story statistics
+* Commit statistics
+* Violations
+* Deployment readiness information
+* Relevant summary metrics
+* Filters
+* Refresh information
+* Last component refresh timestamp
+
+⸻
+
+9. Generate Report
+
+Preserve the complete Generate Report functionality.
+
+It includes:
+
+* Team selection
+* Fix Version selection
+* Story fetching
+* Component loading
+* Commit analysis
+* Release analysis
+* Branch analysis
+* Database persistence
+* Report generation
+* Asynchronous/parallel processing
+* Job/status tracking
+* Error handling
+* Logging
+
+The existing Java implementation is the reference implementation.
+
+The business logic must not be simplified or redesigned during migration.
+
+⸻
+
+10. Review Commits
+
+Preserve the complete Review Commits functionality.
+
+It must support the existing filtering capabilities including:
 
 * Team
 * Fix Version
+* Scrum Team
+* Component
+* Committer
+* Commit
+* Other existing filters
 
-the application automatically loads and displays the latest component refresh timestamp.
+Preserve:
 
-The timestamp is displayed on the right side near the top of the page.
+* Commit analysis
+* Violation detection
+* Lifecycle status
+* Cherry-pick detection
+* Previous release detection
+* Future release detection
+* Direct release branch commits
+* Missing release commits
+* Override functionality
+* Comments
+* Responsibility/team information
 
-Python Problem
-
-The Python application currently does not correctly display this information.
-
-The issue may exist in both:
-
-* frontend
-* backend
-
-Required Fix
-
-Analyze the Java implementation completely.
-
-Identify:
-
-* database/table used
-* query used
-* service/business logic
-* controller/API
-* request parameters
-* team-key handling
-* fix-version handling
-* timestamp retrieval
-* response structure
-* frontend state management
-* rendering logic
-
-Implement the equivalent behavior in Python.
-
-Expected Behavior
-
-When the user selects the team and fix version:
-
-1. UI sends the selected team key and complete fix version.
-2. Backend retrieves the appropriate component refresh metadata.
-3. Latest refresh timestamp is returned.
-4. UI displays it automatically.
-5. The timestamp must be shown in the same locations as Java.
-
-Do not create a separate inconsistent implementation.
-
-Use the same underlying business behavior as Java.
+The existing Java Release Tracker implementation must be treated as the functional reference.
 
 ⸻
 
-6. Issue 2 — Release Readiness → Story Status
+11. Release Readiness
 
-Java Behavior
+Preserve the complete Release Readiness functionality.
 
-The Story Status section contains, for each story:
+It must include the existing capabilities such as:
 
-* Story details
-* Status
+Story Status
+
+* Total stories
+* Accepted stories
+* Not accepted stories
+* Story status
 * Reporter
+* Other existing metadata
 
-Python Problem
+Branch Cut Validation
 
-The Python Story Status page is missing:
+* Branch cut status
+* Completed components
+* Pending components
+* Validation details
 
-* Status
-* Reporter
+Deployment Readiness
 
-These columns are not loading correctly.
-
-Required Fix
-
-Compare:
-
-Java
-
-* Story Status API
-* Controller
-* Service
-* DB query
-* DTO/response
-* UI table
-* column mapping
-
-Python
-
-* API/service
-* database query
-* response model
-* frontend table
-* column mapping
-
-Identify exactly where the information is lost.
-
-Then fix the Python implementation.
-
-Acceptance Criteria
-
-For every story displayed in Story Status:
-
-* Status must be populated exactly as Java.
-* Reporter must be populated exactly as Java.
-* Existing filters must continue working.
-* Existing story data must not be affected.
-* No unrelated fields should be removed.
-* Empty/null values should behave the same way as Java.
-
-⸻
-
-7. Issue 3 — Release Readiness → Branch Cut Validation
-
-Current Problem
-
-Opening Branch Cut Validation results in a blank/broken page.
-
-The application appears to navigate incorrectly or fail to load the required page.
-
-Required Analysis
-
-Compare Java and Python for:
-
-* route/page registration
-* navigation
-* tab configuration
-* component/page loading
-* API invocation
-* API response
-* database retrieval
-* filtering
-* table rendering
-* error handling
-* frontend state management
-
-Determine why the Python application becomes blank/corrupted.
-
-Do not simply hide the error.
-
-Fix the actual root cause.
-
-Expected Behavior
-
-The Python Branch Cut Validation page must behave the same as Java.
-
-It must:
-
-* load successfully
-* display the expected data
-* display the expected filters
-* display branch-cut status
-* display pending/completed states
-* support the same user interactions
-* handle empty results correctly
-* handle backend errors correctly
-
-⸻
-
-8. Issue 4 — Release Readiness → Deployment Section
-
-Java Behavior
-
-The Deployment section contains deployment-readiness information for multiple environments.
-
-The Python application must provide the same behavior and UI.
+Preserve the existing environments and deployment validation.
 
 Expected environments include:
 
@@ -302,757 +392,1071 @@ Expected environments include:
 * Production East
 * Production West
 
-Required Comparison
+The system must compare the expected/latest release commit with the actual deployed Kubernetes commit.
 
-Compare Java and Python for:
+Preserve:
 
-Frontend
-
-* environment tabs/cards
-* deployment status
-* deployment readiness
-* component information
-* commit IDs
-* latest release commit
-* deployed commit
-* behind/ahead status
-* validation messages
-* filters
-* loading state
-* refresh behavior
-* tooltip behavior
-* empty state
-* error state
-
-Backend
-
-Compare:
-
-* deployment API
-* controller/service flow
-* Kubernetes calls
-* database queries
-* deployment-readiness table
-* team key
-* fix version
-* component lookup
-* commit comparison
-* refresh logic
-* asynchronous processing
-* response model
-
-Critical Requirement
-
-The Python Deployment section must provide the same functional behavior as Java.
-
-Do not implement a simplified deployment page.
-
-All existing deployment-readiness logic must be migrated.
+* Deployment status
+* Commit mismatch detection
+* Behind-commit detection
+* Component status
+* Kubernetes integration
+* Refresh functionality
+* Last refresh timestamp
 
 ⸻
 
-9. Deployment Filters
+12. Scan History
 
-Verify that the Python deployment section contains all applicable filters that exist in Java.
+Preserve Scan History functionality.
 
-Compare:
-
-* team filter
-* fix-version filter
-* component filter
-* environment filter
-* status filter
-* any additional Java filters
-
-The filter behavior must be equivalent.
-
-Verify that filtering is correctly applied at the backend level where Java performs backend filtering.
-
-Do not only filter the already-loaded UI data if Java performs database/backend filtering.
-
-⸻
-
-10. Issue 5 — Scan History
-
-Java Behavior
-
-Scan History displays previously created asynchronous jobs/report execution information.
-
-The generated job ID and related execution details must be available.
-
-Python Problem
-
-Scan History is currently not displaying the expected scan/job information.
-
-Required Analysis
-
-Compare Java:
-
-* job creation
-* asynchronous job ID generation
-* job persistence
-* job status updates
-* scan history query
-* history API
-* frontend table
-* pagination/filtering if applicable
-
-Compare Python implementation.
-
-Identify where the data is lost.
-
-Important
-
-Use the current intended job architecture.
-
-Do not reintroduce the obsolete duplicate Scan Job entity/job architecture if that was already removed from the Java application’s intended design.
-
-The current asynchronous job ID/status mechanism must be followed.
-
-Acceptance Criteria
-
-Scan History must show the same relevant information as Java, including:
+It must display:
 
 * Job ID
-* execution/status information
-* relevant team/fix-version information
-* timestamps
-* available report execution metadata
+* Scan information
+* Report execution information
+* Status
+* Timestamps
+* Other existing fields
 
-The data must be retrieved from the correct database source.
+Analyze how Java currently retrieves and displays scan history and reproduce the same behavior.
 
 ⸻
 
-11. Issue 6 — Dashboard
+13. Settings / Export Center
 
-Current Problem
+Preserve the existing Settings functionality.
 
-The Python Dashboard is displaying:
+The Release Tracker export center must be integrated into AIFO.
 
-* 0
-* 0
-* 0
+The export functionality should support selectable report sections.
 
-for the statistics.
+Expected report options include:
 
-This strongly indicates a backend query, data mapping, or API integration problem.
+1. Review Commits
+2. Review Commit Violations
+3. Commit Analysis Summary
+4. Release/Story Status
+5. Branch Cut Validation
+6. Test 3 Deployment
+7. Test 4 Deployment
+8. Stage Deployment
+9. Production East Deployment
+10. Production West Deployment
 
-Required Analysis
+The selected sections should be exported into a single Excel workbook with multiple tabs.
 
-Compare Java Dashboard completely.
+The exact existing Java behavior must be preserved.
+
+⸻
+
+14. Release Tracker Business Logic
+
+The following Release Tracker logic is especially important.
+
+Previous Release Branch Detection
+
+The previous Fix Version/release information is determined from Kubernetes production information.
+
+This must be preserved.
+
+The previous release branch is required for accurate commit comparison.
+
+⸻
+
+15. Commit Analysis Modes
+
+Preserve all existing commit-analysis scenarios.
+
+Scenario 1 — Main Branch vs Release Branch
+
+Compare:
+
+Previous/current main branch
+        ↓
+Release branch
+
+Analyze every commit.
+
+Validate:
+
+* Fix Version
+* Story
+* Violation
+* Lifecycle status
+* Scrum team
+
+⸻
+
+Scenario 2 — Valid Current Release Commits Missing From Release Branch
+
+Identify commits that:
+
+* Belong to the current Fix Version
+* Exist in the main/master branch
+* Are missing from the release branch
+
+These must be identified as part of release validation.
+
+⸻
+
+Scenario 3 — Cherry-Picked Commits
+
+Identify cherry-picked commits.
+
+Because cherry-picking changes commit IDs, do not rely only on commit ID equality.
+
+Detect the relationship appropriately.
+
+A valid cherry-picked commit should not incorrectly appear as a violation.
+
+⸻
+
+Scenario 4 — Direct Release Branch Commits
+
+Identify commits that were committed directly to the release branch and are not present in the main branch.
+
+Preserve the existing behavior.
+
+⸻
+
+Scenario 5 — Previous/Future Fix Version
+
+If a commit contains:
+
+* Previous Fix Version
+* Future Fix Version
+* Missing Fix Version
+* Invalid Fix Version
+
+the existing Java behavior must be retained.
+
+⸻
+
+16. Scrum Team Mapping
+
+The commits table must contain Scrum Team information where required.
+
+During report generation:
+
+* Identify the story associated with each commit.
+* Determine the Scrum Team from the iTrack information.
+* Store the Scrum Team against the commit.
+
+This should avoid unnecessary repeated database joins during UI queries where the Java implementation already has the required information persisted.
+
+⸻
+
+17. Data Refresh Behavior
+
+Preserve the existing refresh semantics.
+
+Before fetching fresh data, the existing implementation deletes/replaces records for the relevant:
+
+Team Key + Fix Version
+
+This applies to relevant tables such as:
+
+* iTrack stories
+* Components
+* Commits
+* Comments
+* Deployment readiness
+* Other release-specific data
+
+Do not accidentally retain stale release data.
+
+The migration must preserve this behavior.
+
+⸻
+
+18. Fix Version Integrity
+
+This is mandatory.
+
+Fix Version must always be treated as the complete string.
+
+Do NOT:
+
+* Truncate it
+* Trim meaningful spaces
+* Remove internal spaces
+* Alter formatting
+* Convert it into another representation
+
+Every UI → backend → database → API flow must preserve the exact Fix Version value.
+
+⸻
+
+19. Authentication and Authorization
+
+Analyze the existing AIFO authentication architecture.
+
+Determine:
+
+* How Entra ID authentication works
+* How SSO works
+* How roles are obtained
+* Where roles are stored
+* How roles reach the frontend
+* How roles are validated by the backend
+* How existing AIFO tools enforce authorization
+
+Do not introduce a parallel authentication mechanism if the existing AIFO mechanism can be reused.
+
+⸻
+
+20. Release Tracker Roles
+
+The Release Tracker functionality requires three logical access levels.
+
+Admin
+
+Admin users can:
+
+* Generate reports
+* Trigger expensive report-generation operations
+* Refresh deployment data
+* Perform administrative operations
+* Send Teams notifications
+* Perform other state-changing operations
+
+⸻
+
+Developer
+
+Developer users can:
+
+* View Release Tracker pages
+* View Review Commits
+* View Release Readiness
+* View Dashboard
+* View Scan History
+* Use Review Commit actions such as Override where permitted
+* Add override comments
+
+Developer users must NOT have access to Generate Report.
+
+⸻
+
+General / Viewer User
+
+Normal authenticated users who do not belong to the specific admin/developer role should still be able to view the application.
+
+They can view:
+
+* Dashboard
+* Review Commits
+* Release Readiness
+* Scan History
+* Settings where applicable
+
+They must NOT:
+
+* Generate reports
+* Perform admin refresh operations
+* Send Teams notifications
+* Use Review Commit Override
+
+⸻
+
+21. UI Authorization
+
+Every clickable/actionable UI button must enforce authorization.
+
+Do not rely only on hiding the button.
+
+Authorization must also be enforced at the backend/business-logic level.
+
+Examples:
+
+Generate Report
+    → Admin only
+Refresh Deployment
+    → Admin only
+Teams Notification
+    → Admin only
+Review Commit Override
+    → Developer/Admin
+View pages
+    → Authenticated users
+
+Analyze the existing AIFO role implementation and integrate these rules into it.
+
+⸻
+
+22. Git Contribution Analysis
+
+Analyze the Git history of the existing AIFO project.
+
+For every contributor:
+
+* Name
+* Number of commits
+* Percentage of commits
+* Files changed
+* Major areas contributed
+* Frontend/backend contribution
+* Significant features contributed
+
+Where technically feasible, also calculate contribution by:
+
+* Lines added
+* Lines removed
+* Net contribution
+
+Do NOT blindly use commit count as code contribution.
+
+Clearly distinguish:
+
+Commit contribution
+
+from:
+
+Code contribution
+
+Identify the people who have materially contributed to AIFO.
+
+These people should be listed as stakeholders/reviewers who should test the React migration before it is merged.
+
+⸻
+
+23. Identify AIFO Owners / Contributors
+
+Using Git history, determine:
+
+* Active maintainers
+* Major contributors
+* Recent contributors
+* Owners of important modules
+* People responsible for authentication
+* People responsible for deployment
+* People responsible for frontend
+* People responsible for backend
+* People responsible for database
+
+Provide a recommended testing/review group.
+
+⸻
+
+24. Deployment Architecture Analysis
+
+Analyze exactly how AIFO is deployed today.
+
+Do not assume.
+
+Determine:
+
+* Dockerfile
+* Docker build process
+* Base image
+* Python installation
+* Node installation if applicable
+* Frontend build process
+* Backend startup process
+* Nginx configuration
+* Reverse proxy configuration
+* Supervisor configuration
+* Ports
+* Environment variables
+* Azure App Service configuration
+* Container registry
+* Image publishing
+* Deployment pipeline
+* Startup commands
+* Health checks
+
+Explain the complete flow:
+
+Developer Code
+      ↓
+Build
+      ↓
+Docker Image
+      ↓
+Container Registry
+      ↓
+Azure App Service
+      ↓
+Container Startup
+      ↓
+Nginx / Reverse Proxy
+      ↓
+AIFO
+      ↓
+React Frontend
+      ↓
+Backend
+
+Correct this diagram according to the actual implementation.
+
+⸻
+
+25. React Build and Deployment
+
+Since AIFO will be migrated to React, determine:
+
+* How React will be built
+* Whether Node/npm is required during image build
+* Whether the final container contains Node
+* Where compiled React assets are stored
+* How Nginx serves React
+* How API/backend requests are routed
+* How SPA routing is handled
+* How environment variables are supplied
+* How production builds are generated
+
+Compare this with the current Release Tracker deployment architecture.
+
+⸻
+
+26. Backend Architecture
+
+Determine the best way to integrate the Release Tracker backend into AIFO.
+
+Compare:
+
+Option A
+
+Existing AIFO Python backend/business logic.
+
+Option B
+
+Separate Python modules inside AIFO.
+
+Option C
+
+Separate service/API.
+
+The recommendation should favor the architecture that:
+
+* Minimizes operational complexity
+* Preserves existing AIFO deployment
+* Avoids duplicate services
+* Preserves business logic
+* Supports React
+* Supports future scalability
+* Minimizes risk
+
+Provide a recommendation with justification.
+
+⸻
+
+27. Java → Python Migration Considerations
+
+The existing Java Release Tracker backend is the functional reference.
+
+The migration must preserve:
+
+* Inputs
+* Outputs
+* Validation
+* Error handling
+* Business rules
+* Database operations
+* External API calls
+* Kubernetes calls
+* GitHub calls
+* iTrack calls
+* Veracode calls
+* Async behavior
+* Parallel execution
+* Retry behavior
+* Logging
+* State transitions
+
+Only the implementation language/architecture should change.
+
+Business behavior must not change.
+
+⸻
+
+28. Parallel Processing
+
+The existing Java application uses asynchronous execution/custom executors.
+
+Analyze where parallel execution is currently used.
 
 Identify:
 
-* every dashboard metric
-* source table
-* SQL/query
-* aggregation logic
-* filters
-* team/fix-version dependency
-* API/controller
-* response structure
-* frontend mapping
-* default values
-* empty-state behavior
+* Parallel GitHub calls
+* Parallel component processing
+* Kubernetes calls
+* Commit analysis
+* Other independent operations
 
-Then compare with Python.
+Recommend the correct Python equivalent.
 
-Required Fix
+Potential technologies may include:
 
-Do not hard-code values.
+ThreadPoolExecutor
+asyncio
+asyncio.gather
+concurrent.futures
 
-Do not simply replace zero with another default value.
+Choose based on the actual workload.
 
-Fix the underlying backend/data retrieval issue.
+Do not blindly convert Java executors to Python.
 
-The Python Dashboard must display the same calculated values as Java for the same data.
+Explain why the selected approach is appropriate.
 
-⸻
+The objective is to avoid sequential processing such as:
 
-12. Issue 7 — Settings → Export Center
+Component 1 → wait
+Component 2 → wait
+Component 3 → wait
+...
 
-Existing Feature
-
-The Settings page contains an Export Center where users can select report types and download an Excel report.
-
-The Python UI currently appears reasonably close to Java.
-
-However, the backend behavior is suspected to be incorrect/incomplete.
-
-Required Analysis
-
-Compare Java and Python for the complete export flow.
-
-UI
-
-Verify:
-
-* checkbox/options
-* report selection
-* team selection
-* fix-version selection
-* download action
-* loading state
-* error handling
-
-Backend
-
-Verify:
-
-* selected report types
-* team key
-* complete fix version
-* DB queries
-* data aggregation
-* workbook generation
-* sheet creation
-* sheet naming
-* column ordering
-* row population
-* violation filtering
-* commit-analysis data
-* release-readiness data
-* branch-cut data
-* deployment data
-* output file generation
-
-Important
-
-The Python export must contain the same information as the Java export for the same selected options.
-
-Do not create an independent interpretation of the report.
+when operations are independent and can safely run concurrently.
 
 ⸻
 
-13. Export Report Functional Requirements
+29. Database Migration
 
-The existing Export Center supports multiple report selections.
-
-Verify all supported report types against Java, including applicable reports such as:
-
-* Review Commits
-* Review Commit Violations
-* Story Status
-* Branch Cut Validation
-* Test 3 Deployment
-* Test 4 Deployment
-* Stage Deployment
-* Production East Deployment
-* Production West Deployment
-* Commit Analysis
-
-Where Java generates multiple sheets for a selected report category, Python must do the same.
-
-For example, Review Commits must retain the expected separate detailed and violation-oriented outputs if that is the Java behavior.
-
-⸻
-
-14. Database Comparison
-
-For every affected feature, compare the Java database behavior against Python.
-
-Verify:
-
-* tables
-* columns
-* primary keys
-* indexes
-* foreign-key relationships where applicable
-* nullable fields
-* data types
-* insert logic
-* update logic
-* delete logic
-* query conditions
-* team-key usage
-* fix-version usage
-* timestamp handling
-
-Critical Refresh/Delete-and-Repopulate Behavior
-
-The Java implementation has intentional flows where data for a particular:
-
-Team Key + Fix Version
-
-is removed before fresh data is loaded.
-
-This behavior must not be lost during migration.
-
-Verify this behavior for applicable operations, including:
-
-Fetch Stories
-
-Before fetching fresh iTrack stories:
-
-1. Identify Team Key + Fix Version.
-2. Delete existing corresponding iTrack story records.
-3. Fetch latest stories.
-4. Save the fresh records.
-
-Load Components
-
-Before loading components:
-
-1. Identify Team Key + Fix Version.
-2. Delete existing component records.
-3. Fetch latest components.
-4. Save fresh records.
-
-Generate Report
-
-Verify the Java behavior for clearing/rebuilding relevant data, including applicable:
-
-* components
-* iTrack stories
-* commits
-* commit analysis
-* release-readiness data
-* metadata
-
-Refresh Deployment Status
-
-Verify the Java behavior for:
-
-Team Key + Fix Version
-
-and ensure the deployment-readiness data is refreshed correctly.
-
-Do not accidentally remove this refresh lifecycle during migration.
-
-⸻
-
-15. UI-to-Backend End-to-End Comparison
-
-For EVERY affected UI action, perform an end-to-end comparison.
-
-Use this sequence:
-
-UI Button/Action
-→ Frontend request
-→ API endpoint
-→ Request parameters
-→ Backend controller
-→ Service
-→ Business logic
-→ Database/external API
-→ Response
-→ Frontend state
-→ UI rendering
-
-Perform this analysis for:
-
-* Team selection
-* Fix Version selection
-* Last Component Refresh loading
-* Story Status
-* Branch Cut Validation
-* Deployment tabs
-* Deployment refresh
-* Scan History
-* Dashboard
-* Export Center
-* Every report-selection checkbox
-* Excel download
-
-⸻
-
-16. API Contract Comparison
-
-For each API, compare Java and Python.
+Analyze the existing AIFO database.
 
 Document:
 
-Area	Java	Python	Expected
-Endpoint	Verify	Verify	Equivalent
-HTTP method	Verify	Verify	Equivalent
-Request	Verify	Verify	Equivalent
-Team Key	Verify	Verify	Same
-Fix Version	Verify	Verify	Exact complete string
-Response	Verify	Verify	Equivalent
-Error handling	Verify	Verify	Equivalent
-DB operations	Verify	Verify	Equivalent
-Async processing	Verify	Verify	Equivalent
+* Tables
+* Columns
+* Primary keys
+* Foreign keys
+* Indexes
+* Constraints
+* Data types
+* Queries
+* Insert/update/delete operations
+* Transactions
+* Connection handling
+* Connection pooling
+* Migration strategy
 
-The comparison must include every API used by the affected pages.
+Then map Release Tracker database structures into the AIFO database architecture.
 
-⸻
+Avoid unnecessary duplication.
 
-17. Async / Parallel Processing
-
-Where Java performs parallel processing using executor/completable-future patterns, Python must preserve equivalent behavior.
-
-Do not convert parallel operations into unnecessary sequential loops.
-
-For operations involving multiple components/API calls:
-
-* identify Java parallel execution
-* identify executor/thread-pool behavior
-* identify concurrency boundaries
-* identify error handling
-* identify result aggregation
-
-Implement equivalent Python concurrency using the appropriate Python mechanism, such as:
-
-* concurrent.futures.ThreadPoolExecutor
-* asyncio where appropriate
-* other suitable concurrency mechanisms where justified
-
-The objective is equivalent behavior and response performance, not merely equivalent syntax.
+Do not lose any Release Tracker data required for functionality.
 
 ⸻
 
-18. Logging Requirements
+30. UI Architecture
 
-While fixing these issues, ensure sufficient logging exists to troubleshoot future migration problems.
+The final React application should have a consistent unified experience.
 
-Local Default
+Analyze and preserve:
 
-Debug logging should be enabled by default for local execution.
+* AT&T branding
+* Existing AIFO visual identity
+* Existing Release Tracker UI quality
+* Tailwind CSS
+* Navigation
+* Tables
+* Filters
+* Cards
+* Status indicators
+* Dialogs
+* Loading states
+* Error states
+* Notifications
 
-Info Logs
+Reuse components where practical.
 
-Add meaningful INFO logs around major operations such as:
-
-* page/API request received
-* team/fix version selected
-* report generation started
-* stories refresh started/completed
-* components refresh started/completed
-* deployment refresh started/completed
-* export started/completed
-
-Debug Logs
-
-Add detailed DEBUG logging where useful for:
-
-* request parameters
-* selected team key
-* complete fix version
-* database query flow
-* record counts
-* API responses/status
-* component processing
-* deployment comparison
-* report generation
-* Excel sheet generation
-* filtering
-* asynchronous task execution
-
-Do not log secrets, credentials, tokens, cookies, or sensitive authentication information.
+Do not create duplicate UI components when a reusable component already exists.
 
 ⸻
 
-19. Required Plan Before Code Changes
+31. Migration Phases
 
-Before modifying the implementation, create a detailed plan document.
+Create a phased migration plan.
 
-The plan must contain:
+Recommended high-level approach:
 
-Phase 1 — Java Inventory
+Phase 1 — Discovery
 
-Identify all affected:
+Analyze:
 
-* pages
-* components
-* routes
-* APIs
-* controllers
-* services
-* repositories
-* database tables
-* external API integrations
+* AIFO
+* Release Tracker
+* Architecture
+* UI
+* Backend
+* Database
+* Authentication
+* Deployment
 
-Phase 2 — Python Inventory
+No code changes.
 
-Identify corresponding Python:
+⸻
 
-* pages
-* components
-* APIs
-* service functions
-* DB functions
-* external API clients
+Phase 2 — AIFO React Foundation
 
-Phase 3 — Gap Matrix
+Create:
 
-Create a matrix:
+* React application structure
+* Routing
+* Layout
+* Navigation
+* Shared components
+* Authentication integration
+* Role handling
+* Styling
 
-Feature	Java Behavior	Python Behavior	Gap	Required Fix
+⸻
 
-Phase 4 — UI Fixes
+Phase 3 — Migrate Existing AIFO Pages
 
-Document exact frontend changes.
+Migrate each AIFO page one by one.
 
-Phase 5 — Backend Fixes
+After each migration:
 
-Document exact Python backend changes.
+* Validate UI
+* Validate backend integration
+* Validate permissions
+* Validate functionality
 
-Phase 6 — Database Fixes
+⸻
 
-Document schema/query/persistence differences.
+Phase 4 — Integrate Release Tracker
 
-Phase 7 — Integration Fixes
+Move Release Tracker functionality into AIFO.
 
-Verify:
+Migrate:
+
+* Dashboard
+* Generate Report
+* Review Commits
+* Release Readiness
+* Scan History
+* Settings/Export Center
+
+⸻
+
+Phase 5 — Backend Integration
+
+Integrate the Release Tracker Python backend/business logic with AIFO.
+
+Validate Java reference behavior.
+
+⸻
+
+Phase 6 — Authentication / Authorization
+
+Implement:
+
+* Admin
+* Developer
+* General Viewer
+
+Validate every action.
+
+⸻
+
+Phase 7 — Database Integration
+
+Integrate Release Tracker tables/data into the AIFO database architecture.
+
+Validate:
+
+* Queries
+* Inserts
+* Deletes
+* Refresh behavior
+* Transactions
+* Data integrity
+
+⸻
+
+Phase 8 — Deployment
+
+Integrate the unified application into the existing AIFO deployment model.
+
+Validate:
+
+* Docker
+* Nginx
+* App Service
+* Environment variables
+* Ports
+* Health checks
+* Startup
+* Routing
+
+⸻
+
+Phase 9 — Regression Testing
+
+Perform complete regression testing for:
+
+AIFO
+
+Every existing feature.
+
+Release Tracker
+
+Every existing feature.
+
+Authentication
+
+All roles.
+
+Deployment
+
+Local/container/App Service.
+
+⸻
+
+32. Major Migration Risks
+
+Identify risks including:
+
+Risk 1 — AIFO functionality regression
+
+Mitigation:
+
+* Feature-by-feature migration
+* Regression testing
+* Existing behavior comparison
+
+Risk 2 — React migration changes UI behavior
+
+Mitigation:
+
+* Screenshot/reference comparison
+* Component-level testing
+
+Risk 3 — Release Tracker business logic changes
+
+Mitigation:
+
+* Java reference implementation
+* Input/output comparison
+* Golden test cases
+
+Risk 4 — Authentication issues
+
+Mitigation:
+
+* Reuse existing AIFO authentication
+* Validate role claims
+* Backend authorization
+
+Risk 5 — Deployment breakage
+
+Mitigation:
+
+* Validate Docker locally
+* Validate container startup
+* Validate App Service configuration
+* Feature branch deployment
+
+Risk 6 — Performance degradation
+
+Mitigation:
+
+* Parallel execution
+* Database optimization
+* API-call reduction
+* Caching only where behavior allows
+
+Risk 7 — Database conflicts
+
+Mitigation:
+
+* Schema review
+* Migration scripts
+* Backup
+* Regression validation
+
+⸻
+
+33. Testing Strategy
+
+Create a complete test strategy covering:
+
+UI
+
+* Navigation
+* Filters
+* Forms
+* Tables
+* Buttons
+* Dialogs
+* Error states
+* Loading states
+
+API/Backend
+
+* Inputs
+* Outputs
+* Validation
+* Error handling
+* Business rules
+
+Database
+
+* CRUD
+* Constraints
+* Refresh behavior
+* Data consistency
+
+Integrations
 
 * GitHub
 * iTrack
 * Kubernetes
 * Veracode
-* database
+* Teams
 
-Phase 8 — Testing
+Authentication
 
-Create test cases for every affected flow.
+* Admin
+* Developer
+* Viewer
 
-Only after this plan is reviewed should implementation begin.
+Performance
 
-⸻
-
-20. Acceptance Criteria
-
-AC-01 — Last Component Refresh
-
-* Generate Report displays the last component refresh timestamp.
-* Review Commits displays the last component refresh timestamp.
-* Release Readiness displays the last component refresh timestamp.
-* Timestamp is retrieved from the correct backend/database source.
-* Team Key is correctly applied.
-* Complete Fix Version is correctly applied.
-* Frontend and backend behavior matches Java.
-
-AC-02 — Story Status
-
-* Story Status loads successfully.
-* Status column is populated.
-* Reporter column is populated.
-* Values match Java.
-* Existing filters continue working.
-
-AC-03 — Branch Cut Validation
-
-* Branch Cut Validation page no longer opens as blank/broken.
-* Correct backend API is invoked.
-* Correct data is loaded.
-* Filters work.
-* UI matches Java behavior.
-* Backend logic matches Java behavior.
-
-AC-04 — Deployment Readiness
-
-* Test 3 is displayed.
-* Test 4 is displayed.
-* Stage is displayed.
-* Production East is displayed.
-* Production West is displayed.
-* Deployment status is correct.
-* Commit comparison works.
-* Deployment readiness logic matches Java.
-* Filters work.
-* Refresh behavior matches Java.
-
-AC-05 — Scan History
-
-* Scan/job execution history loads.
-* Job IDs are displayed.
-* Job status is displayed.
-* Relevant metadata is displayed.
-* Data source matches Java.
-* No obsolete duplicate scan-job architecture is reintroduced.
-
-AC-06 — Dashboard
-
-* Dashboard metrics are no longer incorrectly displayed as zero.
-* Backend queries return correct data.
-* Aggregations match Java.
-* UI mappings match Java.
-* Team/fix-version filtering behaves correctly.
-
-AC-07 — Export Center
-
-* All supported export options are available.
-* Selected reports are correctly processed.
-* Team Key is correctly passed.
-* Complete Fix Version is preserved.
-* Database data is retrieved correctly.
-* Excel workbook is generated successfully.
-* Expected sheets are created.
-* Sheet contents match Java.
-* Review Commit report matches Java.
-* Review Commit Violation report matches Java.
-* Story Status report matches Java.
-* Branch Cut report matches Java.
-* Deployment reports match Java.
-* Commit Analysis report matches Java.
-
-AC-08 — Database Refresh Behavior
-
-* Fetch Stories clears existing Team Key + Fix Version data before refresh.
-* Load Components clears existing Team Key + Fix Version data before refresh.
-* Generate Report performs required cleanup/rebuild operations.
-* Deployment Refresh performs required cleanup/rebuild operations.
-* No stale records remain.
-* No duplicate records are unintentionally created.
-
-AC-09 — Fix Version Integrity
-
-* Complete fix-version string is preserved.
-* Spaces are preserved.
-* No truncation occurs.
-* No partial fix-version values are sent.
-* UI → backend → DB values remain consistent.
-
-AC-10 — API Compatibility
-
-* Every affected Java API has equivalent Python behavior.
-* HTTP/request behavior is equivalent.
-* Input parameters are equivalent.
-* Output fields are equivalent.
-* Error behavior is equivalent.
-* Database behavior is equivalent.
-
-AC-11 — Async Behavior
-
-* Java parallel execution patterns are identified.
-* Equivalent Python parallel processing is implemented.
-* Independent component operations can execute concurrently.
-* Exceptions are correctly handled.
-* Results are correctly aggregated.
-
-AC-12 — Logging
-
-* INFO logs exist for major operations.
-* DEBUG logs exist for troubleshooting.
-* Local debug logging is enabled by default.
-* Sensitive credentials/tokens are never logged.
+* Large number of components
+* Hundreds of commits
+* Parallel API calls
+* Report generation
 
 ⸻
 
-21. Definition of Done
+34. Feature-by-Feature Comparison Matrix
 
-The work is considered complete only when:
+Create a table:
 
-Functional
+Feature	AIFO Existing	Release Tracker	Target AIFO	Migration Required	Risk	Test Required
 
-* All seven identified problem areas are fixed.
-* Java and Python behavior is equivalent.
-* No existing working functionality is broken.
-* No unrelated functionality is modified.
+Every feature must be accounted for.
 
-Frontend
-
-* UI behavior matches Java.
-* All required pages load.
-* No blank pages.
-* No broken navigation.
-* Filters work.
-* Tables display all required columns.
-* Loading/error/empty states work.
-
-Backend
-
-* Every affected API has been compared.
-* Python logic matches Java.
-* Request/response contracts match.
-* Database operations match.
-* External integrations work.
-* Async behavior is preserved.
-
-Database
-
-* Schema is verified.
-* Queries are verified.
-* Delete-and-refresh behavior is verified.
-* Team Key + Fix Version filtering is correct.
-* No stale/duplicate data is introduced.
-
-Validation
-
-* Generate Report tested.
-* Review Commits tested.
-* Release Readiness tested.
-* Branch Cut Validation tested.
-* Deployment Readiness tested.
-* Scan History tested.
-* Dashboard tested.
-* Settings Export Center tested.
-
-Regression
-
-* Existing Java behavior has been used as the baseline.
-* No migration-related regression remains.
-* No fix-version truncation exists.
-* No team/project-key regression exists.
-* No asynchronous processing regression exists.
+No feature should be marked “not applicable” without justification.
 
 ⸻
 
-22. Final Validation Requirement
+35. File-Level Impact Analysis
 
-Before declaring completion, perform a final end-to-end validation.
+Before implementation, identify:
 
-For each affected feature:
+AIFO files
 
-Java UI
-→ Java API
-→ Java backend
-→ Java DB/external service
+* Frontend files
+* Backend files
+* DB files
+* Auth files
+* Deployment files
+* Configuration files
 
-must be compared against:
+Release Tracker files
 
-Python UI
-→ Python API
-→ Python backend
-→ Python DB/external service
+* React components
+* Java controllers
+* Java services
+* Java repositories
+* Database entities
+* Integration clients
+* Configuration
+* Deployment
 
-Prepare a final validation matrix:
+Map:
 
-Feature	Java Verified	Python Verified	UI Match	API Match	Backend Match	DB Match	Status
-Component Refresh Timestamp							
-Story Status							
-Branch Cut Validation							
-Deployment Readiness							
-Scan History							
-Dashboard							
-Export Center							
-
-No feature should be marked complete until all relevant columns are verified.
+Current file
+     ↓
+Target file/module
+     ↓
+Action
+     ↓
+Reason
 
 ⸻
 
-23. Final Instruction to the Implementing Agent
+36. Do Not Duplicate Functionality
 
-Do not assume that the current Python implementation is correct.
+Before creating any new implementation, check whether AIFO already has:
 
-The Java application is the authoritative working implementation.
+* Authentication
+* Authorization
+* Logging
+* Database utilities
+* API clients
+* UI components
+* Notification utilities
+* Configuration management
+* Deployment utilities
 
-Analyze the Java code deeply and reproduce its behavior in Python.
+Reuse existing functionality where possible.
 
-For every issue:
+Do not create duplicate implementations.
 
-1. Find the Java implementation.
-2. Trace the complete execution flow.
-3. Find the Python equivalent.
-4. Identify the behavioral difference.
-5. Fix the Python implementation.
-6. Verify the UI.
-7. Verify the API.
-8. Verify the backend.
-9. Verify the database.
-10. Verify external integrations.
-11. Verify asynchronous behavior.
-12. Run regression tests.
+⸻
 
-Do not make unrelated improvements.
+37. Backward Compatibility
 
-Do not redesign the existing functionality.
+Existing AIFO users must not experience unexpected changes.
 
-Do not remove existing business rules.
+Existing AIFO functionality must continue to work after Release Tracker integration.
 
-Do not introduce shortcuts.
+The migration must not:
 
-Do not hard-code values merely to make the UI appear correct.
+* Break existing pages
+* Break existing authentication
+* Break existing tools
+* Break deployment
+* Remove existing capabilities
 
-The final Python Release Tracker must behave as closely as possible to the working Java Release Tracker, with the primary intentional change being the backend technology migration from Java/Spring Boot to Python.
+⸻
 
-The goal is functional equivalence, not approximate similarity.
+38. Expected Deliverables Before Coding
+
+Before making implementation changes, produce:
+
+Deliverable 1 — Current Architecture
+
+Detailed AIFO architecture.
+
+Deliverable 2 — Release Tracker Architecture
+
+Detailed Release Tracker architecture.
+
+Deliverable 3 — Unified Target Architecture
+
+Proposed final architecture.
+
+Deliverable 4 — Feature Matrix
+
+AIFO vs Release Tracker vs Target.
+
+Deliverable 5 — File-Level Impact Analysis
+
+Exact files/modules affected.
+
+Deliverable 6 — Git Contribution Analysis
+
+Contributors and ownership.
+
+Deliverable 7 — Authentication/Authorization Analysis
+
+Current and target role model.
+
+Deliverable 8 — Deployment Analysis
+
+Exact Docker/App Service/Nginx/reverse-proxy flow.
+
+Deliverable 9 — Migration Plan
+
+Detailed phased plan.
+
+Deliverable 10 — Risk & Mitigation Plan
+
+Detailed risks.
+
+Deliverable 11 — Test Plan
+
+Complete regression strategy.
+
+Deliverable 12 — Definition of Done
+
+Detailed completion criteria.
+
+⸻
+
+39. Important Constraints
+
+These constraints are mandatory:
+
+1. Do not remove existing AIFO functionality.
+2. Do not change Release Tracker business logic.
+3. Do not create Release Tracker as a separate application.
+4. Do not create a separate Release Tracker deployment.
+5. Do not introduce unnecessary new architecture.
+6. Reuse existing AIFO capabilities wherever possible.
+7. Use React 18 + TypeScript + Vite + Tailwind CSS for the unified frontend.
+8. Preserve the existing Release Tracker UI behavior.
+9. Preserve existing Java Release Tracker business behavior during Python migration.
+10. Preserve exact Fix Version strings.
+11. Preserve authentication.
+12. Implement authorization for every actionable UI operation.
+13. Validate authorization in backend logic as well.
+14. Do not make assumptions about AIFO architecture; verify from source code.
+15. Do not make assumptions about deployment; verify Docker/App Service configuration.
+16. Do not make assumptions about contributors; verify Git history.
+17. Do not modify code until the analysis and implementation plan are completed.
+
+⸻
+
+40. Definition of Done
+
+The migration is considered complete only when:
+
+* Complete AIFO functionality is available in React.
+* Existing AIFO functionality is not broken.
+* Release Tracker is fully integrated into AIFO.
+* No standalone Release Tracker application remains.
+* No separate Release Tracker deployment is required.
+* Release Tracker business logic matches the Java reference.
+* Dashboard works.
+* Generate Report works.
+* Review Commits works.
+* Release Readiness works.
+* Branch Cut Validation works.
+* Deployment Readiness works.
+* Scan History works.
+* Settings/Export Center works.
+* Excel reports work.
+* GitHub integration works.
+* iTrack integration works.
+* Kubernetes integration works.
+* Veracode integration works.
+* Teams notification functionality works where applicable.
+* Admin authorization works.
+* Developer authorization works.
+* Viewer authorization works.
+* Generate Report is Admin-only.
+* Admin-only refresh operations are protected.
+* Developer Override is protected.
+* Backend authorization is enforced.
+* Fix Version is preserved exactly.
+* Database operations are validated.
+* Existing AIFO database behavior is preserved.
+* Docker build works.
+* Container startup works.
+* Nginx/reverse proxy works.
+* Azure App Service deployment works.
+* Existing AIFO tools continue working.
+* Regression testing is completed.
+* Performance is acceptable.
+* Documentation is updated.
+
+⸻
+
+41. Final Instruction to the Development Agent
+
+Treat this task as a lead architect + senior developer migration assessment.
+
+Do not rush into implementation.
+
+First understand the actual code.
+
+Then produce a detailed plan.
+
+The plan must be based on actual source-code evidence, not assumptions.
+
+The primary objectives are:
+
+Preserve AIFO
++
+Migrate AIFO UI to React
++
+Integrate Release Tracker
++
+Preserve Release Tracker business logic
++
+Preserve authentication/authorization
++
+Preserve deployment architecture
++
+Avoid breaking existing functionality
+
+The final result must be a single unified AIFO application containing both the existing AIFO capabilities and the complete Release Tracker capabilities.
+
+Only after the analysis, architecture review, feature matrix, file-level impact analysis, risks, migration plan, and testing strategy are completed should implementation begin.
