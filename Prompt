@@ -1,1462 +1,635 @@
-AIFO + Release Tracker — Unified React Migration & Integration Assessment
+from pathlib import Path
 
-Objective
+content = """# Jira Cloud + Legacy iTrack Dual-Mode Migration
 
-Perform a complete architectural and technical assessment of the existing AIFO (AI Fueled Operations) application and the existing Release Tracker application.
+## Objective
 
-The final goal is to:
+Migrate all existing iTrack integrations used by Release Tracker to AT&T Jira Cloud while preserving the existing functionality and keeping legacy iTrack fully operational.
 
-1. Migrate the existing AIFO UI from Streamlit to React 18 + TypeScript + Vite + Tailwind CSS.
-2. Preserve all existing AIFO functionality and business behavior.
-3. Integrate the complete Release Tracker functionality into AIFO.
-4. Do not maintain Release Tracker as a separate tool, application, or folder.
-5. Create one unified AIFO application containing both the existing AIFO capabilities and the complete Release Tracker capabilities.
-6. Ensure that no existing AIFO functionality is broken or lost.
-7. Ensure that the Release Tracker functionality is migrated without changing its existing business logic.
-8. Before implementing anything, thoroughly analyze both codebases and create a detailed implementation plan.
+The application must support both:
 
-⸻
+1. **Jira Cloud** — new/default backend
+2. **Legacy iTrack** — existing backend for older releases/fix versions
 
-1. Important Instruction — Analyze Before Implementing
+The user must select the backend from the **Generate Report** page.
 
-Do not immediately start modifying code.
+---
 
-First perform a complete analysis of:
+## 1. Generate Report UI Switch
 
-* Existing AIFO project
-* Existing Release Tracker project
-* Existing AIFO UI
-* Existing AIFO backend/business logic
-* Existing Release Tracker React UI
-* Existing Release Tracker Java backend
-* Existing database structures
-* Existing authentication/authorization
-* Existing API clients
-* Existing deployment architecture
-* Existing routing/navigation
-* Existing configuration
-* Existing logging
-* Existing asynchronous processing
-* Existing GitHub/iTrack/Kubernetes/Veracode integrations
-* Existing tests
+Add a compact switch near the Generate Report controls:
 
-The existing Release Tracker Java application is considered the working/reference implementation for Release Tracker functionality.
+`Data Source: [ Jira Cloud | Legacy iTrack ]`
 
-The existing AIFO application is the target host application.
+Requirements:
 
-Create a detailed assessment and implementation plan before making code changes.
+- Default = **Jira Cloud**
+- Jira Cloud selection uses the new Jira Cloud client.
+- Legacy iTrack selection uses the existing iTrack client.
+- The selected source controls the complete Generate Report story/fix-version/team data flow.
+- Existing Generate Report behavior must otherwise remain unchanged.
+- The UI should clearly show which backend is active.
+- Follow the existing UI design system.
 
-⸻
+---
 
-2. Target Architecture
-
-The desired final architecture is:
-
-AIFO
- |
- +-- Existing AIFO functionality
- |
- +-- Existing AIFO tabs/features
- |
- +-- Release Tracker functionality
- |
- +-- Unified React frontend
- |
- +-- Existing/appropriate AIFO backend architecture
- |
- +-- Unified authentication/authorization
- |
- +-- Unified deployment
-
-There must NOT be:
-
-AIFO
-Release Tracker
-
-as two separate applications.
-
-Instead:
-
-AIFO
- ├── Existing AIFO features
- └── Release Tracker features
-
-must exist as one unified application.
-
-⸻
-
-3. AIFO Current-State Analysis
-
-First understand exactly what AIFO currently is.
-
-Document:
-
-* What AIFO stands for
-* Purpose of AIFO
-* Business objectives
-* Current users
-* Current workflows
-* Current navigation
-* Existing tabs
-* Existing tools
-* Existing dashboards
-* Existing release-related functionality
-* Existing quality-gate functionality
-* Existing adoption functionality
-* Existing settings functionality
-* Existing integrations
-* Existing authentication
-* Existing authorization
-* Existing deployment architecture
-
-Identify every existing AIFO page/tab and explain:
-
-* Purpose
-* UI components
-* Backend logic
-* APIs/functions used
-* Database tables
-* External integrations
-* Authentication requirements
-* Authorization requirements
-
-Do not assume anything.
-
-Read the actual code.
-
-⸻
-
-4. Existing AIFO Technology Stack
-
-Determine the actual technology stack from the source code.
-
-Expected areas to investigate include:
-
-Frontend
-
-Current AIFO is believed to use:
-
-* Streamlit
-* Python
-* Single-page application/page navigation
-* Streamlit widgets
-
-Verify this from the actual code.
-
-Backend
-
-Expected:
-
-* Python
-* Streamlit server
-* Python utility/business-logic modules
-* No conventional separate REST API layer in many areas
-
-Verify the actual architecture.
-
-Database
-
-Expected:
-
-* SQLite for local development
-* PostgreSQL/Azure for production
-
-There may be a central database module such as:
-
-AIFO_DB.py
-
-Analyze the actual database implementation.
-
-Hosting
-
-Expected:
-
-* Azure App Service
-* Container-based deployment
-* Nginx/reverse proxy
-* Supervisor/process management
-
-Verify the actual implementation.
-
-Authentication
-
-Expected:
-
-* Microsoft Entra ID / Azure SSO
-* Shared portal authentication/cookie
-* Role information
-
-Analyze the actual implementation.
-
-⸻
-
-5. AIFO UI Migration to React
-
-The requirement is to migrate the complete AIFO UI from Streamlit to:
-
-* React 18
-* TypeScript
-* Vite
-* Tailwind CSS
-
-The existing Release Tracker already has a React-based UI using:
-
-* React 18
-* TypeScript
-* Vite
-* Tailwind CSS
-
-Use the Release Tracker UI architecture and reusable components where appropriate.
-
-However:
-
-Important
-
-Do not blindly replace AIFO UI.
-
-First understand:
-
-* Existing AIFO navigation
-* Existing widgets
-* Existing forms
-* Existing dashboards
-* Existing state management
-* Existing filters
-* Existing tables
-* Existing dialogs
-* Existing notifications
-* Existing role-based UI behavior
-* Existing loading/error states
-
-Then design the React equivalent.
-
-The migrated React UI must preserve the existing AIFO behavior.
-
-⸻
-
-6. Existing AIFO Navigation
-
-Identify all current AIFO navigation items.
-
-Expected examples may include:
-
-* Release Activities
-* Quality Gates
-* Adoption
-* Settings
-* Other existing tools/pages
-
-Document every one.
-
-For each page:
-
-Page
- ├── Purpose
- ├── Existing UI
- ├── Existing backend
- ├── Existing data source
- ├── Existing integrations
- ├── Authentication
- ├── Authorization
- └── React migration approach
-
-⸻
-
-7. Release Tracker Integration
-
-The complete Release Tracker functionality must be integrated into AIFO.
-
-Do NOT create a separate:
-
-release-tracker/
-
-application.
-
-Do NOT create a separate deployable application.
-
-Do NOT create a separate tool entry unless explicitly required by the existing AIFO architecture.
-
-The Release Tracker functionality must become part of AIFO.
-
-⸻
-
-8. Release Tracker Functionality That Must Be Preserved
-
-The following functionality must be completely migrated.
-
-Dashboard
-
-Preserve:
-
-* Release-level statistics
-* Story statistics
-* Commit statistics
-* Violations
-* Deployment readiness information
-* Relevant summary metrics
-* Filters
-* Refresh information
-* Last component refresh timestamp
-
-⸻
-
-9. Generate Report
-
-Preserve the complete Generate Report functionality.
-
-It includes:
-
-* Team selection
-* Fix Version selection
-* Story fetching
-* Component loading
-* Commit analysis
-* Release analysis
-* Branch analysis
-* Database persistence
-* Report generation
-* Asynchronous/parallel processing
-* Job/status tracking
-* Error handling
-* Logging
-
-The existing Java implementation is the reference implementation.
-
-The business logic must not be simplified or redesigned during migration.
-
-⸻
-
-10. Review Commits
-
-Preserve the complete Review Commits functionality.
-
-It must support the existing filtering capabilities including:
-
-* Team
-* Fix Version
-* Scrum Team
-* Component
-* Committer
-* Commit
-* Other existing filters
-
-Preserve:
-
-* Commit analysis
-* Violation detection
-* Lifecycle status
-* Cherry-pick detection
-* Previous release detection
-* Future release detection
-* Direct release branch commits
-* Missing release commits
-* Override functionality
-* Comments
-* Responsibility/team information
-
-The existing Java Release Tracker implementation must be treated as the functional reference.
-
-⸻
-
-11. Release Readiness
-
-Preserve the complete Release Readiness functionality.
-
-It must include the existing capabilities such as:
-
-Story Status
-
-* Total stories
-* Accepted stories
-* Not accepted stories
-* Story status
-* Reporter
-* Other existing metadata
-
-Branch Cut Validation
-
-* Branch cut status
-* Completed components
-* Pending components
-* Validation details
-
-Deployment Readiness
-
-Preserve the existing environments and deployment validation.
-
-Expected environments include:
-
-* Test 3
-* Test 4
-* Stage
-* Production East
-* Production West
-
-The system must compare the expected/latest release commit with the actual deployed Kubernetes commit.
-
-Preserve:
-
-* Deployment status
-* Commit mismatch detection
-* Behind-commit detection
-* Component status
-* Kubernetes integration
-* Refresh functionality
-* Last refresh timestamp
-
-⸻
-
-12. Scan History
-
-Preserve Scan History functionality.
-
-It must display:
-
-* Job ID
-* Scan information
-* Report execution information
-* Status
-* Timestamps
-* Other existing fields
-
-Analyze how Java currently retrieves and displays scan history and reproduce the same behavior.
-
-⸻
-
-13. Settings / Export Center
-
-Preserve the existing Settings functionality.
-
-The Release Tracker export center must be integrated into AIFO.
-
-The export functionality should support selectable report sections.
-
-Expected report options include:
-
-1. Review Commits
-2. Review Commit Violations
-3. Commit Analysis Summary
-4. Release/Story Status
-5. Branch Cut Validation
-6. Test 3 Deployment
-7. Test 4 Deployment
-8. Stage Deployment
-9. Production East Deployment
-10. Production West Deployment
-
-The selected sections should be exported into a single Excel workbook with multiple tabs.
-
-The exact existing Java behavior must be preserved.
-
-⸻
-
-14. Release Tracker Business Logic
-
-The following Release Tracker logic is especially important.
-
-Previous Release Branch Detection
-
-The previous Fix Version/release information is determined from Kubernetes production information.
-
-This must be preserved.
-
-The previous release branch is required for accurate commit comparison.
-
-⸻
-
-15. Commit Analysis Modes
-
-Preserve all existing commit-analysis scenarios.
-
-Scenario 1 — Main Branch vs Release Branch
-
-Compare:
-
-Previous/current main branch
-        ↓
-Release branch
-
-Analyze every commit.
-
-Validate:
-
-* Fix Version
-* Story
-* Violation
-* Lifecycle status
-* Scrum team
-
-⸻
-
-Scenario 2 — Valid Current Release Commits Missing From Release Branch
-
-Identify commits that:
-
-* Belong to the current Fix Version
-* Exist in the main/master branch
-* Are missing from the release branch
-
-These must be identified as part of release validation.
-
-⸻
-
-Scenario 3 — Cherry-Picked Commits
-
-Identify cherry-picked commits.
-
-Because cherry-picking changes commit IDs, do not rely only on commit ID equality.
-
-Detect the relationship appropriately.
-
-A valid cherry-picked commit should not incorrectly appear as a violation.
-
-⸻
-
-Scenario 4 — Direct Release Branch Commits
-
-Identify commits that were committed directly to the release branch and are not present in the main branch.
-
-Preserve the existing behavior.
-
-⸻
-
-Scenario 5 — Previous/Future Fix Version
-
-If a commit contains:
-
-* Previous Fix Version
-* Future Fix Version
-* Missing Fix Version
-* Invalid Fix Version
-
-the existing Java behavior must be retained.
-
-⸻
-
-16. Scrum Team Mapping
-
-The commits table must contain Scrum Team information where required.
-
-During report generation:
-
-* Identify the story associated with each commit.
-* Determine the Scrum Team from the iTrack information.
-* Store the Scrum Team against the commit.
-
-This should avoid unnecessary repeated database joins during UI queries where the Java implementation already has the required information persisted.
-
-⸻
-
-17. Data Refresh Behavior
-
-Preserve the existing refresh semantics.
-
-Before fetching fresh data, the existing implementation deletes/replaces records for the relevant:
-
-Team Key + Fix Version
-
-This applies to relevant tables such as:
-
-* iTrack stories
-* Components
-* Commits
-* Comments
-* Deployment readiness
-* Other release-specific data
-
-Do not accidentally retain stale release data.
-
-The migration must preserve this behavior.
-
-⸻
-
-18. Fix Version Integrity
+## 2. Do Not Modify the Existing iTrack Client
 
 This is mandatory.
 
-Fix Version must always be treated as the complete string.
+Do not rewrite, replace, or heavily refactor the existing iTrack client to support Jira Cloud.
 
-Do NOT:
+Create a **separate Jira Cloud client/module**.
 
-* Truncate it
-* Trim meaningful spaces
-* Remove internal spaces
-* Alter formatting
-* Convert it into another representation
+Prefer a clean provider abstraction:
 
-Every UI → backend → database → API flow must preserve the exact Fix Version value.
-
-⸻
-
-19. Authentication and Authorization
-
-Analyze the existing AIFO authentication architecture.
-
-Determine:
-
-* How Entra ID authentication works
-* How SSO works
-* How roles are obtained
-* Where roles are stored
-* How roles reach the frontend
-* How roles are validated by the backend
-* How existing AIFO tools enforce authorization
-
-Do not introduce a parallel authentication mechanism if the existing AIFO mechanism can be reused.
-
-⸻
-
-20. Release Tracker Roles
-
-The Release Tracker functionality requires three logical access levels.
-
-Admin
-
-Admin users can:
-
-* Generate reports
-* Trigger expensive report-generation operations
-* Refresh deployment data
-* Perform administrative operations
-* Send Teams notifications
-* Perform other state-changing operations
-
-⸻
-
-Developer
-
-Developer users can:
-
-* View Release Tracker pages
-* View Review Commits
-* View Release Readiness
-* View Dashboard
-* View Scan History
-* Use Review Commit actions such as Override where permitted
-* Add override comments
-
-Developer users must NOT have access to Generate Report.
-
-⸻
-
-General / Viewer User
-
-Normal authenticated users who do not belong to the specific admin/developer role should still be able to view the application.
-
-They can view:
-
-* Dashboard
-* Review Commits
-* Release Readiness
-* Scan History
-* Settings where applicable
-
-They must NOT:
-
-* Generate reports
-* Perform admin refresh operations
-* Send Teams notifications
-* Use Review Commit Override
-
-⸻
-
-21. UI Authorization
-
-Every clickable/actionable UI button must enforce authorization.
-
-Do not rely only on hiding the button.
-
-Authorization must also be enforced at the backend/business-logic level.
-
-Examples:
-
+```text
 Generate Report
-    → Admin only
-Refresh Deployment
-    → Admin only
-Teams Notification
-    → Admin only
-Review Commit Override
-    → Developer/Admin
-View pages
-    → Authenticated users
+      |
+      v
+Issue/Story Provider
+      |
+      +---- JiraCloudClient
+      |
+      +---- LegacyITrackClient
+```
 
-Analyze the existing AIFO role implementation and integrate these rules into it.
+Business logic should not contain duplicated provider-specific implementation.
 
-⸻
+---
 
-22. Git Contribution Analysis
+## 3. Complete iTrack Use-Case Inventory
 
-Analyze the Git history of the existing AIFO project.
+Before coding, analyze the entire codebase and identify every existing iTrack dependency.
 
-For every contributor:
+Search for:
 
-* Name
-* Number of commits
-* Percentage of commits
-* Files changed
-* Major areas contributed
-* Frontend/backend contribution
-* Significant features contributed
+- iTrack client imports
+- iTrack service calls
+- REST calls
+- iTrack queries
+- story retrieval
+- fix-version retrieval
+- team/team-key lookup
+- scrum-team lookup
+- story status
+- reporter
+- acceptance/completion status
+- story-number lookup
+- story metadata
+- report-generation dependencies
+- review-commit dependencies
+- release-readiness dependencies
+- export/Excel dependencies
+- asynchronous/background iTrack calls
+- retries and error handling
+- configuration/environment variables
+- tests and mocks
 
-Where technically feasible, also calculate contribution by:
+Do not limit the analysis to Generate Report.
 
-* Lines added
-* Lines removed
-* Net contribution
+**Acceptance criterion:** no existing iTrack use case may be accidentally omitted.
 
-Do NOT blindly use commit count as code contribution.
+---
 
-Clearly distinguish:
+## 4. Jira Cloud Integration
 
-Commit contribution
+The Jira Cloud environment is:
 
-from:
+```text
+https://atlassian.net
+```
 
-Code contribution
+The actual company Jira Cloud hostname/path and token will be provided separately.
 
-Identify the people who have materially contributed to AIFO.
+Do not hard-code credentials or tokens.
 
-These people should be listed as stakeholders/reviewers who should test the React migration before it is merged.
+Use environment/configuration management.
 
-⸻
+Create a dedicated Jira Cloud client and keep it separate from the existing iTrack implementation.
 
-23. Identify AIFO Owners / Contributors
+---
 
-Using Git history, determine:
+## 5. Authentication
 
-* Active maintainers
-* Major contributors
-* Recent contributors
-* Owners of important modules
-* People responsible for authentication
-* People responsible for deployment
-* People responsible for frontend
-* People responsible for backend
-* People responsible for database
+A Jira Cloud API token will be supplied.
 
-Provide a recommended testing/review group.
+Use the approved authentication mechanism for the Jira Cloud APIs.
 
-⸻
+Requirements:
 
-24. Deployment Architecture Analysis
+- Token must remain outside source code.
+- Token must not be logged.
+- Authorization headers must not be logged.
+- Secrets must not appear in exceptions or UI.
+- Follow company security requirements.
+- Verify the exact Jira Cloud authentication format rather than assuming it is identical to iTrack.
 
-Analyze exactly how AIFO is deployed today.
+---
 
-Do not assume.
+## 6. Jira Cloud API Mapping
 
-Determine:
+Before implementation, map every existing iTrack operation to its Jira Cloud equivalent.
 
-* Dockerfile
-* Docker build process
-* Base image
-* Python installation
-* Node installation if applicable
-* Frontend build process
-* Backend startup process
-* Nginx configuration
-* Reverse proxy configuration
-* Supervisor configuration
-* Ports
-* Environment variables
-* Azure App Service configuration
-* Container registry
-* Image publishing
-* Deployment pipeline
-* Startup commands
-* Health checks
+For each use case document:
 
-Explain the complete flow:
+| iTrack Use Case | Existing API/Query | Jira Cloud API | Parameters | Response | Mapping |
+|---|---|---|---|---|---|
+| Story retrieval | Analyze source | Identify official Jira API | Team/Fix Version/etc. | Issue data | Required |
+| Fix version | Analyze source | Identify official Jira API | Project/version | Version data | Required |
+| Scrum team | Analyze source | Identify Jira equivalent | Issue/story | Team data | Required |
+| Story status | Analyze source | Identify Jira API | Issue | Status | Required |
+| Reporter | Analyze source | Identify Jira API | Issue | Reporter | Required |
+| Other use cases | Discover | Map individually | As required | As required | Required |
 
-Developer Code
-      ↓
-Build
-      ↓
-Docker Image
-      ↓
-Container Registry
-      ↓
-Azure App Service
-      ↓
-Container Startup
-      ↓
-Nginx / Reverse Proxy
-      ↓
-AIFO
-      ↓
-React Frontend
-      ↓
-Backend
+Do not guess API equivalence. Verify the official Jira Cloud API contract.
 
-Correct this diagram according to the actual implementation.
+---
 
-⸻
+## 7. Preserve Existing Business Logic
 
-25. React Build and Deployment
+This is an integration migration, not a business-rule redesign.
 
-Since AIFO will be migrated to React, determine:
+Preserve the existing behavior for:
 
-* How React will be built
-* Whether Node/npm is required during image build
-* Whether the final container contains Node
-* Where compiled React assets are stored
-* How Nginx serves React
-* How API/backend requests are routed
-* How SPA routing is handled
-* How environment variables are supplied
-* How production builds are generated
+- Team selection
+- Team key handling
+- Fix-version handling
+- Story retrieval
+- Story filtering
+- Story status
+- Reporter
+- Scrum team
+- Story persistence
+- Commit analysis
+- Violation logic
+- Lifecycle status
+- Release readiness
+- Deployment readiness
+- Branch-cut validation
+- Excel/export behavior
+- Generate Report
+- Refresh behavior
+- Database cleanup/reload behavior
 
-Compare this with the current Release Tracker deployment architecture.
+Only the external issue-tracking source should change.
 
-⸻
+---
 
-26. Backend Architecture
+## 8. Fix Version — CRITICAL
 
-Determine the best way to integrate the Release Tracker backend into AIFO.
+The complete fix-version string must be preserved exactly.
 
-Compare:
+Do not:
 
-Option A
+- truncate
+- remove spaces
+- remove meaningful internal whitespace
+- abbreviate
+- split incorrectly
+- alter case unnecessarily
+- normalize it incorrectly
 
-Existing AIFO Python backend/business logic.
+Verify the value throughout:
 
-Option B
+```text
+UI
+ -> Backend
+ -> Jira API
+ -> Database
+ -> Analysis
+ -> UI
+ -> Excel Export
+```
 
-Separate Python modules inside AIFO.
+Explicitly test fix versions containing spaces and other valid characters.
 
-Option C
+---
 
-Separate service/API.
+## 9. Provider Selection
 
-The recommendation should favor the architecture that:
+Do not scatter provider logic throughout the business layer.
 
-* Minimizes operational complexity
-* Preserves existing AIFO deployment
-* Avoids duplicate services
-* Preserves business logic
-* Supports React
-* Supports future scalability
-* Minimizes risk
+Prefer a provider/factory/strategy abstraction following the existing architecture.
 
-Provide a recommendation with justification.
+Conceptually:
 
-⸻
+```python
+provider = provider_factory.get_provider(source)
 
-27. Java → Python Migration Considerations
+stories = provider.fetch_stories(
+    team_key=team_key,
+    fix_version=fix_version
+)
+```
 
-The existing Java Release Tracker backend is the functional reference.
+The exact implementation must follow project conventions.
 
-The migration must preserve:
+Avoid unnecessary framework layers.
 
-* Inputs
-* Outputs
-* Validation
-* Error handling
-* Business rules
-* Database operations
-* External API calls
-* Kubernetes calls
-* GitHub calls
-* iTrack calls
-* Veracode calls
-* Async behavior
-* Parallel execution
-* Retry behavior
-* Logging
-* State transitions
+---
 
-Only the implementation language/architecture should change.
+## 10. Generate Report Flow
 
-Business behavior must not change.
+Trace the existing flow completely before changing it.
 
-⸻
+Expected conceptual flow:
 
-28. Parallel Processing
+```text
+UI
+ ↓
+Team
+ ↓
+Fix Version
+ ↓
+Data Source Switch
+ ↓
+Controller/Route
+ ↓
+Service
+ ↓
+Selected Provider
+ ↓
+Story Retrieval
+ ↓
+Existing Database Cleanup
+ ↓
+Story Persistence
+ ↓
+Component Retrieval
+ ↓
+Commit Analysis
+ ↓
+Release Validation
+ ↓
+Report Generation
+ ↓
+UI
+```
 
-The existing Java application uses asynchronous execution/custom executors.
+The actual sequence must be derived from the current working implementation.
 
-Analyze where parallel execution is currently used.
+The Jira switch should change only the external issue source.
+
+---
+
+## 11. Database
+
+Analyze all tables and columns populated from iTrack.
 
 Identify:
 
-* Parallel GitHub calls
-* Parallel component processing
-* Kubernetes calls
-* Commit analysis
-* Other independent operations
+- tables
+- columns
+- primary/unique keys
+- team/team-key fields
+- fix-version fields
+- story number
+- status
+- reporter
+- scrum team
+- timestamps
+- source metadata
 
-Recommend the correct Python equivalent.
+Do not unnecessarily change the database schema.
 
-Potential technologies may include:
+If Jira Cloud requires a new field, document why before introducing it.
 
-ThreadPoolExecutor
-asyncio
-asyncio.gather
-concurrent.futures
+---
 
-Choose based on the actual workload.
+## 12. Existing Cleanup and Reload Behavior
 
-Do not blindly convert Java executors to Python.
+Preserve existing data-refresh semantics.
 
-Explain why the selected approach is appropriate.
+Where the current flow deletes records for:
 
-The objective is to avoid sequential processing such as:
+```text
+Team Key + Fix Version
+```
 
-Component 1 → wait
-Component 2 → wait
-Component 3 → wait
-...
+before fetching and storing fresh data, retain the same behavior.
 
-when operations are independent and can safely run concurrently.
+Ensure:
 
-⸻
+- stale iTrack data is not incorrectly reused when Jira Cloud is selected.
+- unrelated teams/releases are never deleted.
+- delete conditions remain exact.
+- fresh Jira data is persisted using the existing business model.
 
-29. Database Migration
+---
 
-Analyze the existing AIFO database.
+## 13. Legacy iTrack Compatibility
 
-Document:
+Legacy iTrack must remain fully usable because some older releases/fix versions still depend on it.
 
-* Tables
-* Columns
-* Primary keys
-* Foreign keys
-* Indexes
-* Constraints
-* Data types
-* Queries
-* Insert/update/delete operations
-* Transactions
-* Connection handling
-* Connection pooling
-* Migration strategy
+Conceptually:
 
-Then map Release Tracker database structures into the AIFO database architecture.
+```text
+Older Release/Fix Version
+        |
+        +--> Legacy iTrack
 
-Avoid unnecessary duplication.
+New Release/Fix Version
+        |
+        +--> Jira Cloud
+```
 
-Do not lose any Release Tracker data required for functionality.
+The UI switch is the explicit selection mechanism.
 
-⸻
+Do not automatically infer the backend from fix-version naming unless separately approved.
 
-30. UI Architecture
+---
 
-The final React application should have a consistent unified experience.
+## 14. Error Handling
 
-Analyze and preserve:
+Handle Jira Cloud errors without exposing secrets.
 
-* AT&T branding
-* Existing AIFO visual identity
-* Existing Release Tracker UI quality
-* Tailwind CSS
-* Navigation
-* Tables
-* Filters
-* Cards
-* Status indicators
-* Dialogs
-* Loading states
-* Error states
-* Notifications
+Cover:
 
-Reuse components where practical.
+- authentication failure
+- invalid/expired token
+- timeout
+- Jira unavailable
+- rate limiting
+- invalid JQL/query
+- missing project/version
+- issue not found
+- permission errors
+- malformed response
+- unexpected response
+- network failure
 
-Do not create duplicate UI components when a reusable component already exists.
+Provide useful application-level errors.
 
-⸻
+Do not expose tokens, authorization headers, or sensitive configuration.
 
-31. Migration Phases
+---
 
-Create a phased migration plan.
+## 15. Logging
 
-Recommended high-level approach:
+Add useful informational/debug logs around provider selection and Jira operations.
 
-Phase 1 — Discovery
+Examples:
 
-Analyze:
+```text
+Generate Report started
+Selected source: Jira Cloud
+Selected team key: <safe value>
+Selected fix version: <safe value>
+Fetching stories from Jira Cloud
+Jira Cloud retrieval completed
+Stories retrieved: N
+```
 
-* AIFO
-* Release Tracker
-* Architecture
-* UI
-* Backend
-* Database
-* Authentication
-* Deployment
+Never log:
 
-No code changes.
+- API tokens
+- Authorization headers
+- passwords
+- cookies
+- secrets
+
+---
+
+## 16. Testing
+
+### Jira Cloud
 
-⸻
+Test:
 
-Phase 2 — AIFO React Foundation
+- authentication
+- story retrieval
+- fix version
+- team filtering
+- status
+- reporter
+- scrum team
+- empty results
+- timeout
+- rate limit
+- malformed response
+- persistence
+- Generate Report integration
 
-Create:
+### Legacy iTrack
 
-* React application structure
-* Routing
-* Layout
-* Navigation
-* Shared components
-* Authentication integration
-* Role handling
-* Styling
+Ensure existing tests continue to pass.
 
-⸻
+### Provider Selection
 
-Phase 3 — Migrate Existing AIFO Pages
+Verify:
 
-Migrate each AIFO page one by one.
+```text
+Jira Cloud selected -> JiraCloudClient called
+Legacy selected     -> LegacyITrackClient called
+```
 
-After each migration:
+### Fix Version
 
-* Validate UI
-* Validate backend integration
-* Validate permissions
-* Validate functionality
+Test a value such as:
 
-⸻
+```text
+Example Release 2026 08
+```
 
-Phase 4 — Integrate Release Tracker
+and verify the exact value survives the entire flow.
 
-Move Release Tracker functionality into AIFO.
+---
 
-Migrate:
+## 17. End-to-End Validation
 
-* Dashboard
-* Generate Report
-* Review Commits
-* Release Readiness
-* Scan History
-* Settings/Export Center
+### Scenario A — Jira Cloud
 
-⸻
+```text
+Select Team
+Select Fix Version
+Select Jira Cloud
+Generate Report
+Verify Jira Cloud calls
+Verify stories
+Verify DB
+Verify analysis
+Verify release readiness
+Verify UI/export
+```
 
-Phase 5 — Backend Integration
+### Scenario B — Legacy iTrack
 
-Integrate the Release Tracker Python backend/business logic with AIFO.
+```text
+Select Team
+Select Fix Version
+Select Legacy iTrack
+Generate Report
+Verify iTrack calls
+Verify stories
+Verify DB
+Verify analysis
+Verify release readiness
+Verify UI/export
+```
 
-Validate Java reference behavior.
+Where equivalent data exists, compare final business results.
 
-⸻
+---
 
-Phase 6 — Authentication / Authorization
+## 18. No Regression
 
-Implement:
+Do not break:
 
-* Admin
-* Developer
-* General Viewer
+- Review Commits
+- Release Readiness
+- Deployment Readiness
+- Branch Cut Validation
+- Dashboard
+- Scan History
+- Settings
+- Excel Export
+- Commit Analysis
+- Violation detection
+- Lifecycle status
+- Teams notifications
+- Existing DB behavior
+- Legacy iTrack
 
-Validate every action.
+Keep Jira migration isolated.
 
-⸻
+---
 
-Phase 7 — Database Integration
+# 19. Implementation Plan — REQUIRED BEFORE CODING
 
-Integrate Release Tracker tables/data into the AIFO database architecture.
+Do not immediately modify the code.
 
-Validate:
+First create a detailed plan.
 
-* Queries
-* Inserts
-* Deletes
-* Refresh behavior
-* Transactions
-* Data integrity
+### Phase 1 — Discovery
 
-⸻
+Identify every iTrack usage, API, query, DB interaction, UI entry point, configuration, and test.
 
-Phase 8 — Deployment
+### Phase 2 — Existing Behavior
 
-Integrate the unified application into the existing AIFO deployment model.
+Document the current iTrack flow from UI to backend to DB/output.
 
-Validate:
+### Phase 3 — Jira Mapping
 
-* Docker
-* Nginx
-* App Service
-* Environment variables
-* Ports
-* Health checks
-* Startup
-* Routing
+Map every existing iTrack operation to an official Jira Cloud API.
 
-⸻
+### Phase 4 — Client Architecture
 
-Phase 9 — Regression Testing
+Design the separate Jira Cloud client and provider abstraction.
 
-Perform complete regression testing for:
+### Phase 5 — UI
 
-AIFO
+Add the Jira Cloud / Legacy iTrack switch.
 
-Every existing feature.
+### Phase 6 — Integration
 
-Release Tracker
+Connect provider selection to the existing business flow.
 
-Every existing feature.
+### Phase 7 — Database
 
-Authentication
+Validate cleanup, persistence, and reload behavior.
 
-All roles.
+### Phase 8 — Testing
 
-Deployment
+Add unit, integration, and end-to-end coverage.
 
-Local/container/App Service.
+### Phase 9 — Regression
 
-⸻
+Verify all existing Release Tracker functionality.
 
-32. Major Migration Risks
+### Phase 10 — Final Review
 
-Identify risks including:
+Confirm that no iTrack use case was missed.
 
-Risk 1 — AIFO functionality regression
+---
 
-Mitigation:
+# 20. Definition of Done
 
-* Feature-by-feature migration
-* Regression testing
-* Existing behavior comparison
+- [ ] Separate Jira Cloud client implemented.
+- [ ] Existing iTrack client remains intact.
+- [ ] Jira Cloud is default.
+- [ ] Legacy iTrack remains selectable.
+- [ ] Generate Report switch controls provider.
+- [ ] Every iTrack use case identified.
+- [ ] Every applicable use case mapped to Jira Cloud.
+- [ ] Business logic unchanged.
+- [ ] Fix-version strings preserved exactly.
+- [ ] Team/team-key behavior preserved.
+- [ ] Story retrieval works in both modes.
+- [ ] Story status works in both modes.
+- [ ] Reporter works in both modes.
+- [ ] Scrum-team lookup works in both modes.
+- [ ] Database cleanup/reload preserved.
+- [ ] Generate Report works end-to-end in both modes.
+- [ ] Review Commits remains functional.
+- [ ] Release Readiness remains functional.
+- [ ] Deployment Readiness remains functional.
+- [ ] Branch Cut Validation remains functional.
+- [ ] Dashboard remains functional.
+- [ ] Scan History remains functional.
+- [ ] Settings/Excel export remains functional.
+- [ ] Existing iTrack tests pass.
+- [ ] Jira Cloud tests pass.
+- [ ] Provider-selection tests pass.
+- [ ] Fix-version edge-case tests pass.
+- [ ] No credentials are hard-coded.
+- [ ] No secrets are logged.
+- [ ] Error handling is implemented.
+- [ ] Documentation updated.
+- [ ] Final review confirms no unnecessary unrelated changes.
 
-Risk 2 — React migration changes UI behavior
+---
 
-Mitigation:
+# 21. Final Instruction to the Development Agent
 
-* Screenshot/reference comparison
-* Component-level testing
+Treat the current working Release Tracker implementation as the **behavioral reference**.
 
-Risk 3 — Release Tracker business logic changes
+The objective is:
 
-Mitigation:
+> Add Jira Cloud as a new issue-tracking provider while preserving the legacy iTrack provider and all existing Release Tracker business behavior.
 
-* Java reference implementation
-* Input/output comparison
-* Golden test cases
+Before coding:
 
-Risk 4 — Authentication issues
+1. Analyze the complete codebase.
+2. Find every iTrack dependency.
+3. Trace every iTrack call from UI through backend to DB.
+4. Map every use case to Jira Cloud.
+5. Create a detailed implementation plan.
+6. Identify risks and compatibility concerns.
+7. List all files that will change.
+8. Only then implement.
 
-Mitigation:
+Do not remove legacy iTrack.
 
-* Reuse existing AIFO authentication
-* Validate role claims
-* Backend authorization
+Do not rewrite the existing iTrack client.
 
-Risk 5 — Deployment breakage
+Do not change unrelated business logic.
 
-Mitigation:
+Do not truncate or alter fix-version values.
 
-* Validate Docker locally
-* Validate container startup
-* Validate App Service configuration
-* Feature branch deployment
+Do not assume Jira API equivalence without verification.
 
-Risk 6 — Performance degradation
+The final architecture should conceptually be:
 
-Mitigation:
+```text
+                    Generate Report
+                           |
+                    Data Source Switch
+                     /               \\
+                    /                 \\
+             Jira Cloud          Legacy iTrack
+                  |                     |
+            New Jira Client       Existing Client
+                  \\                     /
+                   \\                   /
+                    Existing Business Logic
+                             |
+                    Existing DB/Reports/UI
+```
 
-* Parallel execution
-* Database optimization
-* API-call reduction
-* Caching only where behavior allows
+The result must provide a safe transition path from legacy iTrack to Jira Cloud without regression.
+"""
 
-Risk 7 — Database conflicts
-
-Mitigation:
-
-* Schema review
-* Migration scripts
-* Backup
-* Regression validation
-
-⸻
-
-33. Testing Strategy
-
-Create a complete test strategy covering:
-
-UI
-
-* Navigation
-* Filters
-* Forms
-* Tables
-* Buttons
-* Dialogs
-* Error states
-* Loading states
-
-API/Backend
-
-* Inputs
-* Outputs
-* Validation
-* Error handling
-* Business rules
-
-Database
-
-* CRUD
-* Constraints
-* Refresh behavior
-* Data consistency
-
-Integrations
-
-* GitHub
-* iTrack
-* Kubernetes
-* Veracode
-* Teams
-
-Authentication
-
-* Admin
-* Developer
-* Viewer
-
-Performance
-
-* Large number of components
-* Hundreds of commits
-* Parallel API calls
-* Report generation
-
-⸻
-
-34. Feature-by-Feature Comparison Matrix
-
-Create a table:
-
-Feature	AIFO Existing	Release Tracker	Target AIFO	Migration Required	Risk	Test Required
-
-Every feature must be accounted for.
-
-No feature should be marked “not applicable” without justification.
-
-⸻
-
-35. File-Level Impact Analysis
-
-Before implementation, identify:
-
-AIFO files
-
-* Frontend files
-* Backend files
-* DB files
-* Auth files
-* Deployment files
-* Configuration files
-
-Release Tracker files
-
-* React components
-* Java controllers
-* Java services
-* Java repositories
-* Database entities
-* Integration clients
-* Configuration
-* Deployment
-
-Map:
-
-Current file
-     ↓
-Target file/module
-     ↓
-Action
-     ↓
-Reason
-
-⸻
-
-36. Do Not Duplicate Functionality
-
-Before creating any new implementation, check whether AIFO already has:
-
-* Authentication
-* Authorization
-* Logging
-* Database utilities
-* API clients
-* UI components
-* Notification utilities
-* Configuration management
-* Deployment utilities
-
-Reuse existing functionality where possible.
-
-Do not create duplicate implementations.
-
-⸻
-
-37. Backward Compatibility
-
-Existing AIFO users must not experience unexpected changes.
-
-Existing AIFO functionality must continue to work after Release Tracker integration.
-
-The migration must not:
-
-* Break existing pages
-* Break existing authentication
-* Break existing tools
-* Break deployment
-* Remove existing capabilities
-
-⸻
-
-38. Expected Deliverables Before Coding
-
-Before making implementation changes, produce:
-
-Deliverable 1 — Current Architecture
-
-Detailed AIFO architecture.
-
-Deliverable 2 — Release Tracker Architecture
-
-Detailed Release Tracker architecture.
-
-Deliverable 3 — Unified Target Architecture
-
-Proposed final architecture.
-
-Deliverable 4 — Feature Matrix
-
-AIFO vs Release Tracker vs Target.
-
-Deliverable 5 — File-Level Impact Analysis
-
-Exact files/modules affected.
-
-Deliverable 6 — Git Contribution Analysis
-
-Contributors and ownership.
-
-Deliverable 7 — Authentication/Authorization Analysis
-
-Current and target role model.
-
-Deliverable 8 — Deployment Analysis
-
-Exact Docker/App Service/Nginx/reverse-proxy flow.
-
-Deliverable 9 — Migration Plan
-
-Detailed phased plan.
-
-Deliverable 10 — Risk & Mitigation Plan
-
-Detailed risks.
-
-Deliverable 11 — Test Plan
-
-Complete regression strategy.
-
-Deliverable 12 — Definition of Done
-
-Detailed completion criteria.
-
-⸻
-
-39. Important Constraints
-
-These constraints are mandatory:
-
-1. Do not remove existing AIFO functionality.
-2. Do not change Release Tracker business logic.
-3. Do not create Release Tracker as a separate application.
-4. Do not create a separate Release Tracker deployment.
-5. Do not introduce unnecessary new architecture.
-6. Reuse existing AIFO capabilities wherever possible.
-7. Use React 18 + TypeScript + Vite + Tailwind CSS for the unified frontend.
-8. Preserve the existing Release Tracker UI behavior.
-9. Preserve existing Java Release Tracker business behavior during Python migration.
-10. Preserve exact Fix Version strings.
-11. Preserve authentication.
-12. Implement authorization for every actionable UI operation.
-13. Validate authorization in backend logic as well.
-14. Do not make assumptions about AIFO architecture; verify from source code.
-15. Do not make assumptions about deployment; verify Docker/App Service configuration.
-16. Do not make assumptions about contributors; verify Git history.
-17. Do not modify code until the analysis and implementation plan are completed.
-
-⸻
-
-40. Definition of Done
-
-The migration is considered complete only when:
-
-* Complete AIFO functionality is available in React.
-* Existing AIFO functionality is not broken.
-* Release Tracker is fully integrated into AIFO.
-* No standalone Release Tracker application remains.
-* No separate Release Tracker deployment is required.
-* Release Tracker business logic matches the Java reference.
-* Dashboard works.
-* Generate Report works.
-* Review Commits works.
-* Release Readiness works.
-* Branch Cut Validation works.
-* Deployment Readiness works.
-* Scan History works.
-* Settings/Export Center works.
-* Excel reports work.
-* GitHub integration works.
-* iTrack integration works.
-* Kubernetes integration works.
-* Veracode integration works.
-* Teams notification functionality works where applicable.
-* Admin authorization works.
-* Developer authorization works.
-* Viewer authorization works.
-* Generate Report is Admin-only.
-* Admin-only refresh operations are protected.
-* Developer Override is protected.
-* Backend authorization is enforced.
-* Fix Version is preserved exactly.
-* Database operations are validated.
-* Existing AIFO database behavior is preserved.
-* Docker build works.
-* Container startup works.
-* Nginx/reverse proxy works.
-* Azure App Service deployment works.
-* Existing AIFO tools continue working.
-* Regression testing is completed.
-* Performance is acceptable.
-* Documentation is updated.
-
-⸻
-
-41. Final Instruction to the Development Agent
-
-Treat this task as a lead architect + senior developer migration assessment.
-
-Do not rush into implementation.
-
-First understand the actual code.
-
-Then produce a detailed plan.
-
-The plan must be based on actual source-code evidence, not assumptions.
-
-The primary objectives are:
-
-Preserve AIFO
-+
-Migrate AIFO UI to React
-+
-Integrate Release Tracker
-+
-Preserve Release Tracker business logic
-+
-Preserve authentication/authorization
-+
-Preserve deployment architecture
-+
-Avoid breaking existing functionality
-
-The final result must be a single unified AIFO application containing both the existing AIFO capabilities and the complete Release Tracker capabilities.
-
-Only after the analysis, architecture review, feature matrix, file-level impact analysis, risks, migration plan, and testing strategy are completed should implementation begin.
+path = Path("/mnt/data/jira_cloud_dual_mode_migration_prompt.md")
+path.write_text(content, encoding="utf-8")
+print(path.exists(), path)
