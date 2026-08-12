@@ -1,341 +1,455 @@
-from pathlib import Path
-
-content = """# Release Tracker — Jira Story ID Fallback, Direct Release Violation & Override Fix
+# Release Tracker – Review Commits Enhancements & Commit Lifecycle Analysis
 
 ## Objective
 
-Analyze and implement these three changes without changing unrelated working behavior.
+Enhance and correct the **Review Commits** functionality in the Python-migrated Release Tracker application so that its behavior matches the approved and working Java implementation, while also addressing the additional requirements identified during current release validation.
 
-The Java Release Tracker is the trusted reference implementation. The Python implementation must preserve the same business behavior.
+The Java implementation should be treated as the **source of truth for existing business logic**.
 
-Before coding:
-1. Analyze Java and Python code paths.
-2. Identify impacted UI, API, service, database, configuration, and tests.
-3. Create a detailed implementation plan.
-4. Implement only after the plan is complete.
-5. Run regression validation.
+Do not redesign or simplify existing business logic without validating the corresponding Java behavior first.
 
 ---
 
-# 1. Jira Story ID / Legacy iTrack Story ID Fallback
+# 1. Mandatory Pre-Implementation Analysis
 
-## Background
+Before changing any code, analyze the following:
 
-The organization migrated from legacy iTrack to Jira Cloud. Story numbers changed during migration.
+1. Current Java Release Tracker implementation.
+2. Current Python Release Tracker implementation.
+3. Existing Java/Python migration analysis documents, if available.
+4. Review Commits UI flow.
+5. Generate Report flow that populates the Review Commits data.
+6. All backend services, controllers, clients, repositories/DB operations involved.
+7. Commit lifecycle calculation.
+8. Violation detection.
+9. Violation category/description/resolution generation.
+10. Override workflow.
+11. iTrack/Jira story lookup.
+12. Fix-version evaluation.
+13. Scrum-team lookup.
+14. Existing database schema and commit-related tables.
 
-Historical commits may still contain the old iTrack story number, while the corresponding Jira Cloud story has a new/current story number.
+Create a detailed implementation plan before modifying the code.
 
-The existing `iTrack_stories` table contains the legacy identifier in:
+For every proposed change, identify:
 
-`old_story_number`
+- Java implementation/path.
+- Current Python implementation/path.
+- Difference.
+- Root cause.
+- Required Python change.
+- DB impact.
+- UI impact.
+- API impact.
+- Regression risk.
+- Test scenario.
 
-The current commit-analysis logic checks whether the story associated with a commit belongs to the selected/current fix version. Historical commits can therefore be incorrectly reported as invalid.
+---
 
-## Required behavior
+# 2. Commit Lifecycle Details in UI
 
-For every commit:
+## Current Issue
 
-1. Extract the story number using the existing commit-message parsing logic.
-2. First check the current Jira story number.
-3. If the current story exists and belongs to the selected fix version, retain the existing valid behavior.
-4. If the current story is not found, perform a fallback lookup using `iTrack_stories.old_story_number`.
-5. If the old story number belongs to the selected fix version, treat the commit as valid according to the existing validation rules.
-6. If neither identifier matches the selected fix version, preserve the existing invalid/violation behavior.
+When the user clicks/selects **Commit Lifecycle**, the Python application is showing only limited/basic information.
 
-The old story lookup is only a temporary compatibility fallback. It must not replace the current Jira story lookup.
+The Java implementation previously displayed richer technical information.
 
-## Configuration
+## Requirement
 
-Introduce a feature/configuration flag using the project's existing configuration mechanism, for example:
+Compare the Java and Python implementations and restore the complete lifecycle information available in Java.
 
-`ENABLE_OLD_STORY_NUMBER_FALLBACK=true`
+The lifecycle details should provide sufficient technical information to understand:
 
-Behavior:
-- Enabled: current story lookup + legacy fallback.
-- Disabled: current story lookup only.
+- Where the commit originated.
+- Where the commit currently exists.
+- Branch information.
+- Commit SHA/details.
+- Lifecycle classification.
+- Relevant source/release branches.
+- Cherry-pick information where applicable.
+- Direct-release information where applicable.
+- Relevant comparison details.
+- Any other technical metadata currently displayed by Java.
 
-Do not introduce an unrelated configuration framework.
+Do not invent new lifecycle information.
 
-## Database
+Use the Java implementation as the baseline.
+
+### UI Rename
+
+In the Review Commits page:
+
+Current:
+
+`Commit Lifecycle Status`
+
+Change to:
+
+`Commit Lifecycle`
+
+This is a UI wording change only unless the underlying Java business logic indicates otherwise.
+
+---
+
+# 3. Violation Metadata Is Missing
+
+## Current Problem
+
+In the Python application, violation tooltips/details frequently show:
+
+- Category: `Unknown`
+- Description: `No description`
+- Resolution: `No resolution provided`
+
+This is incorrect compared with the intended Java behavior.
+
+## Requirement
+
+Trace the complete Java flow for generating:
+
+- Violation category.
+- Violation description.
+- Violation resolution.
+
+Compare it against Python.
+
+Determine why Python is losing these values.
+
+Fix the Python implementation so that violation metadata is populated consistently with Java.
+
+The fix must cover:
+
+- Backend generation.
+- Database persistence.
+- API response.
+- Frontend rendering.
+- Tooltip/popover display.
+
+Do not simply hardcode descriptions in the UI.
+
+The metadata must originate from the correct business logic.
+
+---
+
+# 4. Override Workflow
+
+## Current Problem
+
+The Review Commits page has an Action/Override workflow.
+
+The user can enter an override message and click `OK`, but the action is currently not working correctly.
+
+Additionally, when logged in as an Admin user, the expected approval/rejection controls are not visible.
+
+## Requirements
+
+Analyze the complete Java override workflow and replicate it in Python.
 
 Verify:
-- `old_story_number` exists.
-- Current story-number field exists.
-- Team key and fix-version fields are correct.
-- Existing indexes/query patterns are adequate.
 
-Avoid unnecessary schema changes.
+1. Override button visibility.
+2. Override dialog/modal.
+3. Comment/message input.
+4. OK/Submit button.
+5. Backend request.
+6. Authentication/authorization.
+7. DB persistence.
+8. Override status.
+9. Admin approval/rejection controls.
+10. UI refresh after override.
+11. Audit information.
 
-The fallback must be efficient and must not create unnecessary repeated DB/API calls.
+### Role Behavior
 
-## Critical fix-version rule
+The existing role model must be respected.
 
-The complete fix-version string must be preserved everywhere.
+- Normal users/developers should have the permissions defined by the existing application.
+- Admin users should be able to approve/reject override requests where applicable.
+- Unauthorized users must not be able to invoke protected backend operations by directly calling the API.
 
-Do not:
-- truncate it;
-- remove meaningful spaces;
-- take substrings;
-- incorrectly normalize it;
-- change its casing unless existing logic explicitly requires it.
+Do not rely only on hiding buttons in React.
 
-Verify the complete value through:
-
-`UI → API → Controller/Route → Service → DB/External Client → Commit Analysis → Response → UI`
-
----
-
-# 2. Direct Release Must Be a Violation
-
-## Required business rule
-
-If a commit exists in the release branch but is missing from master/main, it represents a direct release and MUST be a violation.
-
-There is no exception for a direct release.
-
-Expected rule:
-
-`Release branch contains commit AND master/main does not contain commit = Direct Release = Violation`
-
-## Required analysis
-
-Identify:
-1. Where direct release is detected.
-2. Which method determines lifecycle status.
-3. Which method determines violation/non-violation.
-4. Why the current implementation marks this scenario non-violation.
-5. Any historical reason for the current behavior.
-6. Whether UI/database transformations affect the result.
-
-Then change the smallest possible code path necessary to enforce the rule.
-
-## Cherry-pick protection
-
-Do not break legitimate cherry-pick detection.
-
-A legitimate cherry-picked commit must continue to follow the existing cherry-pick/non-violation behavior when it satisfies the existing rules.
-
-Distinguish:
-
-- Valid cherry-pick: legitimately delivered through the existing cherry-pick detection.
-- Direct release: present in release branch, absent from master/main, and not legitimately identified as a cherry-pick.
-
-Only the second case must be forced to violation.
-
-Do not rewrite unrelated lifecycle logic.
+Authorization must also be enforced at the backend/business-operation level.
 
 ---
 
-# 3. Review Commits Override — OK Button
+# 5. Direct Release Detection
 
-## Problem
+## Current Problem
 
-Review Commits → Actions → Override opens an override dialog.
+Some commits are being classified as `Direct Release` violations.
 
-Expected flow:
+However, there is a legitimate development pattern that may produce a different SHA:
 
-`Override → Enter comment → OK → Frontend handler → Backend API → Service → DB update → UI refresh`
+1. Branch cut occurs.
+2. Developer creates a feature branch from the release branch.
+3. Developer makes changes on that branch.
+4. Commit is subsequently delivered to the release branch.
+5. The SHA may not exist in master because the development branch originated from the release branch.
 
-Currently the OK button does not correctly accept/process the entered data.
+This can incorrectly appear as a direct release.
 
-## Frontend analysis
+## Requirement
 
-Check:
-- Override click handler.
-- Modal/dialog state.
-- Comment binding.
-- Validation.
-- OK button handler.
-- Request payload.
-- Commit ID.
-- Team key.
-- Complete fix version.
-- Complete comment.
-- API response handling.
-- Error handling.
-- UI refresh/update.
+Analyze the current Java logic and determine exactly how `Direct Release` is detected.
 
-## Backend analysis
+Document:
 
-Check:
-- Endpoint/route.
-- HTTP method.
-- Request model.
-- Validation.
-- Controller/route handling.
-- Service.
-- Authorization.
-- Database update.
-- Comment persistence.
-- Violation/status update.
-- Response.
-- Exception handling.
-
-## Database
-
-Verify:
-- Correct record is updated.
-- Correct team key is used.
-- Complete fix version is preserved.
-- Complete comment is preserved.
-- No unrelated records are modified.
-
-## Authorization
-
-Do not bypass authorization.
-
-The Override action must remain protected at backend level as well as UI level.
-
-Expected model:
-- Developer/authorized users can perform Override.
-- General/viewer users cannot execute the operation.
-- Admin retains appropriate access.
-
----
-
-# Java-to-Python Comparison
-
-For every affected behavior, inspect the Java reference implementation and equivalent Python implementation.
-
-Compare:
-- Controllers/routes.
-- Request parameters.
-- Response models.
-- Services.
-- Database queries.
-- Lifecycle logic.
-- Violation logic.
-- Configuration.
-- UI/API interaction.
-- Tests.
-
-The Python implementation may differ in syntax/architecture, but the business behavior must not deviate.
-
----
-
-# Required Tests
-
-## Story fallback
-
-Test:
-1. Current Jira story exists → valid.
-2. Current story missing + old story exists → valid.
-3. Neither exists → existing violation behavior.
-4. Fallback disabled → old story is ignored.
-5. Fix version containing spaces is preserved exactly.
-6. Null/empty old story does not fail.
-7. Multiple commits using legacy story IDs.
-
-## Direct release
-
-Test:
-1. Commit in master and release → existing behavior.
-2. Commit in release but not master → violation.
-3. Legitimate cherry-pick → existing behavior preserved.
-4. Direct release cannot become non-violation through lifecycle mapping.
-5. Unrelated lifecycle statuses remain unchanged.
-
-## Override
-
-Test:
-1. Dialog opens.
-2. Comment is entered.
-3. OK calls the correct API.
-4. Complete comment reaches backend.
-5. Authorization is enforced.
-6. DB is updated correctly.
-7. UI reflects the updated state.
-8. Invalid/empty comment follows existing rules.
-9. API failure is handled.
-10. Unauthorized direct API invocation is rejected.
-
----
-
-# Regression Scope
-
-Verify:
-- Review Commit analysis.
-- Violation calculation.
-- Lifecycle status.
+- Code path.
+- Comparison logic.
+- Branches compared.
+- SHA comparison.
+- Parent/ancestor relationships if used.
 - Cherry-pick detection.
-- Team filtering.
-- Fix-version filtering.
-- Release readiness.
-- Deployment readiness.
-- Branch-cut validation.
-- Dashboard.
-- Settings/export.
-- Jira Cloud integration.
-- Legacy iTrack integration.
-- Authentication/authorization.
-- Report generation.
+- Merge detection.
 
-Do not modify unrelated working functionality.
+Then determine whether the above legitimate workflow can be distinguished from an actual direct release.
+
+### If technically possible
+
+Implement a more accurate classification.
+
+Do not blindly classify every:
+
+> Commit exists in release branch but not master
+
+as a violation if Git history proves that the commit originated from a legitimate post-branch-cut development flow.
+
+Possible evidence to investigate:
+
+- Branch ancestry.
+- Commit timestamps.
+- Parent commits.
+- Merge-base.
+- Branch creation point.
+- Commit graph.
+- Cherry-pick metadata.
+- Equivalent patch detection.
+- Commit message references.
+- Git patch/content equivalence.
+
+### Important
+
+Do not introduce speculative logic.
+
+First determine what can reliably be detected from the available Git data.
+
+If reliable detection is not possible, document the limitation and propose the safest classification strategy.
 
 ---
 
-# Implementation Plan Required Before Coding
+# 6. Fix-Version Evaluation
 
-## Phase 1 — Discovery
-List all relevant Java, Python, React/TypeScript, controller/route, service, DB, configuration, and test files.
+## Current Problem
 
-## Phase 2 — Story ID Fallback
-Document current lookup, old-story lookup, feature flag, query, integration point, performance impact, and tests.
+Some commits are reported as violations because the story extracted from the commit message does not belong to the current fix version.
 
-## Phase 3 — Direct Release
-Document current lifecycle flow, current direct-release classification, reason for non-violation, required change, cherry-pick interaction, and tests.
+This is not sufficient to explain every violation.
 
-## Phase 4 — Override
-Document UI event flow, API flow, backend processing, DB update, authorization, root cause of OK-button failure, fix, and tests.
+A story may belong to:
 
-## Phase 5 — Regression
-Document every impacted existing feature and validation approach.
+- Current fix version.
+- Previous fix version.
+- Future fix version.
+- Another release.
+- No known fix version.
+
+## Requirement
+
+During commit analysis, determine the actual fix version associated with the extracted story.
+
+The existing story lookup already retrieves information such as Scrum Team.
+
+Extend the lookup so that the evaluated fix version is also available.
+
+Do NOT overwrite the existing primary/current fix-version field if it has a different business purpose.
+
+Add a separate DB field for the evaluated story fix version.
+
+Suggested field name:
+
+`evaluated_fix_version`
+
+Before implementing, verify the existing schema/naming conventions and use the appropriate naming convention if another name is more consistent.
 
 ---
 
-# Definition of Done
+# 7. Violation Reason Classification
 
-- [ ] Current Jira story validation remains intact.
-- [ ] Old iTrack story fallback is implemented.
-- [ ] Fallback is configurable.
-- [ ] `old_story_number` is used correctly.
-- [ ] Fix-version strings remain complete and unchanged.
-- [ ] Direct release is always a violation unless it is legitimately identified as a valid cherry-pick.
-- [ ] Existing cherry-pick behavior remains intact.
-- [ ] Override dialog works.
-- [ ] Override comment is accepted by OK.
-- [ ] Override API is invoked correctly.
-- [ ] Override data is persisted.
-- [ ] Authorization is enforced.
-- [ ] UI reflects successful override.
-- [ ] Error cases are handled.
-- [ ] Automated tests are added/updated.
-- [ ] Regression tests pass.
-- [ ] No unrelated functionality is changed.
-- [ ] Java reference behavior has been reviewed.
-- [ ] Python implementation has been reviewed.
+For each commit whose story does not belong to the current fix version, determine and persist the reason.
 
-# Final Report Required
+At minimum distinguish:
 
-After implementation provide:
-1. Files changed.
-2. Java paths analyzed.
-3. Python paths changed.
-4. Story fallback implementation.
-5. Configuration property.
-6. Direct-release violation code path.
-7. Root cause and fix for Override OK.
-8. DB changes, if any.
-9. API changes, if any.
-10. Authorization impact.
-11. Tests added/updated.
-12. Test results.
-13. Regression results.
-14. Remaining risks/limitations.
+### Previous Fix Version
 
-Do not make assumptions about unstated business rules. If existing behavior conflicts with these requirements, identify the conflict in the plan before changing it.
-"""
+The story belongs to an earlier release/fix version.
 
-path = Path("/mnt/data/release_tracker_jira_fallback_direct_release_override_prompt.md")
-path.write_text(content, encoding="utf-8")
-print(path)
+### Current Fix Version
+
+The story belongs to the currently analyzed fix version.
+
+### Future Fix Version
+
+The story belongs to a future release.
+
+### Unknown / Unavailable
+
+The story/fix-version information cannot be determined.
+
+Use the actual Jira/iTrack data rather than guessing from version names.
+
+Persist the evaluated fix version so that the UI can explain the violation accurately.
+
+---
+
+# 8. Violation UI Representation
+
+## Current Requirement
+
+For previous/future fix-version cases, the UI should make the reason obvious.
+
+Do not show only:
+
+`Violation ?`
+
+Instead, provide a warning-style indicator with meaningful text.
+
+Example:
+
+`Previous Fix Version`
+
+or
+
+`Future Fix Version`
+
+The indicator should remain **red**, because these records require attention and should not be treated as non-violations.
+
+The warning symbol/text should have a tooltip or detail view containing:
+
+- Violation category.
+- Reason.
+- Evaluated fix version.
+- Current analyzed fix version.
+- Story number.
+- Description.
+- Resolution.
+- Any other relevant technical details.
+
+Do not change the underlying violation semantics merely because the UI uses a warning symbol.
+
+---
+
+# 9. Violation Tooltip / Details
+
+Ensure the tooltip/detail popup works correctly.
+
+For every violation category, verify:
+
+- Category is populated.
+- Description is populated.
+- Resolution is populated.
+- Reason is populated where applicable.
+- Evaluated fix version is displayed where relevant.
+- Previous/future version information is displayed where applicable.
+
+Do not allow the UI to fall back to:
+
+`Unknown`
+
+`No description`
+
+`No resolution provided`
+
+when the Java implementation has valid values.
+
+---
+
+# 10. Review Commits Filters
+
+The Review Commits page already contains multiple filters.
+
+Add the following filters:
+
+## Commit Lifecycle Filter
+
+Allow filtering by the available commit lifecycle classifications.
+
+Examples may include:
+
+- Normal/Expected lifecycle.
+- Cherry Picked.
+- Direct Release.
+- Other classifications supported by the application.
+
+Use the actual lifecycle values from the application rather than inventing values.
+
+## Violation Category Filter
+
+Add a filter for violation category.
+
+This should allow users to quickly identify specific violation types.
+
+The filters should work together with the existing filters.
+
+Filtering must be applied correctly to the complete Review Commits dataset.
+
+---
+
+# 11. Backend Filtering
+
+Do not implement filters purely on the frontend if the existing architecture/business logic expects backend filtering.
+
+Analyze the current implementation and determine the correct approach.
+
+Ensure:
+
+- Team filtering works.
+- Fix-version filtering works.
+- Scrum-team filtering works.
+- Component filtering works.
+- Commit filtering works.
+- Commit lifecycle filtering works.
+- Violation category filtering works.
+
+Preserve existing filter behavior.
+
+---
+
+# 12. Generate Report → Review Commits Flow
+
+The Review Commits data is generated/populated during the Generate Report process.
+
+Therefore, analyze the complete flow:
+
+```text
+UI
+  ↓
+Generate Report
+  ↓
+Controller/API
+  ↓
+Report Service
+  ↓
+Git APIs
+  ↓
+Commit extraction
+  ↓
+Story identification
+  ↓
+Story lookup
+  ↓
+Fix-version evaluation
+  ↓
+Scrum-team lookup
+  ↓
+Lifecycle analysis
+  ↓
+Violation analysis
+  ↓
+Violation metadata
+  ↓
+Database persistence
+  ↓
+Review Commits API
+  ↓
+Review Commits UI
