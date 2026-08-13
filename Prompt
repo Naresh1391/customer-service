@@ -1,700 +1,447 @@
 from pathlib import Path
-
-content = """# Release Tracker — Major/Minor Release Commit Analysis Prompt
+content = """# Prompt: Detect Feature-Branch Cherry-Pick After Branch Cut Without False Direct-Release Violations
 
 ## Objective
 
-Analyze the **current Python Release Tracker BFF codebase** and determine the best approach for reliable commit analysis across OC's major and minor release models.
+Analyze the current **Python Release Tracker** implementation and enhance review-commit analysis for a specific scenario currently being reported as a `DIRECT_RELEASE` violation even though the same logical change was transferred through a feature branch after the release branch was cut.
 
-**Do not implement code.** Produce a detailed technical analysis, current-code assessment, recommended approach, decision flow, risks, and phased implementation plan only.
-
-**Important:** Python is the current source of truth. Do not refer to Java unless explicitly requested as a historical reference.
+**Important:** The Python codebase is the current source of truth. Do not refer to Java unless explicitly requested.
 
 ---
 
-## 1. Current Release Tracker Context
+## Problem Scenario
 
-Analyze the complete current Python Release Tracker BFF project, including:
+Expected process:
 
-- Generate Report flow
-- Review Commits flow
-- Release Readiness flow
-- GitHub integration
-- Kubernetes integration
-- Story/iTrack/Jira integration
-- Database models and persistence
-- Component retrieval
-- Branch/release resolution
-- Commit retrieval and parsing
-- Lifecycle-status logic
-- Violation logic
-- Cherry-pick detection
+1. Release branch is cut from `master`.
+2. Developer has a change on a feature branch.
+3. Change is committed/merged to `master`, creating SHA `123`.
+4. Because the release branch was already cut, the change needs to be included in the release.
+5. Normally the developer should cherry-pick SHA `123` from `master` into the release branch.
+
+However, cherry-picking directly from `master` can cause merge conflicts.
+
+Developers sometimes use this alternative:
+
+```text
+feature-A
+   |
+   v
+master
+   |
+   +-- SHA 123
+
+release/XXX  (already cut)
+   |
+   v
+feature-B
+   |
+   | equivalent change transferred/cherry-picked
+   v
+release/XXX
+   |
+   +-- SHA 456
+```
+
+Here:
+
+- SHA `123` exists on `master`.
+- SHA `456` exists on the release side.
+- SHA `123 != SHA 456`.
+- The release-side change may currently be detected as `DIRECT_RELEASE`.
+- Existing logic therefore reports it as a violation.
+
+The desired behavior is:
+
+```text
+Commit Lifecycle = DIRECT_RELEASE
+Compliance       = NON-VIOLATION
+Category         = dedicated feature-branch-transfer classification
+```
+
+when the system can reliably establish that SHA `456` represents the same logical change transferred through the feature-branch workflow.
+
+---
+
+# Required Analysis
+
+First inspect the complete current Python implementation related to:
+
+- Generate Report
+- Review Commits
+- Commit analysis
+- Lifecycle status
 - Direct-release detection
-- Existing major/minor release handling
-- Existing asynchronous/parallel processing
-
-Do not assume the current implementation is correct. Verify behavior from the actual code.
-
----
-
-## 2. Existing Data-Fetching Behavior to Document
-
-First document exactly how the current application obtains the data used by Generate Report.
-
-### Stories
-
-Document:
-
-1. How stories are fetched.
-2. Team/team-key handling.
-3. Fix-version handling.
-4. Primary source.
-5. Fallback source.
-6. Previous release/fix-version lookup.
-7. Date-range logic.
-8. Story persistence.
-9. Refresh/delete behavior.
-10. How stories are consumed by commit analysis.
-
-### Components
-
-Document:
-
-1. How components are identified.
-2. GitHub calls.
-3. Branch/repository resolution.
-4. Database persistence.
-5. Refresh behavior.
-6. Date-range/fallback logic.
-7. How component information feeds Generate Report.
-
-### Release/Kubernetes information
-
-Document:
-
-- How previous release information is obtained.
-- How current release information is obtained.
-- How Kubernetes production information is obtained.
-- How the **latest Git commit ID is obtained from Kubernetes**.
-- Which Kubernetes environment is queried.
-- How the Kubernetes commit ID is used.
-- Any fallback behavior.
-
----
-
-# 3. Existing Generate Report Flow
-
-Trace the complete flow from UI click to final database persistence.
-
-Document:
-
-1. UI inputs.
-2. API/BFF endpoint.
-3. Request payload.
-4. Validation.
-5. Story retrieval.
-6. Component retrieval.
-7. Previous/current branch resolution.
-8. GitHub calls.
-9. Kubernetes calls.
-10. Commit retrieval.
-11. Commit parsing.
-12. Story-number extraction.
-13. Story/fix-version validation.
-14. Scrum-team lookup.
-15. Lifecycle determination.
-16. Violation determination.
-17. Cherry-pick detection.
-18. Direct-release detection.
-19. Missing-release-commit detection.
-20. Database writes.
-21. Parallel/asynchronous processing.
-22. Error handling.
-23. Final response.
-
-Identify every important method/function involved.
-
----
-
-# 4. Existing Commit Analysis — Document Every Analysis Path
-
-Inspect the actual Python code and document every distinct Git comparison currently used.
-
-At minimum verify these expected paths.
-
-## 4.1 Previous Release → Current Release
-
-Document exactly how this comparison is performed and what commits it identifies.
-
-Explain how those commits affect lifecycle and violation status.
-
-## 4.2 Current Release → Previous Release / Reverse Comparison
-
-Document why the reverse comparison exists and whether it is used for:
-
 - Cherry-pick detection
-- Missing commits
-- Divergence
-- Lifecycle classification
-- Other logic
+- Violation calculation
+- Git/GitHub data retrieval
+- Commit message parsing
+- Commit SHA and parent handling
+- Branch relationships
+- Existing database metadata
+- Existing violation category/reason/resolution
+- Review Commit UI
 
-Do not assume its purpose; verify it.
-
-## 4.3 Previous Release vs Current Release Difference
-
-Document the Git operation, resulting commit set, and downstream classification.
-
-## 4.4 Master → Current Release
-
-Analyze how master-to-release differences are used to identify commits that belong to the release but are missing from the release branch.
-
-Document the effect on Review Commits.
-
-## 4.5 Release Branch → Master / Direct Release Detection
-
-Document how commits present in the release branch but absent from master are detected.
-
-Explain:
-
-- Exact comparison.
-- Current lifecycle classification.
-- Current violation classification.
-- SHA assumptions.
-- False-positive scenarios.
-
-## 4.6 Cherry-Pick Detection
-
-Document:
-
-- How cherry-picks are identified.
-- Whether SHA equality is required.
-- Whether patch equivalence, commit message, Git patch-id, PR metadata, or other signals are used.
-- How different SHAs representing the same logical change are handled.
-- How cherry-picked commits affect violation/lifecycle status.
-
-## 4.7 Story/Fix-Version Validation
-
-Document:
-
-- Story-number extraction.
-- Story lookup.
-- Fix-version lookup.
-- Current/previous/future fix-version behavior.
-- Fallback behavior.
-- Impact on violation classification.
+Document the exact current flow before modifying anything.
 
 ---
 
-# 5. OC Release Process
+# Investigate Reliable Git Signals
 
-OC has approximately:
+Determine whether the scenario can be detected reliably using Git/GitHub data.
 
-- 100+ microservices.
-- 500+ developers.
+Investigate all of the following.
 
-Releases alternate between **major and minor releases**.
+## 1. Commit Message
 
-## Major Release
+Compare source and release-side commit messages.
 
-Typical process:
+Determine whether normalized message matching is useful only as supporting evidence.
 
-1. Development occurs on master.
-2. Release branch is cut from master.
-3. That branch becomes the major release branch.
-4. It is deployed.
-5. Commit analysis identifies relevant differences and missing/extra commits.
+Do **not** classify a commit as valid solely because messages match.
 
-This is broadly trunk-based.
+## 2. Patch Equivalence
 
-## Minor Release
+Investigate Git mechanisms such as:
 
-Recommended process:
+- patch-id
+- equivalent diffs
+- normalized patch comparison
+- equivalent change detection
 
-1. Start from the previous release branch.
-2. Create the new minor-release branch from that previous release.
-3. Cherry-pick required fixes from master.
-4. Deploy the minor release.
+Determine whether patch equivalence can establish that two commits introduce the same logical code change despite different SHA IDs and parents.
 
-However, this process is **not consistently followed**.
+Prefer a robust combination of evidence rather than a single weak heuristic.
 
-In practice, developers may:
-
-- Cut minor-release branches directly from master.
-- Cut them from a previous release.
-- Create feature branches from release branches.
-- Commit directly to release branches.
-- Cherry-pick changes.
-- Make commits immediately before release.
-- Use different approaches depending on urgency.
-
-Therefore, the analysis must not assume that the declared release type tells us the actual Git ancestry.
-
----
-
-# 6. Core Problem Statement
-
-The current Review Commits analysis can produce false positives, especially for minor releases.
-
-The key question is:
-
-> How can Release Tracker determine the actual ancestry/source of a release branch and choose the correct commit-analysis strategy?
-
-For example:
-
-### Expected minor-release flow
-
-```text
-master
-  |
-  +---- Major Release
-           |
-           +---- Minor Release
-                    |
-                    +---- cherry-picked fixes
-```
-
-### Actual minor-release flow sometimes observed
-
-```text
-master
-  |
-  +---- Minor Release
-```
-
-These two cases require different analysis logic.
-
----
-
-# 7. Investigate Git/GitHub Branch Ancestry
-
-Research Git/GitHub capabilities and determine whether the application can reliably identify:
-
-> Was the release branch actually created from master, or from the previous release branch?
-
-Investigate:
-
-- Commit graph
-- Merge-base
-- Common ancestors
-- Branch refs
-- GitHub branch APIs
-- GitHub Events API
-- Push events
-- Pull requests
-- Audit/event information, if available
-- Commit timestamps
-- Tags/releases
-- Branch creation events
-- Repository permissions
-- API retention limitations
-- Force pushes
-- Rebases
-- Squash merges
-- Cherry-picks
-- Duplicate logical changes with different SHAs
-
-Clearly distinguish:
-
-### Reliable evidence
-What can definitively establish ancestry.
-
-### Strong inference
-What can usually indicate ancestry.
-
-### Unreliable evidence
-What can produce misleading conclusions.
-
-Do not assume Git permanently stores "branch X was created from branch Y."
-
----
-
-# 8. Long Release-Gap Scenario
-
-Explicitly analyze:
-
-- Major release in June.
-- No releases in July.
-- Minor release in August.
-
-Possible scenarios:
-
-1. August branch comes from June major release.
-2. August branch comes directly from master.
-3. August branch comes from another branch.
-
-Determine how the application should analyze each case.
-
-Do not assume the most recent calendar release is necessarily the actual Git parent.
-
----
-
-# 9. Evaluate Solution Options
-
-Analyze at least these alternatives.
-
-## Option A — Git Commit-Graph / Merge-Base Detection
-
-Use Git ancestry and merge-base calculations.
-
-Evaluate:
-
-- Algorithm.
-- Accuracy.
-- Edge cases.
-- GitHub API requirements.
-- Performance.
-
-## Option B — GitHub Branch-Creation/Event Metadata
-
-Determine whether GitHub events/audit information can identify branch creation.
-
-Evaluate:
-
-- Availability.
-- Permissions.
-- Retention.
-- Reliability.
-
-## Option C — Explicit Release Metadata
-
-Use release type + previous release information.
-
-Evaluate whether this is sufficient despite developer deviations.
-
-## Option D — Hybrid Detection
-
-Combine:
-
-- Declared major/minor type.
-- Previous release branch.
-- Git merge-base.
-- Commit graph.
-- GitHub metadata.
-- Release dates.
-- Tags, if available.
-
-Evaluate whether this is safer.
-
-## Option E — Governance
-
-Require release metadata such as:
-
-- Release type.
-- Parent branch.
-- Previous release.
-- Intended source branch.
-
-Evaluate the practicality for 500+ developers.
-
-## Option F — Confidence-Based Detection
-
-Consider classifications such as:
-
-- CONFIRMED
-- HIGH_CONFIDENCE
-- INFERRED
-- UNKNOWN
-
-Evaluate whether this is safer than forcing binary assumptions.
-
----
-
-# 10. False-Positive Scenarios
-
-Analyze the current code against these scenarios:
-
-1. Minor branch created from master.
-2. Minor branch created from previous release.
-3. Cherry-picked commit with different SHA.
-4. Feature branch created from a release branch.
-5. Direct commit to release branch.
-6. Commit added to master after branch cut.
-7. Commit made shortly before release.
-8. Commit made shortly after branch cut.
-9. Rebased branch.
-10. Squashed merge.
-11. Merge commit.
-12. Duplicate logical changes.
-13. Long gap between releases.
-14. Previous release several weeks/months earlier.
-15. Multiple releases between relevant branches.
-16. Missing previous release branch.
-17. Deleted/recreated branch.
-18. Force-pushed branch.
-19. Story/fix-version changed after commit.
-20. Legacy iTrack → Jira Cloud story migration.
-21. Different SHAs representing the same logical change.
-
-For each scenario explain:
-
-- Current behavior.
-- Whether it is correct.
-- Why false positives occur.
-- Recommended behavior.
-
----
-
-# 11. Recommended Commit-Analysis Strategy
-
-Determine the correct analysis model for:
-
-### Major release
-
-If branch ancestry indicates master, what comparisons should run?
-
-### Minor release from previous release
-
-What comparisons should run?
-
-### Minor release from master
-
-What comparisons should run?
-
-### Unknown ancestry
-
-What is the safest behavior?
-
-The objective is to minimize false-positive violations while preserving the existing valid analysis.
-
----
-
-# 12. Review Commits UI Impact
-
-Analyze whether the current Review Commits UI needs additional metadata to make analysis explainable.
-
-Potential metadata:
-
-- Declared release type.
-- Detected parent branch.
-- Expected parent branch.
-- Branch ancestry status.
-- Detection method.
-- Confidence.
-- Previous release branch.
-- Current release branch.
-- Analysis strategy used.
-
-Do not implement UI changes. Recommend only what is justified.
-
----
-
-# 13. Database Impact
-
-Analyze whether the existing database schema is sufficient.
-
-Potential information to persist:
-
-- Release type.
-- Expected parent branch.
-- Detected parent branch.
-- Previous release branch.
-- Branch ancestry result.
-- Detection confidence.
-- Detection method.
-- Selected analysis strategy.
-- Analysis timestamp.
-
-Do not modify the database during this task.
-
----
-
-# 14. Performance and Reliability
-
-OC has 100+ microservices, so the solution must be practical at release time.
+## 3. Commit Ancestry
 
 Analyze:
 
-- GitHub API call count.
-- Duplicate API calls.
-- Commit retrieval volume.
-- Merge-base operations.
-- Parallel processing.
-- Existing Python asynchronous execution.
-- GitHub API rate limits.
-- Batch operations.
-- Failure/retry handling.
-- Time required to generate the report.
-- Opportunities for minimizing repeated Git operations.
+- parent SHA
+- merge parents
+- common ancestors
+- ancestry relationships
+- whether the release-side feature branch originated from the release branch
+- whether the source change exists on another branch
+
+Determine what can actually be proven from Git history.
+
+## 4. Branch Relationships
+
+Investigate whether the available GitHub APIs/data can establish:
+
+- release branch origin
+- feature branch origin
+- whether a feature branch was derived from the release branch
+- whether a source feature branch contains the corresponding master change
+- whether the release-side commit originated from that feature branch
+
+Do not assume GitHub retains an explicit branch-creation relationship if it cannot be reliably derived.
+
+## 5. Source Commit on Master
+
+For a candidate direct-release commit:
+
+1. Identify the story/commit metadata.
+2. Find the corresponding master change when possible.
+3. Compare the release-side change against the source change.
+4. Determine whether it was transferred through another feature branch.
 
 ---
 
-# 15. Current Python Code Audit
+# Classification Requirement
 
-Before recommending changes, inspect the actual Python implementation.
-
-For every relevant method/function identify:
-
-- File.
-- Class/module.
-- Method/function.
-- Purpose.
-- Inputs.
-- Outputs.
-- Dependencies.
-- Current limitations.
-- Whether it should be reused, modified, or replaced.
-
-Specifically locate:
-
-- GitHub branch methods.
-- Commit retrieval methods.
-- Branch comparison methods.
-- Merge/difference methods.
-- Cherry-pick detection.
-- Direct-release detection.
-- Lifecycle calculation.
-- Violation calculation.
-- Release-type handling.
-- Previous-release resolution.
-- Kubernetes integration.
-- Story/fix-version validation.
-- Database persistence.
-- Generate Report orchestration.
-
-Do not invent behavior.
-
----
-
-# 16. Required Deliverables
-
-Produce a detailed analysis containing:
-
-## A. Current Architecture
-
-Explain the current commit-analysis architecture.
-
-## B. Current Generate Report Flow
-
-Show the complete data and execution flow.
-
-## C. Existing Git Analysis Paths
-
-Document every comparison currently performed.
-
-## D. Current Major/Minor Behavior
-
-Explain the actual implementation, not the intended process.
-
-## E. Problem Areas
-
-List false positives, assumptions, and limitations.
-
-## F. Git/GitHub Capability Analysis
-
-Explain exactly what can and cannot be detected.
-
-## G. Solution Comparison
-
-Compare all viable approaches.
-
-## H. Recommended Solution
-
-Provide the preferred approach with justification.
-
-## I. Decision Flow / Pseudocode
-
-Provide pseudocode or a decision tree, but **do not provide implementation code**.
-
-Example structure:
+Do not simply change:
 
 ```text
-Determine release type
-        |
-        v
-Identify current release branch
-        |
-        v
-Identify candidate parent branches
-        |
-        v
-Analyze Git ancestry
-        |
-        +---- Parent = master
-        |
-        +---- Parent = previous release
-        |
-        +---- Unknown
-        |
-        v
-Select analysis strategy
-        |
-        v
-Run commit analysis
-        |
-        v
-Determine lifecycle/violation
-        |
-        v
-Persist results
+DIRECT_RELEASE + violation=true
 ```
 
-Adapt the flow based on actual findings.
+to:
 
-## J. Database Impact
+```text
+DIRECT_RELEASE + violation=false
+```
 
-Identify required changes, if any.
+Create a transparent classification.
 
-## K. UI Impact
+The lifecycle should remain:
 
-Identify explainability/filter changes, if any.
+```text
+DIRECT_RELEASE
+```
 
-## L. Performance
+because the branch/lifecycle behavior is still direct release.
 
-Explain how the solution will scale.
+But when reliable evidence proves that it is an equivalent feature-branch transfer, compliance should be:
 
-## M. Risks and Mitigations
+```text
+NON-VIOLATION
+```
 
-Provide a detailed risk/mitigation table.
+with a separate meaningful category.
 
-## N. Phased Implementation Plan
+Possible naming:
 
-Provide implementation phases, but do not implement them.
+```text
+FEATURE_BRANCH_CHERRY_PICK
+```
 
----
+or
 
-# 17. Important Constraints
+```text
+DIRECT_RELEASE_FEATURE_BRANCH_TRANSFER
+```
 
-1. **Do not implement code.**
-2. **Do not modify files.**
-3. **Do not modify the database.**
-4. **Do not change lifecycle/violation logic yet.**
-5. Analyze first.
-6. Use the current Python Release Tracker BFF as the source of truth.
-7. Do not refer to Java unless explicitly requested.
-8. Do not assume developers follow recommended branching guidelines.
-9. Do not assume minor releases always originate from previous releases.
-10. Do not assume GitHub permanently preserves branch-creation ancestry.
-11. Minimize false-positive violations.
-12. Preserve existing valid behavior.
-13. Consider 100+ microservices and 500+ developers.
-14. Consider GitHub API limits.
-15. Consider release-time performance.
-16. Clearly distinguish actual current behavior from recommended future behavior.
-17. Do not implement the recommendation during this analysis task.
+Select the final name based on existing application terminology.
+
+Do not use simply `OK`.
+
+The user must be able to understand why the commit was considered non-violating.
 
 ---
 
-# 18. Final Questions That Must Be Answered
+# Evidence Requirements
 
-End the analysis with clear answers to:
+Use strong evidence wherever possible.
 
-1. **What is the most reliable way for Release Tracker to determine actual release-branch ancestry?**
+Potential evidence hierarchy:
 
-2. **How should commit analysis differ between major releases, minor releases from a previous release branch, and minor releases created from master?**
+### Strong evidence
 
-3. **Can Git/GitHub reliably tell us how a branch was originally created? If not, what is the strongest practical inference?**
+- patch-equivalent change
+- identifiable source commit
+- Git ancestry relationship
+- clear feature-branch relationship
 
-4. **What should happen when branch ancestry cannot be determined confidently?**
+### Supporting evidence
 
-5. **How can false-positive Review Commit violations be minimized without relying on every developer following strict branching guidelines?**
+- same story
+- normalized commit message
+- author
+- timestamp
+- branch naming
 
-6. **What changes should be made to the current Python analysis architecture, and what existing logic should remain unchanged?**
+Do not treat weak evidence as proof.
 
-7. **What is the recommended implementation sequence after this analysis is approved?**
+If strong evidence cannot be established, retain the existing violation classification rather than incorrectly suppressing a genuine violation.
 
-Again: **analysis and approach only. Do not implement code.**
+---
+
+# UI Requirements
+
+Review Commits should distinguish:
+
+### Genuine Direct Release
+
+```text
+Commit Lifecycle: DIRECT_RELEASE
+Compliance: VIOLATION
+```
+
+### Feature-Branch Transfer
+
+```text
+Commit Lifecycle: DIRECT_RELEASE
+Compliance: NON-VIOLATION
+Category: <new category>
+```
+
+The UI/details/tooltip should explain:
+
+- why it is `DIRECT_RELEASE`
+- why it is non-violating
+- matched/source commit SHA when available
+- source branch when reliably available
+- detection method/evidence
+- relevant story/fix-version information
+
+Reuse the existing violation/details architecture where possible.
+
+---
+
+# Database Requirements
+
+Inspect the existing `commits` table and related schema before changing it.
+
+Determine whether additional metadata is needed, potentially including:
+
+- source/master commit SHA
+- matched equivalent commit SHA
+- source branch
+- release-side branch
+- detection method
+- lifecycle
+- violation flag
+- violation category
+- reason
+- resolution
+
+Do not add unnecessary columns.
+
+If schema changes are required:
+
+1. Document them.
+2. Preserve existing data.
+3. Ensure Generate Report populates them.
+4. Ensure Review Commits consumes persisted values consistently.
+
+---
+
+# Performance Requirements
+
+Generate Report processes many commits.
+
+Do not introduce expensive GitHub API calls for every commit without analysis.
+
+Investigate:
+
+- reusable existing API responses
+- batching
+- caching
+- parallel processing
+- existing Python concurrency/executor patterns
+
+The new logic must not materially degrade report-generation performance.
+
+---
+
+# Mandatory Test Scenarios
+
+## Scenario 1 — Genuine Direct Release
+
+```text
+master: commit A
+release: unrelated commit B
+```
+
+Expected:
+
+```text
+DIRECT_RELEASE
+VIOLATION
+```
+
+## Scenario 2 — Normal Master-to-Release Cherry-Pick
+
+```text
+master: commit A
+release: equivalent cherry-pick of A
+```
+
+Expected:
+
+```text
+CHERRY_PICK
+NON-VIOLATION
+```
+
+## Scenario 3 — Feature-Branch Transfer After Branch Cut
+
+```text
+master: commit A
+release branch already exists
+release-feature: equivalent change transferred from source feature branch
+release: resulting commit B
+```
+
+Expected:
+
+```text
+DIRECT_RELEASE
+NON-VIOLATION
+FEATURE_BRANCH_CHERRY_PICK / equivalent category
+```
+
+## Scenario 4 — Same Message, Different Code
+
+Same/similar commit message but different patch.
+
+Expected:
+
+```text
+Do not classify as non-violation.
+```
+
+## Scenario 5 — Same Story, Different Implementation
+
+Same story but unrelated change.
+
+Expected:
+
+```text
+Do not classify as non-violation.
+```
+
+## Scenario 6 — Similar Metadata, No Strong Relationship
+
+Same author/story/message but no reliable source/patch/ancestry relationship.
+
+Expected:
+
+```text
+DIRECT_RELEASE
+VIOLATION
+```
+
+## Scenario 7 — Existing Cherry-Pick
+
+Verify existing valid cherry-pick detection remains unchanged.
+
+---
+
+# Implementation Plan Before Coding
+
+Before modifying code, create a detailed plan covering:
+
+1. Current direct-release detection flow
+2. Current cherry-pick detection flow
+3. Existing GitHub API usage
+4. Existing commit metadata
+5. Existing DB fields
+6. Proposed detection strategy
+7. Git APIs required
+8. Patch-equivalence approach
+9. Branch/ancestry approach
+10. New classification/category
+11. Database changes
+12. Backend changes
+13. UI changes
+14. Performance impact
+15. Unit/integration tests
+16. Backward compatibility
+17. Risks and mitigations
+
+Do not implement until this plan is completed and reviewed.
+
+---
+
+# Acceptance Criteria
+
+- [ ] Genuine direct releases remain violations.
+- [ ] Existing valid cherry-picks remain non-violations.
+- [ ] Feature-branch transfer/cherry-pick scenarios are detected when sufficient evidence exists.
+- [ ] Lifecycle remains `DIRECT_RELEASE` for this scenario.
+- [ ] A dedicated non-violation classification/category is persisted and displayed.
+- [ ] UI explains why the commit is non-violating.
+- [ ] Commit-message matching alone is never sufficient.
+- [ ] Story matching alone is never sufficient.
+- [ ] Different SHA IDs are handled correctly.
+- [ ] Existing review-commit logic is preserved.
+- [ ] Existing violation rules remain unchanged for unrelated scenarios.
+- [ ] Database persistence is consistent.
+- [ ] Generate Report performance is protected.
+- [ ] All mandatory scenarios have automated tests.
+- [ ] No Java comparison is introduced unless explicitly requested.
+
+## Final Instruction
+
+Analyze the current Python Release Tracker codebase first and determine the most reliable technically feasible solution using Git/GitHub information.
+
+Do not hide violations merely to reduce violation counts.
+
+The goal is **accurate governance classification with transparent evidence**.
 """
-
-path = Path("/mnt/data/release_tracker_major_minor_commit_analysis_prompt.md")
+path = Path("/mnt/data/direct_release_feature_branch_cherrypick_prompt.md")
 path.write_text(content, encoding="utf-8")
-print(str(path))
+print(path)
