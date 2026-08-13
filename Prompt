@@ -1,447 +1,696 @@
-from pathlib import Path
-content = """# Prompt: Detect Feature-Branch Cherry-Pick After Branch Cut Without False Direct-Release Violations
+# Release Tracker – Deployment UI/Backend Fix + Teams Notification Implementation
 
 ## Objective
 
-Analyze the current **Python Release Tracker** implementation and enhance review-commit analysis for a specific scenario currently being reported as a `DIRECT_RELEASE` violation even though the same logical change was transferred through a feature branch after the release branch was cut.
+Analyze the existing Python-based Release Tracker implementation and implement the following enhancements/fixes without breaking any existing functionality.
 
-**Important:** The Python codebase is the current source of truth. Do not refer to Java unless explicitly requested.
+The current Python project is the active implementation. **Do not refer to Java code unless explicitly requested.** The Java project was the original implementation, but the current source of truth is the Python codebase.
 
----
-
-## Problem Scenario
-
-Expected process:
-
-1. Release branch is cut from `master`.
-2. Developer has a change on a feature branch.
-3. Change is committed/merged to `master`, creating SHA `123`.
-4. Because the release branch was already cut, the change needs to be included in the release.
-5. Normally the developer should cherry-pick SHA `123` from `master` into the release branch.
-
-However, cherry-picking directly from `master` can cause merge conflicts.
-
-Developers sometimes use this alternative:
-
-```text
-feature-A
-   |
-   v
-master
-   |
-   +-- SHA 123
-
-release/XXX  (already cut)
-   |
-   v
-feature-B
-   |
-   | equivalent change transferred/cherry-picked
-   v
-release/XXX
-   |
-   +-- SHA 456
-```
-
-Here:
-
-- SHA `123` exists on `master`.
-- SHA `456` exists on the release side.
-- SHA `123 != SHA 456`.
-- The release-side change may currently be detected as `DIRECT_RELEASE`.
-- Existing logic therefore reports it as a violation.
-
-The desired behavior is:
-
-```text
-Commit Lifecycle = DIRECT_RELEASE
-Compliance       = NON-VIOLATION
-Category         = dedicated feature-branch-transfer classification
-```
-
-when the system can reliably establish that SHA `456` represents the same logical change transferred through the feature-branch workflow.
+The implementation must preserve the existing business logic and UI behavior wherever it is already working correctly.
 
 ---
 
-# Required Analysis
+# Acceptance Criteria 1 – Release Readiness → Deployment
 
-First inspect the complete current Python implementation related to:
+## Problem
 
-- Generate Report
-- Review Commits
-- Commit analysis
-- Lifecycle status
-- Direct-release detection
-- Cherry-pick detection
-- Violation calculation
-- Git/GitHub data retrieval
-- Commit message parsing
-- Commit SHA and parent handling
-- Branch relationships
-- Existing database metadata
-- Existing violation category/reason/resolution
-- Review Commit UI
+In the **Release Readiness** page, the **Deployment** section is currently not working correctly in the Python implementation.
 
-Document the exact current flow before modifying anything.
+The UI is either missing or not behaving as expected, and it is unclear whether the backend implementation is complete/correct.
 
----
+## Required Actions
 
-# Investigate Reliable Git Signals
-
-Determine whether the scenario can be detected reliably using Git/GitHub data.
-
-Investigate all of the following.
-
-## 1. Commit Message
-
-Compare source and release-side commit messages.
-
-Determine whether normalized message matching is useful only as supporting evidence.
-
-Do **not** classify a commit as valid solely because messages match.
-
-## 2. Patch Equivalence
-
-Investigate Git mechanisms such as:
-
-- patch-id
-- equivalent diffs
-- normalized patch comparison
-- equivalent change detection
-
-Determine whether patch equivalence can establish that two commits introduce the same logical code change despite different SHA IDs and parents.
-
-Prefer a robust combination of evidence rather than a single weak heuristic.
-
-## 3. Commit Ancestry
+Perform a complete analysis of the existing Python implementation for the Release Readiness → Deployment functionality.
 
 Analyze:
 
-- parent SHA
-- merge parents
-- common ancestors
-- ancestry relationships
-- whether the release-side feature branch originated from the release branch
-- whether the source change exists on another branch
+1. Frontend/UI implementation
+2. Backend/business logic
+3. Database queries
+4. Deployment data retrieval
+5. Kubernetes integration
+6. API/client calls
+7. Request/response data flow
+8. UI rendering logic
+9. Filters
+10. Deployment readiness calculations
+11. Error handling
+12. Loading/empty states
+13. Authentication/authorization
 
-Determine what can actually be proven from Git history.
+The expected functionality must be restored completely.
 
-## 4. Branch Relationships
+### Important
 
-Investigate whether the available GitHub APIs/data can establish:
+The Release Readiness Deployment section should provide the same functional behavior already defined for the Release Tracker application.
 
-- release branch origin
-- feature branch origin
-- whether a feature branch was derived from the release branch
-- whether a source feature branch contains the corresponding master change
-- whether the release-side commit originated from that feature branch
+The deployment section must correctly display deployment readiness information for the relevant environments, including the environments already supported by the application such as:
 
-Do not assume GitHub retains an explicit branch-creation relationship if it cannot be reliably derived.
+- Test 3
+- Test 4
+- Stage
+- Production
+- Any other deployment environments already supported by the existing Python codebase
 
-## 5. Source Commit on Master
+Do **not** invent new deployment logic if equivalent existing logic already exists elsewhere in the project.
 
-For a candidate direct-release commit:
-
-1. Identify the story/commit metadata.
-2. Find the corresponding master change when possible.
-3. Compare the release-side change against the source change.
-4. Determine whether it was transferred through another feature branch.
-
----
-
-# Classification Requirement
-
-Do not simply change:
-
-```text
-DIRECT_RELEASE + violation=true
-```
-
-to:
-
-```text
-DIRECT_RELEASE + violation=false
-```
-
-Create a transparent classification.
-
-The lifecycle should remain:
-
-```text
-DIRECT_RELEASE
-```
-
-because the branch/lifecycle behavior is still direct release.
-
-But when reliable evidence proves that it is an equivalent feature-branch transfer, compliance should be:
-
-```text
-NON-VIOLATION
-```
-
-with a separate meaningful category.
-
-Possible naming:
-
-```text
-FEATURE_BRANCH_CHERRY_PICK
-```
-
-or
-
-```text
-DIRECT_RELEASE_FEATURE_BRANCH_TRANSFER
-```
-
-Select the final name based on existing application terminology.
-
-Do not use simply `OK`.
-
-The user must be able to understand why the commit was considered non-violating.
+First identify the existing implementation and determine why the current UI/backend is not working.
 
 ---
 
-# Evidence Requirements
+## Deployment Data Validation
 
-Use strong evidence wherever possible.
+Verify that deployment information is correctly retrieved and evaluated.
 
-Potential evidence hierarchy:
+Where applicable, validate:
 
-### Strong evidence
+- Component
+- Team
+- Fix version
+- Release branch
+- Latest release commit
+- Kubernetes deployed commit
+- Environment
+- Deployment status
+- Deployment readiness
+- Commit ID comparison
+- Configuration/deployment details already supported by the application
 
-- patch-equivalent change
-- identifiable source commit
-- Git ancestry relationship
-- clear feature-branch relationship
+Ensure the backend returns the complete information required by the frontend.
 
-### Supporting evidence
+The UI must correctly render the backend response.
 
-- same story
-- normalized commit message
-- author
-- timestamp
-- branch naming
+---
 
-Do not treat weak evidence as proof.
+# Acceptance Criteria 2 – Review Commits → Teams Notifications
 
-If strong evidence cannot be established, retain the existing violation classification rather than incorrectly suppressing a genuine violation.
+## Objective
+
+Implement Teams notifications for selected commit violations in the **Review Commits** section.
+
+There is already similar selection behavior in the Release Readiness → Story Status section.
+
+Use the existing selection behavior as a reference and implement a consistent experience in Review Commits.
+
+---
+
+# Selection Behavior
+
+## Eligibility
+
+The selection checkboxes must be available **only for Admin users**.
+
+The current application has role-based access.
+
+Expected behavior:
+
+### Admin
+
+Admin users can:
+
+- Filter commits
+- Select individual commits
+- Select all visible commits
+- Send Teams notifications
+
+### Developer
+
+Developer users must NOT see the bulk-selection checkboxes for Teams notifications.
+
+They should continue to have only the existing developer-level functionality.
+
+### Other/Viewer Users
+
+Viewer/general users must NOT see the Teams notification selection controls.
+
+Do not weaken existing authorization rules.
+
+---
+
+# Review Commits Filtering
+
+The selection functionality must work with all existing Review Commits filters.
+
+For example:
+
+- Team
+- Fix Version
+- Scrum Team
+- Component
+- Committer
+- Violation-only filter
+- Commit lifecycle filter
+- Violation category
+- Any other currently supported filters
+
+When the user selects **Violations Only**, the selectable commit records should represent the currently filtered dataset.
+
+The selection must respect the filters currently applied on the screen.
+
+---
+
+# Select All / Individual Selection
+
+Provide:
+
+1. Select individual commit
+2. Select all displayed commits
+3. Ability to select multiple commits
+4. Ability to deselect individual commits
+5. Ability to clear all selections
+
+The behavior should be consistent with the existing selection experience in Release Readiness → Story Status.
+
+Do not allow records outside the currently filtered dataset to be accidentally included.
+
+---
+
+# Send Teams Notification Button
+
+Once one or more commits are selected:
+
+Provide a **Send Teams Notification** action near the top of the Review Commits section.
+
+The UI behavior should be similar to the existing action/notification behavior in the Release Readiness section.
+
+The action must:
+
+1. Validate that the user has Admin authorization.
+2. Validate that at least one commit is selected.
+3. Retrieve the selected commit records.
+4. Retrieve the committer email from the commits table.
+5. Validate the email address.
+6. Build the notification message.
+7. Send the Teams notification.
+8. Display success/failure information to the user.
+9. Log the operation appropriately.
+
+---
+
+# Committer Email Validation
+
+The `commits` table contains the committer email.
+
+For every selected commit:
+
+Retrieve the committer email from the database.
+
+The email must belong to the expected AT&T domains.
+
+Valid domain endings:
+
+- `@att.com`
+- `@intl.att.com`
+
+The implementation must validate the complete email address before attempting notification.
+
+Invalid or missing email addresses must be handled gracefully.
+
+Do not fail the entire notification operation unnecessarily because one record has invalid/missing email.
+
+Provide appropriate logging and user feedback for skipped/failed recipients.
+
+---
+
+# Teams User Mention
+
+The notification must mention/tag the actual commit author in Microsoft Teams.
+
+The committer email should be used to resolve the Teams user identity.
+
+The final Teams message should create an actual Teams mention where technically supported by the selected Teams integration mechanism.
+
+Do NOT simply write:
+
+`@username`
+
+as plain text and assume that it is a real Teams mention.
+
+The implementation must determine the correct mechanism required by the currently supported Teams integration.
+
+---
+
+# Teams Integration
+
+The existing webhook implementation may not be usable.
+
+The current recommendation is to use:
+
+**Microsoft Teams Workflows / Power Automate-based incoming webhook mechanism**
+
+instead of relying on the older Teams webhook approach.
+
+Before implementing:
+
+1. Inspect the existing Teams notification implementation.
+2. Identify whether webhook support already exists.
+3. Identify existing configuration/settings.
+4. Determine whether a Teams Workflow endpoint is already expected by the application.
+5. Reuse existing configuration mechanisms wherever possible.
+6. Do not hard-code URLs, tokens, or credentials.
+
+---
+
+# Configuration
+
+Teams configuration must be externalized.
+
+Do NOT hard-code:
+
+- Workflow URL
+- Webhook URL
+- Tokens
+- Channel identifiers
+- Team identifiers
+- User identifiers
+
+Use the application's existing configuration/settings mechanism.
+
+If the Settings page already supports Teams configuration, extend it rather than creating a completely separate configuration mechanism.
+
+If a new configuration is required, document:
+
+- Configuration name
+- Purpose
+- Where it is stored
+- How it is loaded
+- How it is secured
+- How local development should configure it
+- How Azure deployment should configure it
+
+Secrets must never be committed to source control.
+
+---
+
+# Teams Message Template
+
+Create a clear and concise notification template.
+
+For every selected commit, the notification should contain relevant information such as:
+
+- Component
+- Commit SHA ID
+- Commit message
+- Story number
+- Committer
+- Violation reason
+- Commit lifecycle
+- Violation category
+- Resolution/action required
+- Relevant fix version information
+- Release/team information where useful
+
+The message should provide enough information for the developer to understand:
+
+1. What commit was identified.
+2. Why it was flagged.
+3. What lifecycle state was detected.
+4. Why it is considered a violation/non-compliance.
+5. What action the developer is expected to take.
+
+Do not create an unnecessarily large message.
+
+Keep the notification readable and actionable.
+
+---
+
+# Configurable Message Templates
+
+Where practical, make the Teams notification template configurable.
+
+Do not scatter notification text throughout the business logic.
+
+Create a maintainable template/configuration mechanism so that message wording can be changed later without modifying core commit-analysis logic.
+
+The design should also allow future notification templates for:
+
+- Review Commit violations
+- Release Readiness story issues
+- Other compliance notifications
+
+without duplicating the entire notification implementation.
+
+---
+
+# Backend Architecture
+
+Before implementing, trace the complete flow:
+
+UI
+→ UI action
+→ Python handler
+→ backend/business logic
+→ database
+→ Teams integration
+→ response
+→ UI feedback
+
+Document the current flow before making changes.
+
+Identify whether the existing project already has:
+
+- Teams client/service
+- Notification service
+- HTTP utility
+- Configuration service
+- Authentication/authorization helper
+- Database repository/helper
+- Logging framework
+
+Reuse existing components whenever possible.
+
+Do not create duplicate utilities when equivalent functionality already exists.
+
+---
+
+# Authentication / Authorization
+
+This functionality is an administrative operation.
+
+The backend MUST enforce authorization.
+
+Do not rely only on hiding the UI button.
+
+Even if a non-admin user manually invokes the backend operation, the backend must reject the request.
+
+Required behavior:
+
+### Admin
+
+Allowed to:
+
+- Select commits
+- Send Teams notifications
+
+### Developer
+
+Not allowed to send bulk Teams notifications.
+
+### Viewer/General User
+
+Not allowed to send bulk Teams notifications.
+
+Ensure both:
+
+- Frontend authorization
+- Backend authorization
+
+are implemented.
+
+---
+
+# Partial Failure Handling
+
+The notification operation must handle multiple selected commits safely.
+
+Example:
+
+10 commits selected:
+
+- 7 valid AT&T email addresses
+- 2 missing email addresses
+- 1 invalid email address
+
+The operation should process the valid records and report the skipped/failed records.
+
+Do not silently fail.
+
+Provide a useful summary such as:
+
+- Total selected
+- Successfully notified
+- Skipped due to missing email
+- Skipped due to invalid email
+- Failed Teams delivery
+
+Do not expose sensitive information unnecessarily in the UI.
+
+Detailed diagnostic information should be available through logs.
+
+---
+
+# Logging
+
+Add appropriate logging throughout the flow.
+
+At minimum log:
+
+- User initiating the operation
+- Number of selected commits
+- Commit IDs being processed
+- Email validation result
+- Notification attempt
+- Notification success/failure
+- Skipped records
+- Teams integration errors
+- Overall operation result
+
+Do not log:
+
+- Tokens
+- Secrets
+- Passwords
+- Full authentication credentials
+
+Follow the application's existing logging conventions.
+
+Use INFO logs for important business events.
+
+Use DEBUG logs for detailed troubleshooting.
+
+---
+
+# Error Handling
+
+Handle:
+
+- No commits selected
+- Invalid user role
+- Missing committer email
+- Invalid committer email
+- Teams user cannot be resolved
+- Teams Workflow unavailable
+- HTTP errors
+- Timeout
+- Invalid response
+- Configuration missing
+- Database failure
+- Unexpected exceptions
+
+The UI should show a meaningful error instead of a generic application failure.
 
 ---
 
 # UI Requirements
 
-Review Commits should distinguish:
+The Review Commits page should maintain the existing UI design.
 
-### Genuine Direct Release
+Do not unnecessarily redesign the page.
 
-```text
-Commit Lifecycle: DIRECT_RELEASE
-Compliance: VIOLATION
-```
+Follow the existing:
 
-### Feature-Branch Transfer
+- React/TypeScript structure
+- Tailwind styling
+- AT&T visual design
+- Existing button patterns
+- Existing notification patterns
+- Existing filter behavior
 
-```text
-Commit Lifecycle: DIRECT_RELEASE
-Compliance: NON-VIOLATION
-Category: <new category>
-```
-
-The UI/details/tooltip should explain:
-
-- why it is `DIRECT_RELEASE`
-- why it is non-violating
-- matched/source commit SHA when available
-- source branch when reliably available
-- detection method/evidence
-- relevant story/fix-version information
-
-Reuse the existing violation/details architecture where possible.
+The selection and notification controls should look like native parts of the existing application.
 
 ---
 
-# Database Requirements
+# Important Existing Behavior
 
-Inspect the existing `commits` table and related schema before changing it.
+Do NOT modify unrelated Review Commits functionality.
 
-Determine whether additional metadata is needed, potentially including:
+Existing behavior such as:
 
-- source/master commit SHA
-- matched equivalent commit SHA
-- source branch
-- release-side branch
-- detection method
-- lifecycle
-- violation flag
-- violation category
-- reason
-- resolution
+- Commit analysis
+- Violation detection
+- Commit lifecycle
+- Violation categories
+- Scrum team
+- Fix version
+- Component
+- Filters
+- Override functionality
+- Admin/developer permissions
 
-Do not add unnecessary columns.
+must continue working.
 
-If schema changes are required:
-
-1. Document them.
-2. Preserve existing data.
-3. Ensure Generate Report populates them.
-4. Ensure Review Commits consumes persisted values consistently.
+This change is an enhancement to notification functionality and must not introduce regressions.
 
 ---
 
-# Performance Requirements
+# Required Analysis Before Coding
 
-Generate Report processes many commits.
+Before modifying code, inspect the complete existing implementation.
 
-Do not introduce expensive GitHub API calls for every commit without analysis.
+Analyze:
 
-Investigate:
+1. Review Commits UI
+2. Review Commits backend
+3. Existing filters
+4. Existing role handling
+5. Existing authentication
+6. Existing database schema
+7. `commits` table
+8. Existing Teams notification code
+9. Existing settings/configuration
+10. Existing Release Readiness selection implementation
+11. Existing logging framework
+12. Existing HTTP/API utilities
 
-- reusable existing API responses
-- batching
-- caching
-- parallel processing
-- existing Python concurrency/executor patterns
+Then prepare an implementation plan.
 
-The new logic must not materially degrade report-generation performance.
+The plan must identify:
 
----
-
-# Mandatory Test Scenarios
-
-## Scenario 1 — Genuine Direct Release
-
-```text
-master: commit A
-release: unrelated commit B
-```
-
-Expected:
-
-```text
-DIRECT_RELEASE
-VIOLATION
-```
-
-## Scenario 2 — Normal Master-to-Release Cherry-Pick
-
-```text
-master: commit A
-release: equivalent cherry-pick of A
-```
-
-Expected:
-
-```text
-CHERRY_PICK
-NON-VIOLATION
-```
-
-## Scenario 3 — Feature-Branch Transfer After Branch Cut
-
-```text
-master: commit A
-release branch already exists
-release-feature: equivalent change transferred from source feature branch
-release: resulting commit B
-```
-
-Expected:
-
-```text
-DIRECT_RELEASE
-NON-VIOLATION
-FEATURE_BRANCH_CHERRY_PICK / equivalent category
-```
-
-## Scenario 4 — Same Message, Different Code
-
-Same/similar commit message but different patch.
-
-Expected:
-
-```text
-Do not classify as non-violation.
-```
-
-## Scenario 5 — Same Story, Different Implementation
-
-Same story but unrelated change.
-
-Expected:
-
-```text
-Do not classify as non-violation.
-```
-
-## Scenario 6 — Similar Metadata, No Strong Relationship
-
-Same author/story/message but no reliable source/patch/ancestry relationship.
-
-Expected:
-
-```text
-DIRECT_RELEASE
-VIOLATION
-```
-
-## Scenario 7 — Existing Cherry-Pick
-
-Verify existing valid cherry-pick detection remains unchanged.
+- Files to modify
+- Files to create
+- Existing functions to reuse
+- Existing functions requiring modification
+- Database changes, if any
+- UI changes
+- Backend changes
+- Authentication/authorization changes
+- Teams integration changes
+- Configuration changes
+- Test strategy
+- Regression risks
 
 ---
 
-# Implementation Plan Before Coding
+# Implementation Constraints
 
-Before modifying code, create a detailed plan covering:
-
-1. Current direct-release detection flow
-2. Current cherry-pick detection flow
-3. Existing GitHub API usage
-4. Existing commit metadata
-5. Existing DB fields
-6. Proposed detection strategy
-7. Git APIs required
-8. Patch-equivalence approach
-9. Branch/ancestry approach
-10. New classification/category
-11. Database changes
-12. Backend changes
-13. UI changes
-14. Performance impact
-15. Unit/integration tests
-16. Backward compatibility
-17. Risks and mitigations
-
-Do not implement until this plan is completed and reviewed.
+1. Do not rewrite unrelated code.
+2. Do not remove existing functionality.
+3. Do not change existing commit-analysis business rules.
+4. Do not change violation calculation logic.
+5. Do not change lifecycle calculation logic.
+6. Do not hard-code Teams credentials or URLs.
+7. Do not bypass authorization.
+8. Do not rely only on frontend role checks.
+9. Reuse existing utilities where possible.
+10. Keep the implementation maintainable and modular.
+11. Preserve existing UI behavior.
+12. Ensure local development continues to work.
+13. Ensure the solution is suitable for Azure deployment.
+14. Do not introduce unnecessary dependencies.
+15. Do not implement a Teams integration without first understanding the existing project architecture.
 
 ---
 
-# Acceptance Criteria
+# Required Deliverables
 
-- [ ] Genuine direct releases remain violations.
-- [ ] Existing valid cherry-picks remain non-violations.
-- [ ] Feature-branch transfer/cherry-pick scenarios are detected when sufficient evidence exists.
-- [ ] Lifecycle remains `DIRECT_RELEASE` for this scenario.
-- [ ] A dedicated non-violation classification/category is persisted and displayed.
-- [ ] UI explains why the commit is non-violating.
-- [ ] Commit-message matching alone is never sufficient.
-- [ ] Story matching alone is never sufficient.
-- [ ] Different SHA IDs are handled correctly.
-- [ ] Existing review-commit logic is preserved.
-- [ ] Existing violation rules remain unchanged for unrelated scenarios.
-- [ ] Database persistence is consistent.
-- [ ] Generate Report performance is protected.
-- [ ] All mandatory scenarios have automated tests.
-- [ ] No Java comparison is introduced unless explicitly requested.
+Before implementation:
 
-## Final Instruction
+Create a detailed plan covering:
 
-Analyze the current Python Release Tracker codebase first and determine the most reliable technically feasible solution using Git/GitHub information.
+### Phase 1 – Existing Code Analysis
+- Current Review Commits flow
+- Current Release Readiness deployment flow
+- Existing Teams implementation
+- Existing role/authentication mechanism
 
-Do not hide violations merely to reduce violation counts.
+### Phase 2 – Release Readiness Deployment Fix
+- Root cause
+- Backend changes
+- UI changes
+- Integration changes
+- Testing
 
-The goal is **accurate governance classification with transparent evidence**.
-"""
-path = Path("/mnt/data/direct_release_feature_branch_cherrypick_prompt.md")
-path.write_text(content, encoding="utf-8")
-print(path)
+### Phase 3 – Teams Notification
+- UI selection
+- Admin authorization
+- Backend notification service
+- Email validation
+- Teams user resolution
+- Teams mention
+- Message template
+- Workflow integration
+- Configuration
+
+### Phase 4 – Testing
+Include:
+
+- Admin user
+- Developer user
+- Viewer/general user
+- No selected commits
+- Single commit
+- Multiple commits
+- Invalid email
+- Missing email
+- Teams failure
+- Successful Teams notification
+- Select all
+- Filtered selection
+- Deselect behavior
+- Regression testing
+
+---
+
+# Final Acceptance Criteria
+
+The implementation is complete only when:
+
+- [ ] Release Readiness → Deployment UI works correctly.
+- [ ] Release Readiness → Deployment backend works correctly.
+- [ ] Existing deployment environments are displayed.
+- [ ] Existing filters continue working.
+- [ ] Review Commits supports admin-only commit selection.
+- [ ] Select individual commit works.
+- [ ] Select all works.
+- [ ] Deselect works.
+- [ ] Selection respects current filters.
+- [ ] Send Teams Notification button is available only to Admin.
+- [ ] Backend independently validates Admin authorization.
+- [ ] Committer email is retrieved from the commits table.
+- [ ] Only valid `@att.com` / `@intl.att.com` addresses are processed.
+- [ ] Teams user can be resolved from the email.
+- [ ] Actual Teams mention is generated where supported.
+- [ ] Notification contains SHA, story, component, violation reason, lifecycle and resolution details.
+- [ ] Teams Workflow integration is used if that is the supported current mechanism.
+- [ ] Workflow URL/configuration is externalized.
+- [ ] No secrets are hard-coded.
+- [ ] Partial failures are handled.
+- [ ] Success/failure summary is shown to the administrator.
+- [ ] Proper INFO/DEBUG/error logging is available.
+- [ ] Existing Review Commits behavior is unchanged.
+- [ ] Existing violation/lifecycle logic is unchanged.
+- [ ] Existing authentication/authorization is not weakened.
+- [ ] No regressions are introduced.
+
+---
+
+# Definition of Done
+
+The work is considered DONE only after:
+
+1. Code analysis is completed.
+2. Implementation plan is created and reviewed.
+3. Release Readiness deployment functionality is fixed.
+4. Review Commit selection is implemented.
+5. Admin-only authorization is implemented on frontend and backend.
+6. Teams notification integration is implemented.
+7. Teams user mention is implemented using the supported mechanism.
+8. Message templates are maintainable/configurable.
+9. Error and partial-failure handling is implemented.
+10. Logging is implemented.
+11. Unit/backend tests are added or updated.
+12. UI validation/testing is completed.
+13. Existing functionality is regression-tested.
+14. Local execution is verified.
+15. Configuration requirements are documented.
+16. Azure deployment considerations are verified.
+17. No secrets or credentials are committed.
+18. Final implementation summary and changed-file list are provided.
+
+## Critical Rule
+
+**Do not start by blindly writing new code.**
+
+First understand the existing Python codebase, trace the complete UI-to-backend flow, identify what is missing/broken, prepare the plan, and only then implement the required changes.
+
+The goal is to **complete and correct the existing functionality**, not to create a parallel implementation.
