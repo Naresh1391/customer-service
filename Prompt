@@ -1,696 +1,173 @@
-# Release Tracker – Deployment UI/Backend Fix + Teams Notification Implementation
+# Release Tracker – Validation Category & Export Center Enhancements
 
 ## Objective
 
-Analyze the existing Python-based Release Tracker implementation and implement the following enhancements/fixes without breaking any existing functionality.
+Implement the following two enhancements in the existing Python Release Tracker application.
 
-The current Python project is the active implementation. **Do not refer to Java code unless explicitly requested.** The Java project was the original implementation, but the current source of truth is the Python codebase.
-
-The implementation must preserve the existing business logic and UI behavior wherever it is already working correctly.
+Do not change unrelated functionality or existing commit-analysis logic.
 
 ---
 
-# Acceptance Criteria 1 – Release Readiness → Deployment
+## 1. Improve "Story Not in Version" Validation Categories
 
-## Problem
+### Current Problem
 
-In the **Release Readiness** page, the **Deployment** section is currently not working correctly in the Python implementation.
+During Generate Report, each commit is analyzed and a validation status/category is generated.
 
-The UI is either missing or not behaving as expected, and it is unclear whether the backend implementation is complete/correct.
+Currently, a large number of commits are shown under:
 
-## Required Actions
+**Story Not in Version**
 
-Perform a complete analysis of the existing Python implementation for the Release Readiness → Deployment functionality.
+This is not sufficiently descriptive and causes confusion for developers.
 
-Analyze:
+The application already extracts the story number from the commit message and looks up the story through the configured iTrack/Jira Cloud flow. Use the existing story lookup mechanism.
 
-1. Frontend/UI implementation
-2. Backend/business logic
-3. Database queries
-4. Deployment data retrieval
-5. Kubernetes integration
-6. API/client calls
-7. Request/response data flow
-8. UI rendering logic
-9. Filters
-10. Deployment readiness calculations
-11. Error handling
-12. Loading/empty states
-13. Authentication/authorization
+### Required Behavior
 
-The expected functionality must be restored completely.
+Instead of using `Story Not in Version` as the default for all cases, determine the story's actual fix-version situation.
 
-### Important
+The validation category should support:
 
-The Release Readiness Deployment section should provide the same functional behavior already defined for the Release Tracker application.
+1. **Previous Fix Version**
+2. **Future Fix Version**
+3. **No Fix Version**
+4. **Story Not in Version** – only when the application genuinely cannot determine the appropriate category.
 
-The deployment section must correctly display deployment readiness information for the relevant environments, including the environments already supported by the application such as:
+### Fix-Version Evaluation
 
-- Test 3
-- Test 4
-- Stage
-- Production
-- Any other deployment environments already supported by the existing Python codebase
-
-Do **not** invent new deployment logic if equivalent existing logic already exists elsewhere in the project.
-
-First identify the existing implementation and determine why the current UI/backend is not working.
-
----
-
-## Deployment Data Validation
-
-Verify that deployment information is correctly retrieved and evaluated.
-
-Where applicable, validate:
-
-- Component
-- Team
-- Fix version
-- Release branch
-- Latest release commit
-- Kubernetes deployed commit
-- Environment
-- Deployment status
-- Deployment readiness
-- Commit ID comparison
-- Configuration/deployment details already supported by the application
-
-Ensure the backend returns the complete information required by the frontend.
-
-The UI must correctly render the backend response.
-
----
-
-# Acceptance Criteria 2 – Review Commits → Teams Notifications
-
-## Objective
-
-Implement Teams notifications for selected commit violations in the **Review Commits** section.
-
-There is already similar selection behavior in the Release Readiness → Story Status section.
-
-Use the existing selection behavior as a reference and implement a consistent experience in Review Commits.
-
----
-
-# Selection Behavior
-
-## Eligibility
-
-The selection checkboxes must be available **only for Admin users**.
-
-The current application has role-based access.
-
-Expected behavior:
-
-### Admin
-
-Admin users can:
-
-- Filter commits
-- Select individual commits
-- Select all visible commits
-- Send Teams notifications
-
-### Developer
-
-Developer users must NOT see the bulk-selection checkboxes for Teams notifications.
-
-They should continue to have only the existing developer-level functionality.
-
-### Other/Viewer Users
-
-Viewer/general users must NOT see the Teams notification selection controls.
-
-Do not weaken existing authorization rules.
-
----
-
-# Review Commits Filtering
-
-The selection functionality must work with all existing Review Commits filters.
-
-For example:
-
-- Team
-- Fix Version
-- Scrum Team
-- Component
-- Committer
-- Violation-only filter
-- Commit lifecycle filter
-- Violation category
-- Any other currently supported filters
-
-When the user selects **Violations Only**, the selectable commit records should represent the currently filtered dataset.
-
-The selection must respect the filters currently applied on the screen.
-
----
-
-# Select All / Individual Selection
-
-Provide:
-
-1. Select individual commit
-2. Select all displayed commits
-3. Ability to select multiple commits
-4. Ability to deselect individual commits
-5. Ability to clear all selections
-
-The behavior should be consistent with the existing selection experience in Release Readiness → Story Status.
-
-Do not allow records outside the currently filtered dataset to be accidentally included.
-
----
-
-# Send Teams Notification Button
-
-Once one or more commits are selected:
-
-Provide a **Send Teams Notification** action near the top of the Review Commits section.
-
-The UI behavior should be similar to the existing action/notification behavior in the Release Readiness section.
-
-The action must:
-
-1. Validate that the user has Admin authorization.
-2. Validate that at least one commit is selected.
-3. Retrieve the selected commit records.
-4. Retrieve the committer email from the commits table.
-5. Validate the email address.
-6. Build the notification message.
-7. Send the Teams notification.
-8. Display success/failure information to the user.
-9. Log the operation appropriately.
-
----
-
-# Committer Email Validation
-
-The `commits` table contains the committer email.
-
-For every selected commit:
-
-Retrieve the committer email from the database.
-
-The email must belong to the expected AT&T domains.
-
-Valid domain endings:
-
-- `@att.com`
-- `@intl.att.com`
-
-The implementation must validate the complete email address before attempting notification.
-
-Invalid or missing email addresses must be handled gracefully.
-
-Do not fail the entire notification operation unnecessarily because one record has invalid/missing email.
-
-Provide appropriate logging and user feedback for skipped/failed recipients.
-
----
-
-# Teams User Mention
-
-The notification must mention/tag the actual commit author in Microsoft Teams.
-
-The committer email should be used to resolve the Teams user identity.
-
-The final Teams message should create an actual Teams mention where technically supported by the selected Teams integration mechanism.
-
-Do NOT simply write:
-
-`@username`
-
-as plain text and assume that it is a real Teams mention.
-
-The implementation must determine the correct mechanism required by the currently supported Teams integration.
-
----
-
-# Teams Integration
-
-The existing webhook implementation may not be usable.
-
-The current recommendation is to use:
-
-**Microsoft Teams Workflows / Power Automate-based incoming webhook mechanism**
-
-instead of relying on the older Teams webhook approach.
-
-Before implementing:
-
-1. Inspect the existing Teams notification implementation.
-2. Identify whether webhook support already exists.
-3. Identify existing configuration/settings.
-4. Determine whether a Teams Workflow endpoint is already expected by the application.
-5. Reuse existing configuration mechanisms wherever possible.
-6. Do not hard-code URLs, tokens, or credentials.
-
----
-
-# Configuration
-
-Teams configuration must be externalized.
-
-Do NOT hard-code:
-
-- Workflow URL
-- Webhook URL
-- Tokens
-- Channel identifiers
-- Team identifiers
-- User identifiers
-
-Use the application's existing configuration/settings mechanism.
-
-If the Settings page already supports Teams configuration, extend it rather than creating a completely separate configuration mechanism.
-
-If a new configuration is required, document:
-
-- Configuration name
-- Purpose
-- Where it is stored
-- How it is loaded
-- How it is secured
-- How local development should configure it
-- How Azure deployment should configure it
-
-Secrets must never be committed to source control.
-
----
-
-# Teams Message Template
-
-Create a clear and concise notification template.
-
-For every selected commit, the notification should contain relevant information such as:
-
-- Component
-- Commit SHA ID
-- Commit message
-- Story number
-- Committer
-- Violation reason
-- Commit lifecycle
-- Violation category
-- Resolution/action required
-- Relevant fix version information
-- Release/team information where useful
-
-The message should provide enough information for the developer to understand:
-
-1. What commit was identified.
-2. Why it was flagged.
-3. What lifecycle state was detected.
-4. Why it is considered a violation/non-compliance.
-5. What action the developer is expected to take.
-
-Do not create an unnecessarily large message.
-
-Keep the notification readable and actionable.
-
----
-
-# Configurable Message Templates
-
-Where practical, make the Teams notification template configurable.
-
-Do not scatter notification text throughout the business logic.
-
-Create a maintainable template/configuration mechanism so that message wording can be changed later without modifying core commit-analysis logic.
-
-The design should also allow future notification templates for:
-
-- Review Commit violations
-- Release Readiness story issues
-- Other compliance notifications
-
-without duplicating the entire notification implementation.
-
----
-
-# Backend Architecture
-
-Before implementing, trace the complete flow:
-
-UI
-→ UI action
-→ Python handler
-→ backend/business logic
-→ database
-→ Teams integration
-→ response
-→ UI feedback
-
-Document the current flow before making changes.
-
-Identify whether the existing project already has:
-
-- Teams client/service
-- Notification service
-- HTTP utility
-- Configuration service
-- Authentication/authorization helper
-- Database repository/helper
-- Logging framework
-
-Reuse existing components whenever possible.
-
-Do not create duplicate utilities when equivalent functionality already exists.
-
----
-
-# Authentication / Authorization
-
-This functionality is an administrative operation.
-
-The backend MUST enforce authorization.
-
-Do not rely only on hiding the UI button.
-
-Even if a non-admin user manually invokes the backend operation, the backend must reject the request.
-
-Required behavior:
-
-### Admin
-
-Allowed to:
-
-- Select commits
-- Send Teams notifications
-
-### Developer
-
-Not allowed to send bulk Teams notifications.
-
-### Viewer/General User
-
-Not allowed to send bulk Teams notifications.
-
-Ensure both:
-
-- Frontend authorization
-- Backend authorization
-
-are implemented.
-
----
-
-# Partial Failure Handling
-
-The notification operation must handle multiple selected commits safely.
+The current release fix version must be used as the reference point.
 
 Example:
 
-10 commits selected:
+Current release:
 
-- 7 valid AT&T email addresses
-- 2 missing email addresses
-- 1 invalid email address
+`26.8.3`
 
-The operation should process the valid records and report the skipped/failed records.
+Interpretation:
 
-Do not silently fail.
+- `26` = year
+- `8` = month
+- `3` = release number within that month
 
-Provide a useful summary such as:
+Examples:
 
-- Total selected
-- Successfully notified
-- Skipped due to missing email
-- Skipped due to invalid email
-- Failed Teams delivery
+- `26.8.1` → Previous Fix Version
+- `26.8.2` → Previous Fix Version
+- `26.8.3` → Current release
+- `26.8.4` → Future Fix Version
+- `26.8.5` → Future Fix Version
+- `26.9.1` → Future Fix Version
 
-Do not expose sensitive information unnecessarily in the UI.
+The comparison must correctly handle:
 
-Detailed diagnostic information should be available through logs.
+- Release number
+- Month changes
+- Year changes
 
----
+Do **not** simply increment/decrement the numeric components independently.
 
-# Logging
+Implement a proper version comparison suitable for the existing fix-version naming convention.
 
-Add appropriate logging throughout the flow.
+### No Fix Version
 
-At minimum log:
+If the story exists but has **no fix version assigned**, classify it as:
 
-- User initiating the operation
-- Number of selected commits
-- Commit IDs being processed
-- Email validation result
-- Notification attempt
-- Notification success/failure
-- Skipped records
-- Teams integration errors
-- Overall operation result
+**No Fix Version**
 
-Do not log:
+Do not classify this as Story Not in Version.
 
-- Tokens
-- Secrets
-- Passwords
-- Full authentication credentials
+### Story Not in Version
 
-Follow the application's existing logging conventions.
-
-Use INFO logs for important business events.
-
-Use DEBUG logs for detailed troubleshooting.
+Use **Story Not in Version** only when the story/fix-version information genuinely cannot be determined after using the existing lookup mechanisms.
 
 ---
 
-# Error Handling
+## UI Requirements
 
-Handle:
+Display these categories clearly in the Review Commits UI.
 
-- No commits selected
-- Invalid user role
-- Missing committer email
-- Invalid committer email
-- Teams user cannot be resolved
-- Teams Workflow unavailable
-- HTTP errors
-- Timeout
-- Invalid response
-- Configuration missing
-- Database failure
-- Unexpected exceptions
+Update the violation/validation description so that developers can understand the actual reason.
 
-The UI should show a meaningful error instead of a generic application failure.
+Example:
 
----
+- Previous Fix Version → explain that the story belongs to an earlier release.
+- Future Fix Version → explain that the story is planned for a future release.
+- No Fix Version → explain that no fix version is assigned to the story.
+- Story Not in Version → explain that the application could not determine the story's release version.
 
-# UI Requirements
+### Color Coding
 
-The Review Commits page should maintain the existing UI design.
+Use different visual indicators:
 
-Do not unnecessarily redesign the page.
+- **Future Fix Version** → Red
+- **No Fix Version** → Red
+- **Previous Fix Version** → Amber/Yellow
+- **Story Not in Version** → retain the existing/default violation styling
 
-Follow the existing:
+Do not treat Previous Fix Version as equivalent to the highest-severity violation.
 
-- React/TypeScript structure
-- Tailwind styling
-- AT&T visual design
-- Existing button patterns
-- Existing notification patterns
-- Existing filter behavior
-
-The selection and notification controls should look like native parts of the existing application.
+Ensure the tooltip/details shown for the validation category also reflect the new category and explanation.
 
 ---
 
-# Important Existing Behavior
+# 2. Add Fix Version to Export Center Excel Reports
 
-Do NOT modify unrelated Review Commits functionality.
+The Export Center Excel output must include the story's Fix Version information.
 
-Existing behavior such as:
+The Fix Version must be populated using the same story/fix-version information already available through the existing iTrack/Jira Cloud lookup.
 
-- Commit analysis
-- Violation detection
-- Commit lifecycle
-- Violation categories
-- Scrum team
-- Fix version
-- Component
-- Filters
-- Override functionality
-- Admin/developer permissions
+## Required Tabs
 
-must continue working.
+### Review All Commits
 
-This change is an enhancement to notification functionality and must not introduce regressions.
+Add a **Fix Version** column.
 
----
+For each commit:
 
-# Required Analysis Before Coding
+- Extract the story number from the commit message.
+- Determine the corresponding story.
+- Retrieve its Fix Version.
+- Populate the Fix Version column.
 
-Before modifying code, inspect the complete existing implementation.
+### Commit Violations
 
-Analyze:
+Add a **Fix Version** column.
 
-1. Review Commits UI
-2. Review Commits backend
-3. Existing filters
-4. Existing role handling
-5. Existing authentication
-6. Existing database schema
-7. `commits` table
-8. Existing Teams notification code
-9. Existing settings/configuration
-10. Existing Release Readiness selection implementation
-11. Existing logging framework
-12. Existing HTTP/API utilities
+Populate it using the same logic as Review All Commits.
 
-Then prepare an implementation plan.
+### Story Status
 
-The plan must identify:
+Add a **Fix Version** column.
 
-- Files to modify
-- Files to create
-- Existing functions to reuse
-- Existing functions requiring modification
-- Database changes, if any
-- UI changes
-- Backend changes
-- Authentication/authorization changes
-- Teams integration changes
-- Configuration changes
-- Test strategy
-- Regression risks
+For each story, populate the Fix Version associated with that story from the iTrack/Jira Cloud story information.
+
+If a story has multiple fix versions, preserve the complete available value rather than arbitrarily selecting/truncating one.
 
 ---
 
-# Implementation Constraints
+# Important Constraints
 
-1. Do not rewrite unrelated code.
-2. Do not remove existing functionality.
-3. Do not change existing commit-analysis business rules.
-4. Do not change violation calculation logic.
-5. Do not change lifecycle calculation logic.
-6. Do not hard-code Teams credentials or URLs.
-7. Do not bypass authorization.
-8. Do not rely only on frontend role checks.
-9. Reuse existing utilities where possible.
-10. Keep the implementation maintainable and modular.
-11. Preserve existing UI behavior.
-12. Ensure local development continues to work.
-13. Ensure the solution is suitable for Azure deployment.
-14. Do not introduce unnecessary dependencies.
-15. Do not implement a Teams integration without first understanding the existing project architecture.
+- Use the existing iTrack/Jira Cloud story lookup mechanism.
+- Do not duplicate the story lookup logic unnecessarily.
+- Do not modify unrelated commit-analysis behavior.
+- Do not break existing validation/lifecycle functionality.
+- Preserve the complete Fix Version string.
+- Do not truncate or remove spaces from Fix Version values.
+- Ensure the UI and Excel exports use consistent Fix Version information.
+- Ensure existing filters and report generation continue to work.
 
----
+## Definition of Done
 
-# Required Deliverables
-
-Before implementation:
-
-Create a detailed plan covering:
-
-### Phase 1 – Existing Code Analysis
-- Current Review Commits flow
-- Current Release Readiness deployment flow
-- Existing Teams implementation
-- Existing role/authentication mechanism
-
-### Phase 2 – Release Readiness Deployment Fix
-- Root cause
-- Backend changes
-- UI changes
-- Integration changes
-- Testing
-
-### Phase 3 – Teams Notification
-- UI selection
-- Admin authorization
-- Backend notification service
-- Email validation
-- Teams user resolution
-- Teams mention
-- Message template
-- Workflow integration
-- Configuration
-
-### Phase 4 – Testing
-Include:
-
-- Admin user
-- Developer user
-- Viewer/general user
-- No selected commits
-- Single commit
-- Multiple commits
-- Invalid email
-- Missing email
-- Teams failure
-- Successful Teams notification
-- Select all
-- Filtered selection
-- Deselect behavior
-- Regression testing
-
----
-
-# Final Acceptance Criteria
-
-The implementation is complete only when:
-
-- [ ] Release Readiness → Deployment UI works correctly.
-- [ ] Release Readiness → Deployment backend works correctly.
-- [ ] Existing deployment environments are displayed.
-- [ ] Existing filters continue working.
-- [ ] Review Commits supports admin-only commit selection.
-- [ ] Select individual commit works.
-- [ ] Select all works.
-- [ ] Deselect works.
-- [ ] Selection respects current filters.
-- [ ] Send Teams Notification button is available only to Admin.
-- [ ] Backend independently validates Admin authorization.
-- [ ] Committer email is retrieved from the commits table.
-- [ ] Only valid `@att.com` / `@intl.att.com` addresses are processed.
-- [ ] Teams user can be resolved from the email.
-- [ ] Actual Teams mention is generated where supported.
-- [ ] Notification contains SHA, story, component, violation reason, lifecycle and resolution details.
-- [ ] Teams Workflow integration is used if that is the supported current mechanism.
-- [ ] Workflow URL/configuration is externalized.
-- [ ] No secrets are hard-coded.
-- [ ] Partial failures are handled.
-- [ ] Success/failure summary is shown to the administrator.
-- [ ] Proper INFO/DEBUG/error logging is available.
-- [ ] Existing Review Commits behavior is unchanged.
-- [ ] Existing violation/lifecycle logic is unchanged.
-- [ ] Existing authentication/authorization is not weakened.
-- [ ] No regressions are introduced.
-
----
-
-# Definition of Done
-
-The work is considered DONE only after:
-
-1. Code analysis is completed.
-2. Implementation plan is created and reviewed.
-3. Release Readiness deployment functionality is fixed.
-4. Review Commit selection is implemented.
-5. Admin-only authorization is implemented on frontend and backend.
-6. Teams notification integration is implemented.
-7. Teams user mention is implemented using the supported mechanism.
-8. Message templates are maintainable/configurable.
-9. Error and partial-failure handling is implemented.
-10. Logging is implemented.
-11. Unit/backend tests are added or updated.
-12. UI validation/testing is completed.
-13. Existing functionality is regression-tested.
-14. Local execution is verified.
-15. Configuration requirements are documented.
-16. Azure deployment considerations are verified.
-17. No secrets or credentials are committed.
-18. Final implementation summary and changed-file list are provided.
-
-## Critical Rule
-
-**Do not start by blindly writing new code.**
-
-First understand the existing Python codebase, trace the complete UI-to-backend flow, identify what is missing/broken, prepare the plan, and only then implement the required changes.
-
-The goal is to **complete and correct the existing functionality**, not to create a parallel implementation.
+- [ ] Previous Fix Version is correctly identified.
+- [ ] Future Fix Version is correctly identified.
+- [ ] No Fix Version is correctly identified.
+- [ ] Story Not in Version is used only as the fallback.
+- [ ] Version comparison correctly handles month/year boundaries.
+- [ ] UI displays the new validation categories.
+- [ ] UI descriptions/tooltips reflect the actual category.
+- [ ] Correct color coding is applied.
+- [ ] Review All Commits Excel tab contains Fix Version.
+- [ ] Commit Violations Excel tab contains Fix Version.
+- [ ] Story Status Excel tab contains Fix Version.
+- [ ] Complete Fix Version strings are preserved.
+- [ ] Existing functionality remains unaffected.
