@@ -1,71 +1,153 @@
-# Review Commits – Minor Enhancements
+# Excel Report Column Updates
 
-## Objective
+Update the existing Excel report export only as specified below. Do not change any underlying business logic, data retrieval, calculations, or UI behavior.
 
-Implement the following enhancements in the **Review Commits** functionality without changing any existing business logic or behavior outside the requested changes.
+## 1. Commit Violations Tab
 
----
-
-## 1. Evaluated Fix Version – Backend
-
-The `commits` table contains an `evaluated_fix_version` field.
-
-### Requirement
-
-For **every commit**, `evaluated_fix_version` must be populated whenever the corresponding story's fix version can be determined.
-
-- If the story already exists in the iTrack/Jira stories data and its fix version is available, store that fix version in `evaluated_fix_version`.
-- If the story is fetched separately because it was not already available, continue using the existing story lookup logic and store the retrieved fix version.
-- Do **not** leave `evaluated_fix_version` as `NULL` when the fix version can be determined.
-- Preserve the existing iTrack/Jira Cloud fallback behavior and existing story-number handling.
-- Do not change unrelated commit-analysis logic.
-
----
-
-## 2. Evaluated Fix Version – Review Commits UI
-
-In the **Review Commits** screen:
-
-- Display `evaluated_fix_version` for every commit.
-- Place it **immediately after the commit message**.
-- Use the UI label:
-
-**Commit Fix Version**
-
-- Ensure the value displayed is the same value stored in the backend `evaluated_fix_version` field.
-- This must also be available wherever the commit details are displayed, including the GitHub exception/details view where applicable.
-
----
-
-## 3. Multi-Select Filters
-
-In the **Review Commits** screen, keep the existing Team and Fix Version filtering behavior.
-
-For all of the following filters, provide **multi-select / multi-checkbox selection**:
-
-- Scrum Team
+### Keep
 - Component
-- Committer
+- Commit Message
+- Story
+- Author
 - Commit Lifecycle
+- Commit Story Fixed Version
 - Violation Category
+- Violation Description
+- Suggested Resolution
 
-### Expected behavior
+### Remove
+- Commit Date
+- Compliance Status
+- Evaluation Status
+- Override Status
+- Override Reason
 
-- Users must be able to select multiple values from each filter.
-- The dropdown should display the available values with checkbox/multi-select behavior.
-- Applying multiple selections must correctly filter the Review Commits results.
-- Existing Team and Fix Version filters must continue working as they currently do.
-- Multiple filters must work together without breaking the existing filtering logic.
+### Column order
+Place **Commit Story Fixed Version** immediately before **Violation Category**.
+
+Use the existing `evaluated_fix_version` value for **Commit Story Fixed Version**.
+
+---
+
+## 2. Review All Commits Tab
+
+Apply the same column changes as the **Commit Violations** tab:
+
+### Keep
+- Component
+- Commit Message
+- Story
+- Author
+- Commit Lifecycle
+- Commit Story Fixed Version
+- Violation Category
+- Violation Description
+- Suggested Resolution
+
+### Remove
+- Commit Date
+- Compliance Status
+- Evaluation Status
+- Override Status
+- Override Reason
+
+Place **Commit Story Fixed Version** immediately before **Violation Category**.
+
+---
+
+## 3. Story Status Tab
+
+No changes are required.
+
+Keep the existing columns:
+- Story Number
+- Summary
+- Status
+- Assignee
+- Reporter
+- Scrum Team
+- Sprint
+- Issue Type
+- Components
+
+---
+
+## 4. Branch Cut Validations Tab
+
+### Keep
+- Component
+- Previous Branch
+- Current Branch
+- Resolution Source
+- Branch Cut Status
+- Teams
+- Stories
+
+### Remove
+- GitHub Repo
+- User Excluded
+- Is Library
+- Override Status
+
+### Additional requirement
+
+Do not include the **Not Valid Components** section/data in the Branch Cut Validation Excel report.
+
+---
+
+## 5. Deployment Tabs
+
+Apply the following column structure consistently to **all deployment sections**:
+
+- Test 3
+- Test 4
+- Stage
+- Production
+- East-West
+- Any other existing deployment environment sections
+
+### Keep
+- Component
+- Namespace
+- Git Commit
+- Latest Release Commit
+- Release Branch / GitHub Branch
+- Deployment Status
+- Teams
+- Stories
+- Validation Message
+
+### Remove
+- Deployment Name
+- Active Color
+- Image Tag
+- Build Number
+- Commits Behind
+- Deployment Timestamp
+
+Do **not** remove:
+- Git Commit
+- Latest Release Commit
+- Release Branch / GitHub Branch
+
+### Deployment Status
+
+Keep the existing **Deployment Status** column.
+
+Do not introduce or retain duplicate/redundant status columns unnecessarily. If `Validation Status` duplicates the same information as `Deployment Status`, use the existing `Deployment Status` as the single exported status field.
 
 ---
 
 ## Acceptance Criteria
 
-1. Every commit has `evaluated_fix_version` populated whenever the corresponding story fix version is available.
-2. `evaluated_fix_version` is correctly displayed in Review Commits as **Commit Fix Version** immediately after the commit message.
-3. Commit Fix Version is also available in the relevant GitHub exception/details display.
-4. Scrum Team, Component, Committer, Commit Lifecycle, and Violation Category support multi-select filtering.
-5. Multiple selections within a filter work correctly.
-6. Multiple different filters can be applied together.
-7. Existing Review Commits functionality and business logic must not regress.
-8. Do not introduce unrelated changes or unnecessary refactoring.
+1. Excel export contains exactly the requested columns for each tab.
+2. Column ordering follows the requirements above.
+3. `evaluated_fix_version` is exported as **Commit Story Fixed Version**.
+4. Commit Lifecycle is included in both commit-related tabs.
+5. Removed columns must no longer appear in the generated Excel file.
+6. Story Status remains unchanged.
+7. Branch Cut Validation excludes invalid-component data and the specified columns.
+8. All deployment environment tabs follow the same requested column structure.
+9. Existing data retrieval and business logic must remain unchanged.
+10. Do not introduce unrelated changes or refactoring.
+11. Verify the generated Excel workbook after implementation to ensure every tab contains the correct columns and ordering.
