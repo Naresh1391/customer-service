@@ -1,173 +1,71 @@
-# Release Tracker – Validation Category & Export Center Enhancements
+# Review Commits – Minor Enhancements
 
 ## Objective
 
-Implement the following two enhancements in the existing Python Release Tracker application.
-
-Do not change unrelated functionality or existing commit-analysis logic.
+Implement the following enhancements in the **Review Commits** functionality without changing any existing business logic or behavior outside the requested changes.
 
 ---
 
-## 1. Improve "Story Not in Version" Validation Categories
+## 1. Evaluated Fix Version – Backend
 
-### Current Problem
+The `commits` table contains an `evaluated_fix_version` field.
 
-During Generate Report, each commit is analyzed and a validation status/category is generated.
+### Requirement
 
-Currently, a large number of commits are shown under:
+For **every commit**, `evaluated_fix_version` must be populated whenever the corresponding story's fix version can be determined.
 
-**Story Not in Version**
-
-This is not sufficiently descriptive and causes confusion for developers.
-
-The application already extracts the story number from the commit message and looks up the story through the configured iTrack/Jira Cloud flow. Use the existing story lookup mechanism.
-
-### Required Behavior
-
-Instead of using `Story Not in Version` as the default for all cases, determine the story's actual fix-version situation.
-
-The validation category should support:
-
-1. **Previous Fix Version**
-2. **Future Fix Version**
-3. **No Fix Version**
-4. **Story Not in Version** – only when the application genuinely cannot determine the appropriate category.
-
-### Fix-Version Evaluation
-
-The current release fix version must be used as the reference point.
-
-Example:
-
-Current release:
-
-`26.8.3`
-
-Interpretation:
-
-- `26` = year
-- `8` = month
-- `3` = release number within that month
-
-Examples:
-
-- `26.8.1` → Previous Fix Version
-- `26.8.2` → Previous Fix Version
-- `26.8.3` → Current release
-- `26.8.4` → Future Fix Version
-- `26.8.5` → Future Fix Version
-- `26.9.1` → Future Fix Version
-
-The comparison must correctly handle:
-
-- Release number
-- Month changes
-- Year changes
-
-Do **not** simply increment/decrement the numeric components independently.
-
-Implement a proper version comparison suitable for the existing fix-version naming convention.
-
-### No Fix Version
-
-If the story exists but has **no fix version assigned**, classify it as:
-
-**No Fix Version**
-
-Do not classify this as Story Not in Version.
-
-### Story Not in Version
-
-Use **Story Not in Version** only when the story/fix-version information genuinely cannot be determined after using the existing lookup mechanisms.
+- If the story already exists in the iTrack/Jira stories data and its fix version is available, store that fix version in `evaluated_fix_version`.
+- If the story is fetched separately because it was not already available, continue using the existing story lookup logic and store the retrieved fix version.
+- Do **not** leave `evaluated_fix_version` as `NULL` when the fix version can be determined.
+- Preserve the existing iTrack/Jira Cloud fallback behavior and existing story-number handling.
+- Do not change unrelated commit-analysis logic.
 
 ---
 
-## UI Requirements
+## 2. Evaluated Fix Version – Review Commits UI
 
-Display these categories clearly in the Review Commits UI.
+In the **Review Commits** screen:
 
-Update the violation/validation description so that developers can understand the actual reason.
+- Display `evaluated_fix_version` for every commit.
+- Place it **immediately after the commit message**.
+- Use the UI label:
 
-Example:
+**Commit Fix Version**
 
-- Previous Fix Version → explain that the story belongs to an earlier release.
-- Future Fix Version → explain that the story is planned for a future release.
-- No Fix Version → explain that no fix version is assigned to the story.
-- Story Not in Version → explain that the application could not determine the story's release version.
-
-### Color Coding
-
-Use different visual indicators:
-
-- **Future Fix Version** → Red
-- **No Fix Version** → Red
-- **Previous Fix Version** → Amber/Yellow
-- **Story Not in Version** → retain the existing/default violation styling
-
-Do not treat Previous Fix Version as equivalent to the highest-severity violation.
-
-Ensure the tooltip/details shown for the validation category also reflect the new category and explanation.
+- Ensure the value displayed is the same value stored in the backend `evaluated_fix_version` field.
+- This must also be available wherever the commit details are displayed, including the GitHub exception/details view where applicable.
 
 ---
 
-# 2. Add Fix Version to Export Center Excel Reports
+## 3. Multi-Select Filters
 
-The Export Center Excel output must include the story's Fix Version information.
+In the **Review Commits** screen, keep the existing Team and Fix Version filtering behavior.
 
-The Fix Version must be populated using the same story/fix-version information already available through the existing iTrack/Jira Cloud lookup.
+For all of the following filters, provide **multi-select / multi-checkbox selection**:
 
-## Required Tabs
+- Scrum Team
+- Component
+- Committer
+- Commit Lifecycle
+- Violation Category
 
-### Review All Commits
+### Expected behavior
 
-Add a **Fix Version** column.
-
-For each commit:
-
-- Extract the story number from the commit message.
-- Determine the corresponding story.
-- Retrieve its Fix Version.
-- Populate the Fix Version column.
-
-### Commit Violations
-
-Add a **Fix Version** column.
-
-Populate it using the same logic as Review All Commits.
-
-### Story Status
-
-Add a **Fix Version** column.
-
-For each story, populate the Fix Version associated with that story from the iTrack/Jira Cloud story information.
-
-If a story has multiple fix versions, preserve the complete available value rather than arbitrarily selecting/truncating one.
+- Users must be able to select multiple values from each filter.
+- The dropdown should display the available values with checkbox/multi-select behavior.
+- Applying multiple selections must correctly filter the Review Commits results.
+- Existing Team and Fix Version filters must continue working as they currently do.
+- Multiple filters must work together without breaking the existing filtering logic.
 
 ---
 
-# Important Constraints
+## Acceptance Criteria
 
-- Use the existing iTrack/Jira Cloud story lookup mechanism.
-- Do not duplicate the story lookup logic unnecessarily.
-- Do not modify unrelated commit-analysis behavior.
-- Do not break existing validation/lifecycle functionality.
-- Preserve the complete Fix Version string.
-- Do not truncate or remove spaces from Fix Version values.
-- Ensure the UI and Excel exports use consistent Fix Version information.
-- Ensure existing filters and report generation continue to work.
-
-## Definition of Done
-
-- [ ] Previous Fix Version is correctly identified.
-- [ ] Future Fix Version is correctly identified.
-- [ ] No Fix Version is correctly identified.
-- [ ] Story Not in Version is used only as the fallback.
-- [ ] Version comparison correctly handles month/year boundaries.
-- [ ] UI displays the new validation categories.
-- [ ] UI descriptions/tooltips reflect the actual category.
-- [ ] Correct color coding is applied.
-- [ ] Review All Commits Excel tab contains Fix Version.
-- [ ] Commit Violations Excel tab contains Fix Version.
-- [ ] Story Status Excel tab contains Fix Version.
-- [ ] Complete Fix Version strings are preserved.
-- [ ] Existing functionality remains unaffected.
+1. Every commit has `evaluated_fix_version` populated whenever the corresponding story fix version is available.
+2. `evaluated_fix_version` is correctly displayed in Review Commits as **Commit Fix Version** immediately after the commit message.
+3. Commit Fix Version is also available in the relevant GitHub exception/details display.
+4. Scrum Team, Component, Committer, Commit Lifecycle, and Violation Category support multi-select filtering.
+5. Multiple selections within a filter work correctly.
+6. Multiple different filters can be applied together.
+7. Existing Review Commits functionality and business logic must not regress.
+8. Do not introduce unrelated changes or unnecessary refactoring.
