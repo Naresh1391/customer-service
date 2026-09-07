@@ -1,153 +1,183 @@
-# Excel Report Column Updates
+# Centralized GitHub & Kubernetes Authentication Migration
 
-Update the existing Excel report export only as specified below. Do not change any underlying business logic, data retrieval, calculations, or UI behavior.
+## Objective
 
-## 1. Commit Violations Tab
+Update the application so that **no user credentials, tokens, PATs, cookies, or other authentication secrets are supplied through the UI** for GitHub, Kubernetes, or Veracode.
 
-### Keep
-- Component
-- Commit Message
-- Story
-- Author
-- Commit Lifecycle
-- Commit Story Fixed Version
-- Violation Category
-- Violation Description
-- Suggested Resolution
+The application must use centrally configured credentials from the backend environment configuration.
 
-### Remove
-- Commit Date
-- Compliance Status
-- Evaluation Status
-- Override Status
-- Override Reason
+## 1. Remove Credential Inputs From UI
 
-### Column order
-Place **Commit Story Fixed Version** immediately before **Violation Category**.
+Remove all user-entered credential fields related to:
 
-Use the existing `evaluated_fix_version` value for **Commit Story Fixed Version**.
+- GitHub
+- Kubernetes / K8s
+- Veracode
 
----
+This includes any username, password, PAT, token, cookie, credential, or similar authentication input currently exposed through the UI, including the Export Center/settings areas.
 
-## 2. Review All Commits Tab
+Users must not be required or allowed to provide these credentials.
 
-Apply the same column changes as the **Commit Violations** tab:
+### Keep Existing Jira Inputs
 
-### Keep
-- Component
-- Commit Message
-- Story
-- Author
-- Commit Lifecycle
-- Commit Story Fixed Version
-- Violation Category
-- Violation Description
-- Suggested Resolution
+Do **not** remove the existing:
 
-### Remove
-- Commit Date
-- Compliance Status
-- Evaluation Status
-- Override Status
-- Override Reason
+- Jira Cloud
+- Legacy iTrack
 
-Place **Commit Story Fixed Version** immediately before **Violation Category**.
+credential/configuration inputs for now.
+
+These will be migrated to centralized credentials separately once the required tokens are available.
 
 ---
 
-## 3. Story Status Tab
+## 2. GitHub Authentication
 
-No changes are required.
+A centralized GitHub PAT has already been created and the connection has been tested successfully.
 
-Keep the existing columns:
-- Story Number
-- Summary
-- Status
-- Assignee
-- Reporter
-- Scrum Team
-- Sprint
-- Issue Type
-- Components
+Update the existing GitHub client/backend connection logic so that:
 
----
+- GitHub authentication uses the configured PAT from the environment.
+- No GitHub credential is obtained from the UI.
+- Existing GitHub API functionality remains unchanged.
+- Existing repositories, commit retrieval, branch retrieval, comparison, and other GitHub operations continue to work exactly as before.
+- Do not change existing business logic merely because the authentication mechanism is changing.
 
-## 4. Branch Cut Validations Tab
-
-### Keep
-- Component
-- Previous Branch
-- Current Branch
-- Resolution Source
-- Branch Cut Status
-- Teams
-- Stories
-
-### Remove
-- GitHub Repo
-- User Excluded
-- Is Library
-- Override Status
-
-### Additional requirement
-
-Do not include the **Not Valid Components** section/data in the Branch Cut Validation Excel report.
+Use environment configuration for the token, with an appropriate configuration key/name consistent with the existing project conventions.
 
 ---
 
-## 5. Deployment Tabs
+## 3. Kubernetes Authentication
 
-Apply the following column structure consistently to **all deployment sections**:
+Separate Kubernetes credentials/tokens have already been created for the required environments and the connections have been tested successfully.
 
-- Test 3
-- Test 4
-- Stage
-- Production
-- East-West
-- Any other existing deployment environment sections
+Update the Kubernetes connection logic so that:
 
-### Keep
-- Component
-- Namespace
-- Git Commit
-- Latest Release Commit
-- Release Branch / GitHub Branch
-- Deployment Status
-- Teams
-- Stories
-- Validation Message
+- Kubernetes authentication uses the centrally configured environment credentials/tokens.
+- No Kubernetes credentials are entered through the UI.
+- Existing Kubernetes environments continue to work:
+  - Test 3
+  - Test 4
+  - Stage East
+  - Stage West
+  - Production East
+  - Production West
+  - Any other currently supported environment
+- Existing deployment-status and deployment-readiness behavior must remain unchanged.
 
-### Remove
-- Deployment Name
-- Active Color
-- Image Tag
-- Build Number
-- Commits Behind
-- Deployment Timestamp
+Do not remove or alter the existing deployment functionality.
 
-Do **not** remove:
-- Git Commit
-- Latest Release Commit
-- Release Branch / GitHub Branch
+Only change **how authentication credentials are obtained**.
 
-### Deployment Status
+---
 
-Keep the existing **Deployment Status** column.
+## 4. Veracode
 
-Do not introduce or retain duplicate/redundant status columns unnecessarily. If `Validation Status` duplicates the same information as `Deployment Status`, use the existing `Deployment Status` as the single exported status field.
+Remove Veracode credential/token input from the UI.
+
+Where Veracode connectivity is currently required, prepare the backend to obtain its credentials from environment configuration rather than from user input.
+
+Do not change existing Veracode business behavior.
+
+---
+
+## 5. Generate Report Connection Status
+
+The existing connection/status information displayed near **Generate Report** must remain.
+
+For example, the application currently indicates the availability/status of connections such as:
+
+- Git
+- K8s
+- Production East/West
+- Jira
+- iTrack
+
+Keep this functionality and UI behavior intact.
+
+The only change should be that GitHub/Kubernetes connection checks now use the centrally configured credentials.
+
+---
+
+## 6. Deployment Readiness
+
+Do not change the existing Deployment Readiness UI or functionality.
+
+All currently supported deployment environments must continue to appear and behave as they do today.
+
+The migration must only change the authentication mechanism behind the scenes.
+
+---
+
+## 7. Environment Configuration
+
+For the current implementation:
+
+- Store the centralized credentials/tokens in the project's `.env` configuration.
+- Read them securely from backend configuration.
+- Do not hard-code tokens anywhere in Python source code.
+- Do not expose tokens through API responses.
+- Do not send tokens to the React frontend.
+- Do not persist user-provided credentials in the database.
+
+The eventual target is to move these secrets from `.env` to **Azure Secrets/Key Vault or the project's existing Azure secret-management mechanism**.
+
+Design the configuration so that this future migration can be performed without changing the business logic.
+
+---
+
+## 8. Security Requirements
+
+The following are mandatory:
+
+- No GitHub PAT input in UI.
+- No Kubernetes token input in UI.
+- No Veracode credential/token input in UI.
+- No authentication cookies supplied by users for these integrations.
+- Never log actual tokens/secrets.
+- Never return secrets to the frontend.
+- Never store secrets in SQLite/database tables.
+- Never hard-code secrets in Python files.
+- Ensure `.env` remains excluded from source control.
+- Existing authentication/SSO behavior for application users must not be affected.
+
+---
+
+## 9. Implementation Approach
+
+Before making code changes:
+
+1. Identify every UI location where GitHub, Kubernetes, or Veracode credentials are currently requested.
+2. Identify every frontend API/request that sends those credentials.
+3. Identify every backend service/client that consumes them.
+4. Identify all GitHub connection paths.
+5. Identify all Kubernetes connection paths and environments.
+6. Identify all Veracode connection paths.
+7. Identify the existing Generate Report connection-status flow.
+8. Identify the Deployment Readiness connection flow.
+9. Identify the current environment/configuration mechanism.
+10. Prepare a concise implementation plan showing exactly what will change.
+11. Implement only the authentication/configuration changes required by this requirement.
+
+Do not perform unrelated refactoring.
 
 ---
 
 ## Acceptance Criteria
 
-1. Excel export contains exactly the requested columns for each tab.
-2. Column ordering follows the requirements above.
-3. `evaluated_fix_version` is exported as **Commit Story Fixed Version**.
-4. Commit Lifecycle is included in both commit-related tabs.
-5. Removed columns must no longer appear in the generated Excel file.
-6. Story Status remains unchanged.
-7. Branch Cut Validation excludes invalid-component data and the specified columns.
-8. All deployment environment tabs follow the same requested column structure.
-9. Existing data retrieval and business logic must remain unchanged.
-10. Do not introduce unrelated changes or refactoring.
-11. Verify the generated Excel workbook after implementation to ensure every tab contains the correct columns and ordering.
+- GitHub authentication works using the centrally configured PAT.
+- Kubernetes authentication works for all existing supported environments using centrally configured credentials.
+- Veracode credentials are no longer supplied through the UI.
+- GitHub/Kubernetes/Veracode credential fields are removed from the UI.
+- Jira Cloud and legacy iTrack credential functionality remains unchanged for now.
+- Generate Report connection indicators continue to work.
+- Deployment Readiness continues to show and process all existing environments.
+- Existing GitHub/Kubernetes/Veracode functionality remains behaviorally unchanged.
+- No secrets are exposed to the frontend.
+- No secrets are stored in the database.
+- No secrets are hard-coded in source code.
+- No actual secret values appear in logs.
+- `.env` is used for the current implementation and is structured for future Azure secret migration.
+- Existing application functionality must not regress.
+
+**Primary principle: change the authentication source, not the application behavior.**
