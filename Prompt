@@ -1,183 +1,703 @@
-# Centralized GitHub & Kubernetes Authentication Migration
+You are acting as a Distinguished Software Architect and Senior Full-Stack/AI Engineer with 15–20+ years of enterprise software experience.
 
-## Objective
+We are building an internal AT&T telecom application currently in testing/development. The working name can be treated as “OCE Insight” for now: an AI-powered Order Investigation and Root Cause Analysis platform for the AT&T Order Capture Engine (OCE) ecosystem.
 
-Update the application so that **no user credentials, tokens, PATs, cookies, or other authentication secrets are supplied through the UI** for GitHub, Kubernetes, or Veracode.
+IMPORTANT:
+Do NOT start implementing production code yet.
 
-The application must use centrally configured credentials from the backend environment configuration.
+Your first responsibility is to perform a comprehensive architecture/discovery exercise using the internal tools and knowledge available to you, especially Wiki MCP, LevelUp MCP/GitHub, the existing BSS Knowledge Graph, AAW documentation, TraceIQ documentation/information, ELK integration capabilities, and any existing application source code/context available to you.
 
-## 1. Remove Credential Inputs From UI
+Do not invent capabilities. If an internal capability is unknown, explicitly mark it as UNKNOWN and identify how it can be verified.
 
-Remove all user-entered credential fields related to:
+==================================================
 
-- GitHub
-- Kubernetes / K8s
-- Veracode
+1. BUSINESS PROBLEM
+    ==================================================
 
-This includes any username, password, PAT, token, cookie, credential, or similar authentication input currently exposed through the UI, including the Export Center/settings areas.
+OCE is a large telecom order orchestration ecosystem involving hundreds of microservices, APIs, Kafka topics/events, command-based processing, Camunda orchestration, downstream systems, and other AT&T platforms such as OGCJ and fulfillment/warehouse systems.
 
-Users must not be required or allowed to provide these credentials.
+When an order becomes stuck or fails, testing/support teams currently perform a largely manual investigation.
 
-### Keep Existing Jira Inputs
+Typical request:
 
-Do **not** remove the existing:
+“Order <ORDER_ID> is stuck in OCE while processing Create Product Order. Please investigate and explain why.”
 
-- Jira Cloud
-- Legacy iTrack
+Today, a human investigator may need to:
 
-credential/configuration inputs for now.
+1. Search audit logs.
+2. Examine API requests and responses.
+3. Determine which API/event was the last successful step.
+4. Determine which step failed or was not triggered.
+5. Search ELK logs using order ID/MDC/correlation information.
+6. Examine Kafka/event processing.
+7. Examine Camunda workflow state and gateway/precondition decisions.
+8. Inspect source code to understand business conditions.
+9. Search Wiki/documentation.
+10. Understand service dependencies.
+11. Consult the BSS Knowledge Graph.
+12. Potentially consult TraceIQ.
+13. Correlate all evidence.
+14. Determine the root cause.
+15. Explain the reason and recommended next action to the testing/support team.
 
-These will be migrated to centralized credentials separately once the required tokens are available.
+The goal of OCE Insight is to automate as much of this investigation as safely and reliably possible.
 
----
+==================================================
+2. TARGET CAPABILITY
 
-## 2. GitHub Authentication
+Given a natural-language investigation request and an order ID, the system should be able to:
 
-A centralized GitHub PAT has already been created and the connection has been tested successfully.
+* Identify the order and investigation scope.
+* Determine the relevant time window.
+* Reconstruct the order execution timeline.
+* Identify successful, failed, skipped, delayed, and missing steps.
+* Identify the expected order flow.
+* Identify the actual order flow.
+* Compare expected vs actual execution.
+* Inspect API audit records.
+* Inspect request/response payloads where permitted.
+* Search ELK logs.
+* Correlate MDC/order/correlation/trace identifiers.
+* Inspect Kafka/event evidence where available.
+* Inspect Camunda workflow/process state.
+* Determine which preconditions/gateway expressions affected execution.
+* Search source code to understand business conditions.
+* Search Wiki and architecture documentation.
+* Query the BSS Knowledge Graph.
+* Consult TraceIQ as an additional evidence source.
+* Correlate evidence across all sources.
+* Determine candidate root causes.
+* Validate candidate causes against multiple independent pieces of evidence.
+* Produce a human-readable RCA.
+* Provide evidence supporting every major conclusion.
+* Provide a confidence level.
+* Clearly distinguish facts from inference.
+* Recommend the next investigation/remediation action.
+* Avoid hallucinating information that is not supported by evidence.
 
-Update the existing GitHub client/backend connection logic so that:
+==================================================
+3. EXISTING INTERNAL CAPABILITIES TO DISCOVER
 
-- GitHub authentication uses the configured PAT from the environment.
-- No GitHub credential is obtained from the UI.
-- Existing GitHub API functionality remains unchanged.
-- Existing repositories, commit retrieval, branch retrieval, comparison, and other GitHub operations continue to work exactly as before.
-- Do not change existing business logic merely because the authentication mechanism is changing.
+Use internal Wiki MCP and other available internal tools to investigate the following.
 
-Use environment configuration for the token, with an appropriate configuration key/name consistent with the existing project conventions.
+A. TraceIQ
 
----
+Find internal documentation about the AT&T TraceIQ system.
 
-## 3. Kubernetes Authentication
+Determine:
 
-Separate Kubernetes credentials/tokens have already been created for the required environments and the connections have been tested successfully.
+* What TraceIQ is.
+* Its architecture.
+* What data it consumes.
+* How it accesses ELK/log data.
+* How it performs analysis.
+* What APIs/tools/interfaces it exposes.
+* Whether it exposes MCP capabilities.
+* What AI/model it uses.
+* How its RCA/reasoning works.
+* Whether it can be reused.
+* Whether it can be integrated.
+* What limitations it has.
+* What functionality should potentially be rewritten rather than integrated.
+* What security/access requirements exist.
 
-Update the Kubernetes connection logic so that:
+Do not assume public internet results for “TraceIQ” describe the AT&T internal implementation.
 
-- Kubernetes authentication uses the centrally configured environment credentials/tokens.
-- No Kubernetes credentials are entered through the UI.
-- Existing Kubernetes environments continue to work:
-  - Test 3
-  - Test 4
-  - Stage East
-  - Stage West
-  - Production East
-  - Production West
-  - Any other currently supported environment
-- Existing deployment-status and deployment-readiness behavior must remain unchanged.
+B. AAW / AT&T Workflows
 
-Do not remove or alter the existing deployment functionality.
+Search internal Wiki for AAW / AT&T Workflows.
 
-Only change **how authentication credentials are obtained**.
+Determine:
 
----
+* What AAW provides.
+* Whether LangGraph is already supported.
+* Existing workflow patterns.
+* Existing AI-agent patterns.
+* Model invocation capabilities.
+* How Ask AT&T models are accessed.
+* Authentication/API-key mechanisms.
+* Existing MCP integrations.
+* Existing observability.
+* Existing enterprise guardrails.
+* Whether OCE Insight should run inside AAW or integrate with AAW.
 
-## 4. Veracode
+C. LevelUp MCP / GitHub / Wiki
 
-Remove Veracode credential/token input from the UI.
+Determine what tools are already available for:
 
-Where Veracode connectivity is currently required, prepare the backend to obtain its credentials from environment configuration rather than from user input.
+* Source-code search.
+* Repository search.
+* File retrieval.
+* Wiki search.
+* Architecture documentation.
+* Service discovery.
+* API discovery.
 
-Do not change existing Veracode business behavior.
+D. ELK
 
----
+Determine whether an existing MCP/tool/API is available for ELK.
 
-## 5. Generate Report Connection Status
+Determine:
 
-The existing connection/status information displayed near **Generate Report** must remain.
+* Search capabilities.
+* Filtering.
+* Time-window querying.
+* Order ID/MDC/correlation ID searching.
+* Service filtering.
+* Log aggregation.
+* Result-size limitations.
+* Security/authentication.
+* Whether server-side summarization is possible.
 
-For example, the application currently indicates the availability/status of connections such as:
+E. Audit Logs
 
-- Git
-- K8s
-- Production East/West
-- Jira
-- iTrack
+Understand the existing audit-log architecture.
 
-Keep this functionality and UI behavior intact.
+Determine:
 
-The only change should be that GitHub/Kubernetes connection checks now use the centrally configured credentials.
+* API request/response storage.
+* Event structure.
+* Order correlation.
+* Timestamp fields.
+* Service identifiers.
+* API names.
+* Kafka/event information.
+* Retention.
+* Search/query capability.
+* Existing APIs/MCP.
 
----
+F. Camunda
 
-## 6. Deployment Readiness
+Determine how the existing OCE Camunda workflows can be inspected.
 
-Do not change the existing Deployment Readiness UI or functionality.
+Determine:
 
-All currently supported deployment environments must continue to appear and behave as they do today.
+* Process instance lookup.
+* Variables.
+* Activity state.
+* Gateway conditions.
+* BPMN definition retrieval.
+* Incident information.
+* Correlation to order ID.
+* Correlation to microservice/API calls.
 
-The migration must only change the authentication mechanism behind the scenes.
+G. BSS Knowledge Graph
 
----
+Study the existing knowledge graph implementation and data model.
 
-## 7. Environment Configuration
+Understand:
 
-For the current implementation:
+* What entities exist.
+* Services.
+* APIs.
+* Dependencies.
+* Kafka topics.
+* Inputs/outputs.
+* README information.
+* Test endpoints.
+* Relationships.
+* Expected order flow.
+* Whether graph traversal/query APIs already exist.
+* Whether it can answer “what should happen next?”
+* Whether it can identify upstream/downstream dependencies.
 
-- Store the centralized credentials/tokens in the project's `.env` configuration.
-- Read them securely from backend configuration.
-- Do not hard-code tokens anywhere in Python source code.
-- Do not expose tokens through API responses.
-- Do not send tokens to the React frontend.
-- Do not persist user-provided credentials in the database.
+==================================================
+4. IMPORTANT ARCHITECTURAL PRINCIPLE
 
-The eventual target is to move these secrets from `.env` to **Azure Secrets/Key Vault or the project's existing Azure secret-management mechanism**.
+Do NOT recommend a single unrestricted autonomous LLM agent.
 
-Design the configuration so that this future migration can be performed without changing the business logic.
+Evaluate a controlled agentic architecture where deterministic investigation steps and AI reasoning are combined.
 
----
+A likely direction to evaluate is:
 
-## 8. Security Requirements
+Investigation API
+->
+Investigation Orchestrator
+->
+Stateful workflow / LangGraph
+->
+Specialized evidence gathering tools
+->
+Evidence normalization
+->
+Expected vs Actual comparison
+->
+Root Cause reasoning
+->
+Evidence validation
+->
+Final RCA
 
-The following are mandatory:
+Evaluate whether this architecture is appropriate and propose alternatives if a better architecture exists.
 
-- No GitHub PAT input in UI.
-- No Kubernetes token input in UI.
-- No Veracode credential/token input in UI.
-- No authentication cookies supplied by users for these integrations.
-- Never log actual tokens/secrets.
-- Never return secrets to the frontend.
-- Never store secrets in SQLite/database tables.
-- Never hard-code secrets in Python files.
-- Ensure `.env` remains excluded from source control.
-- Existing authentication/SSO behavior for application users must not be affected.
+==================================================
+5. PROPOSED EVIDENCE SOURCES
 
----
+Evaluate these as independent evidence providers:
 
-## 9. Implementation Approach
+* Audit logs
+* ELK
+* Kafka/event history
+* Camunda
+* GitHub/source code
+* Wiki
+* BSS Knowledge Graph
+* TraceIQ
+* Existing internal AI/AAW capabilities
 
-Before making code changes:
+The final RCA must be evidence-based.
 
-1. Identify every UI location where GitHub, Kubernetes, or Veracode credentials are currently requested.
-2. Identify every frontend API/request that sends those credentials.
-3. Identify every backend service/client that consumes them.
-4. Identify all GitHub connection paths.
-5. Identify all Kubernetes connection paths and environments.
-6. Identify all Veracode connection paths.
-7. Identify the existing Generate Report connection-status flow.
-8. Identify the Deployment Readiness connection flow.
-9. Identify the current environment/configuration mechanism.
-10. Prepare a concise implementation plan showing exactly what will change.
-11. Implement only the authentication/configuration changes required by this requirement.
+The LLM must NOT be allowed to invent facts.
 
-Do not perform unrelated refactoring.
+Every major conclusion should ideally reference one or more evidence records.
 
----
+==================================================
+6. INVESTIGATION STATE
 
-## Acceptance Criteria
+Design a normalized InvestigationContext/state model.
 
-- GitHub authentication works using the centrally configured PAT.
-- Kubernetes authentication works for all existing supported environments using centrally configured credentials.
-- Veracode credentials are no longer supplied through the UI.
-- GitHub/Kubernetes/Veracode credential fields are removed from the UI.
-- Jira Cloud and legacy iTrack credential functionality remains unchanged for now.
-- Generate Report connection indicators continue to work.
-- Deployment Readiness continues to show and process all existing environments.
-- Existing GitHub/Kubernetes/Veracode functionality remains behaviorally unchanged.
-- No secrets are exposed to the frontend.
-- No secrets are stored in the database.
-- No secrets are hard-coded in source code.
-- No actual secret values appear in logs.
-- `.env` is used for the current implementation and is structured for future Azure secret migration.
-- Existing application functionality must not regress.
+Evaluate fields such as:
 
-**Primary principle: change the authentication source, not the application behavior.**
+* investigationId
+* orderId
+* orderType
+* sourceSystem
+* targetSystem
+* requestedOperation
+* investigationStartTime
+* investigationEndTime
+* orderContext
+* auditEvents
+* API calls
+* API responses
+* Kafka events
+* Camunda events
+* ELK evidence
+* source-code evidence
+* Wiki evidence
+* knowledge-graph evidence
+* TraceIQ evidence
+* expectedFlow
+* actualFlow
+* missingSteps
+* failedSteps
+* skippedSteps
+* candidateRootCauses
+* validatedRootCause
+* evidenceReferences
+* confidence
+* recommendedAction
+
+Refine this model based on actual internal architecture.
+
+==================================================
+7. EXPECTED VS ACTUAL FLOW
+
+Design a mechanism that can determine:
+
+EXPECTED:
+
+OCE
+-> Validation
+-> Eligibility
+-> Inventory
+-> Create Product Order
+-> Fulfillment
+-> Warehouse
+
+ACTUAL:
+
+OCE
+-> Validation SUCCESS
+-> Eligibility SUCCESS
+-> Inventory SUCCESS
+-> Create Product Order NOT TRIGGERED
+
+The system should then investigate WHY the expected step was not triggered.
+
+For example:
+
+* Was a Camunda gateway condition false?
+* Was a required payload field missing?
+* Did an upstream API return an unexpected value?
+* Was an event never published?
+* Was a Kafka consumer unavailable?
+* Was the service invocation skipped intentionally?
+* Was there a downstream timeout?
+* Was there a code/configuration issue?
+
+The exact conclusions must come from evidence.
+
+==================================================
+8. SPECIALIZED AGENTS / NODES
+
+Evaluate whether the following logical agents/nodes are appropriate:
+
+1. Request Understanding
+2. Order Context Resolver
+3. Timeline Builder
+4. Audit Investigator
+5. ELK Investigator
+6. Kafka/Event Investigator
+7. Camunda Investigator
+8. Code Investigator
+9. Wiki Investigator
+10. Knowledge Graph Investigator
+11. TraceIQ Investigator
+12. Evidence Correlator
+13. Expected-vs-Actual Analyzer
+14. Root Cause Analyzer
+15. Evidence Validator
+16. RCA Report Generator
+
+Do not automatically implement all of these as separate LLM agents.
+
+Determine which should be deterministic services/functions and which genuinely require LLM reasoning.
+
+==================================================
+9. TOOL DESIGN
+
+Propose clear tool contracts such as:
+
+searchAudit(orderId, timeRange)
+
+searchELK(orderId, service, timeRange)
+
+getWorkflowInstance(orderId)
+
+getWorkflowState(instanceId)
+
+getBpmnDefinition(processDefinitionId)
+
+searchCode(query)
+
+searchWiki(query)
+
+queryKnowledgeGraph(query)
+
+getTraceIQAnalysis(orderId, timeRange)
+
+Do not assume these exact APIs exist.
+
+Discover existing capabilities first and propose an adapter layer where necessary.
+
+==================================================
+10. SECURITY
+
+Design for enterprise telecom security.
+
+Evaluate:
+
+* Authentication
+* Authorization
+* RBAC
+* Least privilege
+* MCP permissions
+* Production read-only access
+* Sensitive payload masking
+* PII handling
+* Prompt injection risks
+* Tool injection risks
+* Data exfiltration risks
+* Auditability
+* Model access controls
+* API-key/token management
+* Logging
+* Data retention
+
+The initial system should be READ-ONLY.
+
+AI must not modify production systems.
+
+==================================================
+11. AI / MODEL ARCHITECTURE
+
+Determine how the internal Ask AT&T models should be integrated.
+
+Do not introduce external LLMs unless explicitly approved.
+
+Evaluate:
+
+* Model selection
+* Structured outputs
+* Tool calling
+* Context management
+* Prompt templates
+* Evidence grounding
+* Confidence scoring
+* Citation/evidence references
+* Token management
+* Context compression
+* Retry handling
+* Model fallback
+* Hallucination prevention
+
+==================================================
+12. CONTEXT MANAGEMENT
+
+Assume an order can generate:
+
+* Hundreds of API calls
+* Thousands of log records
+* Many Kafka events
+* Multiple microservices
+* Multiple workflow steps
+
+Do NOT send raw data blindly to the LLM.
+
+Design an evidence pipeline:
+
+Raw data
+-> filtering
+-> normalization
+-> correlation
+-> deduplication
+-> summarization
+-> evidence objects
+-> reasoning context
+
+Explain how this should work.
+
+==================================================
+13. PERFORMANCE
+
+Investigate how evidence gathering can run in parallel.
+
+For example:
+
+            Order ID
+               |
+    +----------+----------+
+    |          |          |
+   ELK       Audit      Graph
+    |          |          |
+    +----------+----------+
+               |
+          Correlation
+               |
+          RCA reasoning
+
+Define:
+
+* Parallel calls
+* Timeouts
+* Retries
+* Circuit breakers
+* Partial results
+* Caching
+* Rate limiting
+* Query limits
+* Maximum investigation duration
+
+==================================================
+14. RCA OUTPUT
+
+Design the final response structure.
+
+Target format:
+
+ORDER INVESTIGATION
+
+Order:
+System:
+Operation:
+Status:
+
+ROOT CAUSE
+
+<clear explanation>
+
+EVIDENCE
+
+<evidence>
+<evidence>
+<evidence>
+
+EXPECTED FLOW
+
+<expected step>
+
+ACTUAL FLOW
+
+<actual step>
+
+WHY IT HAPPENED
+
+<reason>
+
+IMPACT
+
+<impact>
+
+RECOMMENDED ACTION
+
+<action>
+
+CONFIDENCE
+
+HIGH / MEDIUM / LOW
+
+CONFIDENCE JUSTIFICATION
+
+<why>
+
+UNRESOLVED ITEMS
+
+<unknowns>
+
+The final answer must clearly distinguish:
+
+FACT
+INFERENCE
+UNKNOWN
+
+==================================================
+15. EVALUATION STRATEGY
+
+Design an evaluation framework.
+
+We need to eventually create a dataset containing historical incidents:
+
+Input:
+Order ID + investigation request
+
+Expected:
+Human-validated RCA
+
+System output:
+AI-generated RCA
+
+Measure:
+
+* Root-cause accuracy
+* Evidence accuracy
+* Evidence completeness
+* False-positive rate
+* False-negative rate
+* Confidence calibration
+* Investigation time
+* Human acceptance rate
+* Unsupported-claim rate
+
+Recommend how to build this evaluation dataset safely.
+
+==================================================
+16. PHASED IMPLEMENTATION PLAN
+
+Propose a realistic implementation roadmap.
+
+At minimum evaluate:
+
+Phase 1:
+Order ID -> Audit + ELK -> timeline + basic RCA
+
+Phase 2:
+Camunda/workflow intelligence
+
+Phase 3:
+Source-code intelligence
+
+Phase 4:
+BSS Knowledge Graph
+
+Phase 5:
+TraceIQ integration
+
+Phase 6:
+Advanced agentic RCA
+
+Phase 7:
+Evaluation/learning/optimization
+
+Adjust the phases based on actual internal capabilities discovered.
+
+==================================================
+17. TECHNOLOGY RECOMMENDATION
+
+Recommend the appropriate technology stack.
+
+Evaluate:
+
+* Python vs Java
+* LangGraph
+* LangChain
+* FastAPI
+* Spring Boot
+* React
+* PostgreSQL
+* Redis
+* Vector database if actually needed
+* Graph database if actually needed
+* Kafka
+* Azure services
+* AAW
+* Internal AT&T models
+* MCP
+* OpenTelemetry/observability if applicable
+
+Do NOT add technology simply because it is popular.
+
+For every major technology recommendation explain WHY it is needed.
+
+==================================================
+18. DELIVERABLE
+
+Before writing code, produce a comprehensive technical design containing:
+
+1. Executive summary
+2. Problem statement
+3. Current-state architecture
+4. Target architecture
+5. Component diagram
+6. Investigation workflow
+7. LangGraph/state-machine design
+8. Agent vs deterministic-service boundaries
+9. MCP/tool architecture
+10. Evidence model
+11. InvestigationContext schema
+12. Expected-vs-actual flow design
+13. RCA reasoning architecture
+14. TraceIQ integration strategy
+15. AAW integration strategy
+16. BSS Knowledge Graph integration strategy
+17. ELK integration strategy
+18. Camunda integration strategy
+19. Security architecture
+20. Performance/scalability design
+21. Error handling
+22. Observability
+23. Evaluation framework
+24. Risks and mitigations
+25. Technology stack recommendation
+26. Phased implementation plan
+27. Suggested repository/module structure
+28. API contracts
+29. Example end-to-end investigation
+30. Open questions / assumptions
+
+==================================================
+19. CRITICAL RULE
+
+Do not start coding until the discovery and architecture proposal is complete.
+
+Use the internal Wiki MCP, LevelUp/GitHub MCP, BSS Knowledge Graph, AAW documentation, TraceIQ information, and other available internal sources to ground the design.
+
+Clearly identify which statements are:
+
+* Confirmed from internal documentation/code
+* Inferred
+* Proposed
+* Unknown
+
+Do not fabricate AT&T-specific capabilities.
+
+At the end, provide:
+
+A. Recommended architecture
+B. Recommended technology stack
+C. Top 10 risks
+D. MVP scope
+E. Open questions requiring human/team confirmation
+F. A proposed implementation backlog broken into small Devin-executable tasks
+
+The objective is to create a production-grade architecture for an AI-powered OCE order investigation and RCA platform, not merely a chatbot.
