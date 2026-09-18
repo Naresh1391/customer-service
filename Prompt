@@ -1,31 +1,158 @@
-We need to validate one critical blocker before proceeding with the OCE Insight AI RCA POC.
+Release Tracker – Further Enhancements
 
-Our POC will run on the company laptop and use ONLY TEST data/systems. We have/expect access to test OCE applications, test Kubernetes, test Camunda, test audit logs, ELK, etc. Production is completely out of scope for now.
+Implement the following changes in the current Python backend/BFF + React frontend. Do not change unrelated functionality.
 
-The main question is the AI model/runtime:
+1. Remove Legacy iTrack Completely
 
-1. Can Devin’s available cloud models/workflows be legitimately used by our local POC to send investigation context and receive an AI-generated analysis/report?
-2. Can a Devin workflow be invoked/integrated programmatically from a local Python application?
-3. Can LangChain/LangGraph integrate with such a Devin workflow/model, if supported?
-4. If Devin cannot act as a runtime model provider, what other APPROVED option can we use with only the capabilities/credentials currently available on the company laptop?
-5. Do NOT assume AWS, AWS Lambda, or an AWS API key. AWS is NOT part of our current architecture. Our deployment environment is Azure/Azure App Services.
-6. Do NOT suggest running small local open-source LLMs unless there is a strong reason; they are not giving sufficient results for this use case.
-7. Do NOT invent or assume a Devin API. Verify what Devin officially supports from the available environment/documentation.
+Legacy iTrack is no longer required. Everything is now available through Jira Cloud / Snowflake.
 
-The immediate goal is only to prove that:
+Remove all iTrack-related code and references completely from both frontend and backend:
 
-Test order/context
-→ investigation data
-→ AI model
-→ reasoning
-→ RCA/report
+* Remove iTrack UI elements, connection/status indicators, switches, settings, and configuration.
+* Remove iTrack API/client calls and related backend logic.
+* Remove iTrack-related .env properties/configuration.
+* Remove iTrack connection details and settings.
+* Delete unused iTrack files/functions/imports.
+* Do not comment out or retain deprecated iTrack code.
 
-is technically feasible.
+Jira Cloud replacement analysis
 
-If Devin can provide the model/workflow capability, propose the simplest POC architecture and a minimal example showing how a local Python/LangGraph application could interact with it.
+Currently, some Jira Cloud flows may still call legacy iTrack to obtain additional story information.
 
-If Devin CANNOT be used as a runtime model provider, clearly say so and identify the most practical alternative available to us.
+Before modifying those flows, identify and document:
 
-Also list the main risks/limitations of the recommended approach, especially around credentials, corporate restrictions, context size, model availability, and Devin credit limits.
+* Where Jira Cloud → iTrack calls currently exist.
+* Why each call is being made.
+* Which fields are being retrieved from iTrack.
+* Which existing functionality consumes those fields.
+* Provide a sample Jira Cloud API request that can retrieve the story/details directly from Jira Cloud.
 
-Do NOT build the full application yet. This is a feasibility check for the AI model invocation, which is the primary go/no-go decision for the POC.
+For this iteration, do not implement the replacement fields yet. Just document the findings so the required Jira Cloud fields can be finalized separately.
+
+No backend flow should call iTrack after this cleanup.
+
+⸻
+
+2. Generate Report – Data Source
+
+Since iTrack is removed:
+
+* Remove the Jira Cloud / iTrack data-source selection UI from Generate Report.
+* Generate Report should show/use Snowflake only as the data source where applicable.
+* Remove any obsolete data-source switching logic related to iTrack.
+* Do not remove the existing backend Jira Cloud capability unless it is specifically required by the above iTrack removal.
+
+⸻
+
+3. Review Commits – Validation Selection
+
+Currently the selection checkboxes/select-all controls are appearing for all records.
+
+Change the behavior:
+
+* By default, no selection checkboxes or Select All control should be displayed.
+* They should appear only when “Validation Only” is enabled/selected.
+* Only in Validation Only mode should users be able to select violations/commits and send Teams notifications.
+* Preserve the existing role-based authorization behavior.
+* Do not change the existing Teams notification functionality otherwise.
+
+⸻
+
+4. Release Readiness – Story Status
+
+Update Story Status validation based on Jira Cloud status:
+
+* Closed = valid status.
+* Any status other than Closed = invalid/pending.
+* When Pending Only is selected, show every story whose status is not Closed.
+* Remove obsolete status references/logic inherited from the previous iTrack implementation.
+* Use the Jira Cloud status model directly.
+
+⸻
+
+5. Remove Veracode / SASH Report Completely
+
+Remove the SASH Report tab from the UI.
+
+Also completely remove all Veracode-related implementation from the backend:
+
+* Veracode API/client code
+* Veracode configuration
+* Veracode credentials
+* .env properties
+* Imports/functions/utilities
+* Related database/config references where no longer required
+
+Do not comment out obsolete code. Delete it completely.
+
+⸻
+
+6. Remove Scan History
+
+The separate Scan History tab is no longer required because Recent Scans are already displayed in Release Overview.
+
+Remove the Scan History tab and its associated UI/navigation.
+
+Enhance Release Overview – Recent Scans
+
+Analyze the existing scan/job database configuration and identify the different asynchronous job purposes currently being tracked, including at minimum:
+
+* Report Generation
+* Deployment Refresh
+
+If there are other relevant async job types, include them as well.
+
+Enhance Recent Scans in Release Overview so the jobs are clearly categorized, for example:
+
+* Report Generation
+* Deployment Refresh
+* Other relevant async jobs, if applicable
+
+Preserve the existing Recent Scans information and add the necessary purpose/type information.
+
+Do not lose any existing job tracking functionality just because Scan History is removed.
+
+⸻
+
+7. Settings / Export Center Cleanup
+
+Remove obsolete connection/credential-management UI.
+
+Remove from frontend:
+
+* Jira Cloud connection/configuration details
+* iTrack connection/configuration
+* GitHub credential/configuration management
+* Kubernetes credential/configuration management
+* Veracode credential/configuration management
+* Any other credential/token/PAT management UI that is centrally managed and should not be user-configured
+
+These credentials are centrally managed and must not be exposed through the UI.
+
+For Jira Cloud backend APIs, keep the existing backend capability for now. No API redesign is required in this iteration.
+
+Remove obsolete frontend settings and related frontend API calls only where applicable.
+
+⸻
+
+8. General Requirements
+
+* Python is the current source of truth.
+* Do not reintroduce or reference the old Java implementation.
+* Preserve existing functionality unrelated to these requirements.
+* Do not comment out deprecated code; delete it completely.
+* Remove unused imports, functions, files, configuration, environment variables, routes, UI components, and API calls associated with removed functionality.
+* Check both frontend and backend for stale references after implementation.
+* Ensure the project builds/runs successfully after cleanup.
+* Do not introduce new functionality beyond the requirements above.
+
+Before implementation
+
+First analyze the current codebase and identify all affected files/components/services. Then implement the changes and provide a concise summary of:
+
+1. Files/modules changed.
+2. iTrack references completely removed.
+3. Veracode/SASH references removed.
+4. Scan History removal and Recent Scans enhancement.
+5. Jira Cloud → iTrack call locations and the required Jira Cloud API/fields identified.
+6. Any assumptions or items requiring confirmation.
