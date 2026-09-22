@@ -1,710 +1,261 @@
-AIDLC – Kubernetes Access Strategy & Leadership Analysis
+Release Tracker – Enhancements & Team Configuration Migration
 
-Objective
+Please implement the following changes in the existing Release Tracker application. This is an already-working application, so preserve all existing functionality and avoid regressions.
 
-We need to prepare for a leadership discussion about the importance of Kubernetes access in the AIDLC application and determine the most appropriate enterprise-approved way to provide this access across multiple teams.
+If anything is unclear or there are conflicting existing implementations, ask me before making assumptions.
 
-Do not implement any code changes yet.
+1. Entra ID / Roles
 
-This is an analysis and research task only. Use the current Python codebase as the source of truth and use the company’s internal Wiki/documentation, infrastructure standards, security policies, AKS standards, and existing enterprise patterns wherever available.
+Use the existing AI Efficiency Tracker project as the reference for how AIDLC gets the logged-in user’s Entra/Azure AD groups and applies authorization.
 
-⸻
+We already have the Release Tracker Admin group:
 
-1. Current Business / Application Context
+AP-AIDLC-AIFO-Admin
 
-AIDLC is intended to become a common application used by approximately 15–25 teams, not only OCE.
+I will provide the Group/Object ID separately.
 
-The application was initially developed primarily for OCE, but the functionality is intended to be reusable by other teams.
+Implement only two roles:
 
-We already have GitHub and Jira Cloud access working through approved enterprise mechanisms.
+* Admin
+* Viewer
 
-The main open concern is Kubernetes access.
+Remove the existing Developer role completely wherever it exists.
 
-Currently, Infra has provided environment-specific Kubernetes connectivity using:
+Admin should have the existing administrative capabilities, including Generate Report and other Admin-only operations. Viewer should remain read-only.
 
-* Kubernetes tokens
-* Private/server endpoints
-* Environment-specific connectivity
+Authorization must work correctly in both frontend and backend.
 
-This works for OCE, but the same Kubernetes setup is not yet available for all teams in AIDLC.
-
-Leadership’s concern is that different teams may not want to provide their Kubernetes credentials/tokens to a common application.
-
-Our requirement is explicitly:
-
-* Read-only Kubernetes access
-* No write operations
-* No deployment changes
-* No resource modification
-* No delete/update/create operations
-* Only the minimum permissions required to retrieve deployment/runtime information
+Do not hard-code the Group Object ID in source code. Use the existing AIDLC configuration pattern.
 
 ⸻
 
-2. Why Kubernetes Is Important to AIDLC
+2. Azure App Service App Settings JSON
 
-Analyze the current Python implementation and identify exactly where Kubernetes is being used and why.
+At the AIDLC project root there is already an Azure App Service App Settings JSON file.
 
-Do not make assumptions. Inspect the actual Kubernetes client/service code.
+Use that as the configuration source/pattern.
 
-Document all Kubernetes use cases, including but not limited to:
+Review the Release Tracker .env and existing configuration and add only the required Release Tracker configuration to that JSON.
 
-A. Deployment status
+Also ensure required configuration/references for:
 
-The application checks whether the expected microservice/version is actually deployed in:
+* Entra/Admin group
+* GitHub
+* Jira Cloud
+* Snowflake
+* Key Vault/secrets
+* other required Release Tracker runtime configuration
 
-* DEV
-* TEST
-* STAGE East
-* STAGE West
-* PROD East
-* PROD West
+are present.
 
-B. Actual deployed Git SHA
+If GitHub/Snowflake configuration already exists, reuse it rather than duplicating it.
 
-The application uses Kubernetes/runtime deployment information to determine the actual Git commit currently deployed in an environment.
+Jira Cloud configuration can be completed if anything required is missing.
 
-This is important because:
-
-GitHub branch = expected/source state
-Kubernetes = actual runtime/deployed state
-
-A Git branch comparison alone does not necessarily prove what is actually running in production.
-
-C. Review Commits
-
-The Review Commits analysis uses production/runtime Kubernetes information to determine the correct deployed release context.
-
-This helps avoid false violation results caused by simply comparing Git branches.
-
-For example:
-
-GitHub:
-Previous Release Branch
-        vs
-Current Release Branch
-        alone
-          ↓
-Potential false conclusions
-Kubernetes:
-Actual Production Deployment
-        ↓
-Actual deployed Git SHA
-        ↓
-Correct runtime/release context
-
-Analyze the current implementation and document exactly how Kubernetes data contributes to Review Commits.
-
-D. Future Config Diff
-
-We also have/plan configuration-diff analysis based on Kubernetes configuration/runtime data.
-
-Identify the existing or planned Kubernetes dependencies for:
-
-* ConfigMaps
-* deployment configuration
-* environment configuration
-* blue/green state
-* active deployment
-* other relevant runtime configuration
-
-E. Other Kubernetes-dependent functionality
-
-Search the entire current Python backend and frontend and identify every other place where Kubernetes is used.
-
-Create a complete inventory.
+Do not add unnecessary/obsolete configuration or plaintext secrets.
 
 ⸻
 
-3. Important Architectural Question
+3. Remove iTrack
 
-We do NOT want to solve the credential problem by simply removing Kubernetes.
+iTrack is no longer required.
 
-Removing Kubernetes would result in losing or weakening important capabilities such as:
+Remove all remaining iTrack-related:
 
-* Actual deployment verification
-* Actual production Git SHA
-* Deployment readiness
-* Runtime/environment validation
-* Correct release context
-* Review Commit accuracy
-* Future config-diff analysis
-* Blue/green deployment information
+* configuration
+* code
+* API/client references
+* UI
+* environment variables
+* database fields
+* filters/configuration
+* imports/references
 
-Analyze whether Kubernetes should therefore remain a core integration and explain the technical consequences of removing it.
-
-⸻
-
-4. Current Kubernetes Connectivity – Inspect the Code
-
-Inspect the existing Python Kubernetes client implementation.
-
-Identify:
-
-1. Which Python Kubernetes library/client is being used.
-2. How authentication currently works.
-3. Whether we are using:
-    * JWT/token
-    * kubeconfig
-    * service account
-    * client certificate
-    * Azure identity
-    * Microsoft Entra ID
-    * another mechanism
-4. Where the token is loaded from.
-5. Where the private Kubernetes endpoint/server URL is loaded from.
-6. Which .env properties/configuration are used.
-7. How the namespace is selected.
-8. Which Kubernetes API endpoints/resources are queried.
-9. Which operations are performed:
-    * get
-    * list
-    * watch
-    * exec
-    * create
-    * update
-    * patch
-    * delete
-    * etc.
-10. Whether the current implementation is truly read-only.
-11. Whether the current implementation requires cluster-wide permissions or namespace-level permissions.
-
-Provide exact file/module/function references.
+Do not leave commented-out code.
 
 ⸻
 
-5. Determine the Exact Minimum Kubernetes Permissions
+4. Replace team_config.yaml with Database + UI
 
-This is extremely important.
+We no longer want team_config.yaml.
 
-From the actual code, create a permission matrix like:
+First migrate all valid existing team configuration from the YAML into the database.
 
-Use Case	Kubernetes Resource	Operation	Namespace/Cluster Scope	Why Required
-Deployment status	?	?	?	?
-Git SHA	?	?	?	?
-Blue/Green	?	?	?	?
-Config Diff	?	?	?	?
-Namespace discovery	?	?	?	?
+Then remove the YAML and ensure nothing anywhere in the application refers to team_config.yaml.
 
-Do not assume permissions.
+All existing consumers must get team configuration from the DB.
 
-Derive them from the actual implementation.
+The configuration must be editable from the UI.
 
-The goal is to prove to Infra/Security:
+Create an appropriate Admin-only Team Administration / Team Onboarding section. You can choose the best UI name.
 
-AIDLC does not need Kubernetes write access. It only needs the minimum read permissions required for its runtime analysis.
+The UI should be clean and easy to use because this will support approximately 25 teams / potentially ~1,000 users.
 
-Explicitly identify any permissions that are currently broader than necessary.
+Admins should be able to:
 
-⸻
-
-6. Investigate the Company’s Internal Wiki
-
-Use the company’s internal Wiki and available documentation extensively.
-
-Search for existing approved enterprise patterns for:
-
-* AKS authentication
-* Kubernetes authentication
-* Microsoft Entra ID + AKS
-* Kubernetes RBAC
-* Azure RBAC for AKS
-* Managed Identity
-* Application Identity
-* Service Principal
-* Workload Identity
-* MAC ID
-* Non-human identity
-* Application/service identity
-* Read-only Kubernetes access
-* Namespace-level Kubernetes access
-* Cross-team AKS access
-* Centralized Kubernetes access
-* Deployment metadata services
-* Infrastructure APIs
-* Platform APIs
-* Kubernetes credential management
-* Secret management
-* Private AKS endpoints
-* AIDLC infrastructure standards
-* Azure App Service → AKS connectivity
-* Enterprise security policies
-* Approved token/credential patterns
-
-Search for existing applications within the company that already solve a similar problem.
-
-Especially identify whether other applications use a single application identity/MAC ID to access multiple AKS clusters/environments.
+* view teams
+* add teams
+* edit teams
+* add/update/delete configuration values
+* manage multiple values where required
 
 ⸻
 
-7. Evaluate the MAC ID Concept
+5. Team Configuration Fields
 
-We currently use the concept of a MAC ID for enterprise application/service identity.
+Use the existing YAML and current application references to migrate the relevant fields.
 
-GitHub currently works conceptually like:
+The important fields include:
 
-MAC ID / enterprise identity
-        +
-PAT / approved authentication mechanism
-        ↓
-GitHub
-        ↓
-Access to required repositories/projects
+* Team Name
+* Display Name
+* App ID
+* Application Fixed Team
+* Project Keys
+* Default Branch
+* Default Branch Overrides — multiple values supported
+* Release Branch Suffix Overrides — multiple values supported
+* Report Template
+* Library Section
+* Repo Overrides
+* Kubernetes Host
+* Kubernetes Namespaces — multiple namespaces must be supported
+* OG
+* CG
+* Excluded Components Default — multiple values supported
 
-Investigate whether a similar pattern can be used for Kubernetes.
+For Excluded Components Default, do not simply use comma-separated text because existing component names themselves can contain commas/spaces/hyphens.
 
-Specifically determine:
+Use a better UI approach, such as allowing the administrator to enter one component and press Add/Enter, displaying the values as removable items/chips/tags.
 
-1. Can an AIDLC MAC ID/application identity be authorized against multiple AKS clusters?
-2. Can the same identity be granted read-only access across multiple teams?
-3. Can access be controlled by namespace?
-4. Can the permissions be centrally managed by Infra?
-5. Can the identity be audited?
-6. Can access be revoked centrally?
-7. How does credential rotation work?
-8. Can we avoid maintaining individual team/user Kubernetes tokens?
-9. Is this an officially supported/approved enterprise pattern according to the internal Wiki?
+Use the same kind of appropriate multi-value UI wherever it makes sense.
 
-⸻
+Remove these fields completely
 
-8. Analyze the Scale Problem
+* Primary Project
+* Scrum Teams
+* CeedX Filters
+* Excluded Components No Code
+* iTrack-related fields/configuration
 
-Our expected scale could be approximately:
-
-15–25 teams
-Each team may have:
-DEV
-TEST
-STAGE-E
-STAGE-W
-PROD-E
-PROD-W
-Potentially multiple namespaces per environment.
-
-For OCE alone, there may be approximately six environments and multiple namespaces.
-
-At approximately 25 teams, maintaining individual credentials could result in roughly:
-
-25 × 6 = ~150 environment-level credential configurations
-
-This is not desirable.
-
-Analyze the operational impact of:
-
-Option A
-
-Individual team/environment Kubernetes tokens.
-
-Option B
-
-Central application identity/MAC ID with RBAC.
-
-Option C
-
-Microsoft Entra-based AKS authentication + RBAC.
-
-Option D
-
-Azure RBAC for AKS.
-
-Option E
-
-Service account + Kubernetes RBAC.
-
-Option F
-
-Managed Identity / Workload Identity, if applicable to our deployment architecture.
-
-Option G
-
-Central infrastructure/deployment metadata service that AIDLC calls instead of directly accessing every AKS cluster.
-
-Option H
-
-Any other company-approved solution you discover in the internal Wiki.
+Do not just hide these fields. If they are not required anywhere else, remove their code/database/configuration references completely.
 
 ⸻
 
-9. Important: Validate the Azure/App Service Architecture
+6. Application Fixed Team + CeedX
 
-Our application is deployed as an Azure application/App Service architecture.
+Application Fixed Team is mandatory whenever the CeedX-related configuration/use case exists.
 
-Determine from the actual AIDLC deployment architecture:
+CeedX identifies/represents the centralized defect exchange context, and the Application Fixed Team is used to determine which team the application belongs to.
 
-AIDLC Application
-       |
-       ↓
-Azure App Service / hosting
-       |
-       ↓
-Private network/private endpoint
-       |
-       ↓
-AKS clusters
+Preserve this relationship correctly.
 
-Confirm the actual architecture from the code/config/deployment documentation.
-
-Then determine which authentication mechanisms are technically supported from this hosting model.
-
-Do not recommend Kubernetes Workload Identity blindly if it only applies to workloads running inside AKS.
-
-Explicitly distinguish:
-
-* App Service Managed Identity
-* Microsoft Entra application identity
-* Service Principal
-* Kubernetes ServiceAccount
-* AKS Workload Identity
-* Azure RBAC
-* Kubernetes RBAC
-
-Explain which ones are applicable to our architecture.
+However, remove the old CeedX Filters configuration itself as mentioned above.
 
 ⸻
 
-10. Evaluate a Central Deployment Metadata Service
+7. Kubernetes Configuration
 
-Investigate whether the company already has an infrastructure/platform API that exposes deployment information.
+Kubernetes is optional per team.
 
-For example:
+Keep Kubernetes configuration under an Advanced Configuration / Kubernetes section rather than making it part of the basic onboarding form.
 
-AIDLC
-   |
-   ↓
-Central Deployment Metadata API
-   |
-   ├── OCE AKS
-   ├── Team A AKS
-   ├── Team B AKS
-   └── Team N AKS
+Support:
 
-If such an existing service exists, identify it.
+* Kubernetes Host
+* Kubernetes Namespaces
+* existing Kubernetes-related configuration currently present in team_config.yaml
 
-If it does not exist, assess whether this would be an appropriate enterprise architecture.
+A single test environment can have approximately 5–6 namespaces, so the DB/UI must support multiple namespaces properly.
 
-The service could expose information such as:
+Do not store Kubernetes credentials/tokens/secrets in the database or UI.
 
-{
-  "team": "OCE",
-  "environment": "PROD-E",
-  "component": "example-service",
-  "namespace": "example-prod",
-  "gitSha": "abc123",
-  "deploymentStatus": "DEPLOYED",
-  "activeColor": "blue",
-  "deploymentTimestamp": "..."
-}
-
-Determine whether this approach is already used elsewhere in the company or would require a new platform capability.
+Use the approved Key Vault/secret-reference mechanism.
 
 ⸻
 
-11. Private Endpoint / Network Requirements
+8. DB Design
 
-Our current Kubernetes access requires a private server endpoint/private link.
+Design the team configuration schema properly for the future.
 
-Investigate:
+Today we may have only these fields, but this application will continue to evolve and support around 25 teams with many users.
 
-1. How AIDLC currently reaches the AKS API server.
-2. Whether all team AKS clusters expose private endpoints.
-3. Whether AIDLC/App Service can reach those private endpoints.
-4. Whether network connectivity would need to be established separately for every cluster.
-5. Whether a central network/API solution could simplify this.
-6. Whether there are enterprise network/security restrictions against cross-team AKS access.
+The DB design should therefore:
 
-This is important because authentication alone is not enough.
+* support multiple teams cleanly;
+* support multiple values such as namespaces, branch overrides, excluded components, etc.;
+* be easy to extend with future configuration;
+* avoid unnecessary duplication;
+* allow complete editing from UI;
+* maintain clear separation between common configuration and team-specific configuration.
 
-We need both:
-
-Network connectivity
-+
-Authentication
-+
-Authorization
+Think about this as a rapidly evolving application, not a one-time static configuration table.
 
 ⸻
 
-12. Security Model
+9. Common Connections
 
-For every proposed option, explain:
+GitHub, Jira Cloud and Snowflake are common/shared connections.
 
-Authentication
+Review the existing Azure App Service configuration JSON first.
 
-Who/what identifies AIDLC?
+* Reuse existing GitHub configuration.
+* Reuse existing Snowflake configuration.
+* Add missing Jira Cloud configuration if required.
+* Do not unnecessarily duplicate common credentials/configuration for every team.
 
-Authorization
-
-What can AIDLC read?
-
-Scope
-
-Cluster-level or namespace-level?
-
-Secret management
-
-Where are credentials/secrets stored?
-
-Rotation
-
-How are credentials rotated?
-
-Audit
-
-Can Infra identify what AIDLC accessed?
-
-Revocation
-
-Can access be removed centrally?
-
-Blast radius
-
-If the AIDLC credential is compromised, what can it access?
-
-Read-only guarantee
-
-How do we ensure AIDLC cannot modify Kubernetes resources?
+Secrets must remain in the approved secret-management mechanism.
 
 ⸻
 
-13. Compare the Options – Without Giving a Political/Organizational Opinion
+10. Configuration Loading / Cache
 
-Provide a technical comparison table:
+Once team configuration is loaded for an operation, reuse it instead of repeatedly querying the DB unnecessarily.
 
-Option	Authentication	Cross-Team Support	Namespace Scope	Read-Only	Credential Count	Rotation	Audit	Infra Effort	Fit for AIDLC
+At the same time, do not introduce a long-lived stale cache.
 
-Do not simply say “best” based on assumptions.
+When an Admin updates team configuration, subsequent operations must use the latest DB values without requiring an application restart.
 
-Instead, provide:
-
-* Advantages
-* Disadvantages
-* Prerequisites
-* Security implications
-* Operational implications
-* Enterprise-policy compatibility
-* What Infra needs to configure
-* What AIDLC needs to change
-
-Clearly distinguish:
-
-Confirmed by company documentation
-
-vs.
-
-Supported by Microsoft/Azure
-
-vs.
-
-Architectural recommendation requiring Infra approval
+Use a sensible caching/invalidation approach based on the existing application architecture.
 
 ⸻
 
-14. Identify the Preferred Enterprise Pattern Only If Supported by Evidence
+11. Existing Application Must Continue Working
 
-After researching the internal Wiki and current architecture, identify which solution appears to align with the company’s existing approved patterns.
+This is a working application.
 
-Do NOT make assumptions about company policy.
+After these changes:
 
-If the evidence supports it, explain whether the likely model is something like:
+* existing release/report functionality must continue working;
+* GitHub integration must continue working;
+* Jira Cloud must continue working;
+* Snowflake must continue working;
+* Kubernetes functionality must continue working for teams that configure it;
+* existing OCE/team configuration must continue working;
+* existing Admin/Viewer functionality must not regress.
 
-AIDLC
-  |
-  ↓
-Enterprise Application Identity / MAC ID
-  |
-  ↓
-Microsoft Entra
-  |
-  ↓
-AKS RBAC / Azure RBAC
-  |
-  ↓
-Read-only permissions
-  |
-  ├── OCE
-  ├── Team A
-  ├── Team B
-  └── ...
-
-But only present this as the preferred direction if the internal documentation supports it.
+Do not make unrelated changes.
 
 ⸻
 
-15. Leadership-Ready Explanation
-
-Prepare a concise section that I can use directly in my leadership meeting.
-
-Explain:
-
-Why Kubernetes is required
-
-GitHub answers:
-
-What code exists?
-
-Kubernetes answers:
-
-What code is actually running?
-
-Therefore, removing Kubernetes would make the application’s deployment/release validation dependent only on source-control state and could cause incorrect release/commit analysis.
-
-What we actually need
-
-We do NOT need:
-
-* user credentials
-* team member credentials
-* Kubernetes write access
-* deployment permissions
-* cluster-admin access
-
-We need:
-
-A centrally governed, read-only application identity with minimum required permissions to retrieve deployment/runtime metadata from the required AKS environments.
-
-What we are asking Infra to provide
-
-Something along these lines:
-
-1. Enterprise application identity / MAC ID
-2. Approved authentication mechanism
-3. Private network connectivity to required AKS API endpoints
-4. Read-only RBAC permissions
-5. Namespace/environment-level access where possible
-6. Centralized secret/identity management
-7. Auditability
-
-Do not state that this exact model is approved unless you find internal documentation confirming it.
-
-⸻
-
-16. Also Identify What We Can Cache
-
-Analyze which Kubernetes information can be retrieved during:
-
-* Component refresh
-* Deployment refresh
-* Report generation
-
-and then persisted into the AIDLC database.
-
-Determine which screens can operate from persisted deployment metadata rather than making live Kubernetes calls.
-
-The goal is:
-
-Kubernetes
-    ↓
-Controlled refresh
-    ↓
-AIDLC database
-    ↓
-Generate Report / Review / Release Readiness
-
-This can reduce:
-
-* AKS API traffic
-* latency
-* dependency on live cluster availability
-* number of authentication calls
-
-while still preserving Kubernetes as the authoritative source during refresh.
-
-Identify which data must remain real-time and which data can safely be cached.
-
-⸻
-
-17. Deliverables
-
-Do not modify the code yet.
-
-Provide the analysis in this exact structure:
-
-1. Executive Summary
-
-Short leadership-level explanation.
-
-2. Why Kubernetes Is Required
-
-List every current/future AIDLC capability that depends on Kubernetes.
-
-3. Current Implementation
-
-Exact Python files/classes/functions and current authentication/connectivity mechanism.
-
-4. Required Kubernetes Permissions
-
-Exact resources + operations + scope.
-
-5. Current Network Architecture
-
-How AIDLC currently reaches the Kubernetes API/private endpoint.
-
-6. Internal Wiki Findings
-
-List relevant company-approved patterns and links/references.
-
-Clearly distinguish confirmed company standards from general Azure capabilities.
-
-7. Authentication Options
-
-Analyze all applicable options.
-
-8. MAC ID / Application Identity Analysis
-
-Determine whether one centrally managed identity can support multiple teams/clusters.
-
-9. Credential Scaling Analysis
-
-Explain the impact of maintaining 100–150+ environment credentials versus centralized identity.
-
-10. Central Deployment Metadata API Option
-
-Determine whether an existing service exists and, if not, analyze whether it is viable.
-
-11. Security/RBAC Model
-
-Show the minimum read-only permissions required.
-
-12. Option Comparison
-
-Provide a technical comparison table.
-
-13. Recommended Direction Based on Evidence
-
-Identify the solution that aligns with existing company architecture/policy, if the evidence is sufficient.
-
-Do not make unsupported assumptions.
-
-14. Leadership Talking Points
-
-Give me concise points I can explain in the meeting.
-
-15. Infra Action Items
-
-Give me the exact questions/requests I should send to the Infra team.
-
-16. Open Questions / Policy Dependencies
-
-List anything that requires confirmation from Infra, Security, Network, or Platform teams.
-
-⸻
-
-Important Constraints
-
-1. Do not implement code changes.
-2. Do not remove Kubernetes from the application.
-3. Do not assume that individual Kubernetes tokens are the only solution.
-4. Do not assume MAC ID automatically works with AKS; verify it.
-5. Do not assume Workload Identity applies to our App Service architecture; verify it.
-6. Search the internal company Wiki extensively before recommending an architecture.
-7. Inspect the actual current Python Kubernetes implementation.
-8. Use current Microsoft/Azure documentation where appropriate.
-9. Clearly distinguish company-approved patterns from general technical possibilities.
-10. Do not expose or reproduce any actual secrets, tokens, private keys, or credentials discovered during analysis.
-11. Do not modify .env or configuration.
-12. Do not make changes to frontend/backend code.
-13. Do not create credentials or request credentials.
-14. The target permission model is read-only and least privilege.
-15. The analysis should specifically address supporting approximately 15–25 teams and potentially 100–150+ environment/namespace combinations without creating an unmanageable credential-maintenance model.
-
-The final output should be detailed enough that I can use it directly in a leadership discussion with Architecture, Infra, Security, and Platform teams.
+12. Basic Validation Checklist
+
+Before completing:
+
+* [ ]	Admin/Viewer authorization works.
+* [ ]	Developer role completely removed.
+* [ ]	AP-AIDLC-AIFO-Admin integrated through configuration.
+* [ ]	App Service App Settings JSON updated.
+* [ ]	Required .env configuration reviewed/migrated.
+* [ ]	iTrack completely removed.
+* [ ]	team_config.yaml data migrated to DB.
+* [ ]	No runtime reference to team_config.yaml remains.
+* [ ]	Team configuration editable from UI.
+* [ ]	Multiple values work for namespaces/branch overrides/excluded components/etc.
+* [ ]	Kubernetes remains optional.
+* [ ]	No credentials stored in DB.
+* [ ]	Primary Project, Scrum Teams, CeedX Filters and Excluded Components No Code removed.
+* [ ]	Existing functionality continues to work.
+* [ ]	Build/tests/application startup verified.
+
+If you find any ambiguity in the existing implementation or cannot determine the intended behavior from the current code/configuration, stop and ask me the specific question rather than making an assumption.
