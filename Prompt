@@ -1,13 +1,28 @@
 Hi Team,
 
-Please review the attached Release Report for the upcoming release.
+Please review each tab in the attached Release Report and take the required action.
 
-* Check only the Violations tab.
-* Select your Scrum Team from the filter and review all violations.
-* Also select No Scrum Team and review those violations, as these may be caused by missing/incorrect story or team/component tagging.
-* For every violation, update:
-    * Action: Fixed or Ignore only
-    * Justification: Provide the reason for the action taken.
-* Please ensure all violations under both your Scrum Team and No Scrum Team are reviewed and updated.
+1. Commit Violations
 
-Please complete the review and required fixes before the next release.
+* Review the Commit Violations tab.
+* Select your Scrum Team and review all violations.
+* Also review No Scrum Team.
+* Update Action as Fixed or Ignore and provide the Justification.
+
+2. Story Status
+
+* Check the Status column.
+* For stories that are not Closed, check if they belong to your Scrum Team.
+* Take the required action and close the story once completed.
+
+3. Branch Cut Validation
+
+* Check the Branch Cut Status column.
+* For anything not marked Branch Cut Completed, please take action and complete the branch cut.
+
+4. Test Three Deployment
+
+* Check the Deployment Status column.
+* For anything not marked Valid, please deploy the branch to Test Three as soon as the code is ready.
+
+Please complete the required actions for all applicable items before the next release.
