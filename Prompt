@@ -1,28 +1,43 @@
-Hi Team,
+Implement the following changes without deleting the existing Kubernetes code.
 
-Please review each tab in the attached Release Report and take the required action.
+1. Global Kubernetes Feature Flag
 
-1. Commit Violations
+* Add a backend configuration flag, for example:
+    KUBERNETES_ENABLED=true/false
+* Default must be false.
+* When false, Kubernetes functionality should work exactly as it does today.
+* When true, Kubernetes must be completely disabled.
 
-* Review the Commit Violations tab.
-* Select your Scrum Team and review all violations.
-* Also review No Scrum Team.
-* Update Action as Fixed or Ignore and provide the Justification.
+2. Complete Kubernetes Disablement
 
-2. Story Status
+When KUBERNETES_ENABLED=true:
 
-* Check the Status column.
-* For stories that are not Closed, check if they belong to your Scrum Team.
-* Take the required action and close the story once completed.
+* Do not make any Kubernetes API/client calls, including background calls.
+* Do not initialize Kubernetes clients unnecessarily.
+* Do not fetch Kubernetes deployment/configuration data.
+* Previous Release Branch should use the existing non-Kubernetes fallback mechanism.
+* Deployment and Config Changes sections must be completely hidden from the UI.
+* Release Readiness Kubernetes-related UI must be hidden.
+* Team Administration must hide Kubernetes configuration fields/options.
+* Frontend and backend must both respect the same flag.
+* Do not delete Kubernetes code; control its execution through the feature flag.
+* Ensure no indirect/background Kubernetes call happens while the feature is disabled.
 
-3. Branch Cut Validation
+When the flag is changed back to false and the application is restarted, all existing Kubernetes functionality must work normally again.
 
-* Check the Branch Cut Status column.
-* For anything not marked Branch Cut Completed, please take action and complete the branch cut.
+3. Show Skipped Components
 
-4. Test Three Deployment
+On Release Readiness → Submit Analysis:
 
-* Check the Deployment Status column.
-* For anything not marked Valid, please deploy the branch to Test Three as soon as the code is ready.
+* Fix the Show Skipped switch.
+* When enabled, all applicable skipped components must be displayed correctly.
+* Ensure this works without affecting the existing non-skipped component behavior.
 
-Please complete the required actions for all applicable items before the next release.
+4. Validation
+
+Verify both modes:
+
+* KUBERNETES_ENABLED=true → zero Kubernetes calls and all Kubernetes UI/functionality hidden.
+* KUBERNETES_ENABLED=false → existing Kubernetes behavior works normally.
+* Local and Azure deployment configuration must support the flag correctly.
+* No existing non-Kubernetes functionality should be impacted.
