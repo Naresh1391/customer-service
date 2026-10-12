@@ -1,43 +1,58 @@
-Implement the following changes without deleting the existing Kubernetes code.
+Build a standalone, locally runnable Kubernetes Deployment Readiness utility by reusing the existing Release Tracker UI and backend logic wherever possible. Do not host this utility inside the main AADLC application.
 
-1. Global Kubernetes Feature Flag
+1. Standalone Tool
 
-* Add a backend configuration flag, for example:
-    KUBERNETES_ENABLED=true/false
-* Default must be false.
-* When false, Kubernetes functionality should work exactly as it does today.
-* When true, Kubernetes must be completely disabled.
+* Package the utility as a downloadable ZIP containing the UI, Python scripts, dependencies, setup/run instructions, and required configuration templates.
+* Developers should be able to extract the ZIP, configure their local settings, and run it on their machines.
+* Use a local SQLite database for temporary storage. Create and initialize it automatically when required.
+* Keep the implementation simple; reuse existing working logic rather than rebuilding it unnecessarily.
 
-2. Complete Kubernetes Disablement
+2. Connectivity
 
-When KUBERNETES_ENABLED=true:
+* Support the existing Kubernetes private-link connectivity, credentials/secrets, cookies, and dashboard API URLs.
+* Provide a simple connection-configuration UI with a Test Connection option.
+* Reuse existing authentication and connectivity logic wherever possible.
+* Do not package or distribute private links, tokens, cookies, or secrets in the ZIP.
+* Users who have the required private-link access and credentials should be able to configure them locally.
+* Keep dashboard API connectivity as the alternative/default path for users who do not have Kubernetes access, wherever supported by the existing APIs.
+* Never log or expose credentials or cookies in the UI, logs, or SQLite database.
 
-* Do not make any Kubernetes API/client calls, including background calls.
-* Do not initialize Kubernetes clients unnecessarily.
-* Do not fetch Kubernetes deployment/configuration data.
-* Previous Release Branch should use the existing non-Kubernetes fallback mechanism.
-* Deployment and Config Changes sections must be completely hidden from the UI.
-* Release Readiness Kubernetes-related UI must be hidden.
-* Team Administration must hide Kubernetes configuration fields/options.
-* Frontend and backend must both respect the same flag.
-* Do not delete Kubernetes code; control its execution through the feature flag.
-* Ensure no indirect/background Kubernetes call happens while the feature is disabled.
+3. Deployment Readiness UI
 
-When the flag is changed back to false and the application is restarted, all existing Kubernetes functionality must work normally again.
+Reuse the existing, currently disabled Kubernetes UI and functionality.
 
-3. Show Skipped Components
+The page should provide:
 
-On Release Readiness → Submit Analysis:
+* Team dropdown.
+* Fix Version dropdown.
+* Ability to fetch stories for the selected team and fix version.
+* Component selection based on the fetched stories.
+* Deployment readiness information for these five environments:
+    * Test 3
+    * Test 4
+    * Stage
+    * Production East
+    * Production West
 
-* Fix the Show Skipped switch.
-* When enabled, all applicable skipped components must be displayed correctly.
-* Ensure this works without affecting the existing non-skipped component behavior.
+4. Keep the UI Simple
 
-4. Validation
+* Display the available components and their relevant branch-cut/deployment readiness status.
+* Clearly distinguish Branch Cut Pending from Branch Cut Completed.
+* Avoid the extensive report preview, violation details, and other unrelated information shown in the main Release Tracker.
+* Keep the interface focused exclusively on Kubernetes deployment readiness.
 
-Verify both modes:
+5. Local Data and Execution
 
-* KUBERNETES_ENABLED=true → zero Kubernetes calls and all Kubernetes UI/functionality hidden.
-* KUBERNETES_ENABLED=false → existing Kubernetes behavior works normally.
-* Local and Azure deployment configuration must support the flag correctly.
-* No existing non-Kubernetes functionality should be impacted.
+* Store temporary application data in SQLite.
+* Reuse existing story-fetching, component-selection, branch-cut, and deployment-readiness logic wherever applicable.
+* Keep configuration external to the packaged code so developers can configure their own environments.
+* Ensure the utility works independently of the hosted AADLC application, except for the external APIs it explicitly needs.
+
+6. Validation and Delivery
+
+* Verify the complete flow: configure connectivity → test connection → select team and fix version → fetch stories → select components → view readiness across all five environments.
+* Test both private-link/Kubernetes connectivity and the supported dashboard API path.
+* Verify that a fresh ZIP can be extracted and run locally using the documented instructions.
+* Confirm that no secrets are included in the ZIP and that existing main Release Tracker functionality remains unaffected.
+
+Keep the implementation focused and reusable. If any existing API or authentication flow does not support the proposed standalone behavior, identify the limitation before introducing a new mechanism.
