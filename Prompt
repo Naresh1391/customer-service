@@ -1,155 +1,50 @@
-Create a complete, well-structured Release Tracker user wiki using the existing project context, source code, UI, and wiki pages already created during the demo. Reuse accurate existing content, update outdated information, and incorporate all requirements below. This wiki is intended for a broad audience, including developers, Scrum teams, team leads, and administrators.
+Objective
 
-Keep the language simple, professional, and practical. Include step-by-step instructions, screenshots where useful, and tables for roles, fields, and actions. Do not invent functionality; verify details against the current application.
+Explore a small AI-powered enhancement to Release Tracker that automates the Cherry-Pick Required workflow, with mandatory human review and approval before merging.
 
-1. Overview and Governance Purpose
+Expected Workflow
 
-* Explain that Release Tracker is a governance and release-readiness tool designed to help ensure the right code reaches production at the right time and that required SOX compliance practices are followed.
-* In a fast-paced development environment, missing even one commit or overlooking a violation can cause significant rework involving developers, team leads, multiple teams, and approvals.
-* The tool analyzes release information and highlights potential violations and readiness issues so teams can address them before release.
-* Clearly state that the tool is read-only with respect to GitHub and the source systems it analyzes. It reports findings; teams must manually investigate, fix issues, provide justifications, and complete required approvals.
-* Explain that the tool supports release governance but does not replace team ownership, code reviews, or compliance responsibilities.
+When a commit is identified as requiring a cherry-pick:
 
-2. Important Data Freshness Disclaimer
+1. Identify the commit: Retrieve the source repository, commit SHA, source branch, target release branch, and associated story/fix version from the existing Release Tracker data.
+2. Validate: Verify that the repository, commit, and target release branch exist. Check whether the commit is already present in the target branch and identify potential conflicts or missing dependencies.
+3. Prepare the change: Create a uniquely named automation feature branch from the correct target release branch.
+4. Cherry-pick: Apply the identified commit to the feature branch. If conflicts or other errors occur, stop safely and request human intervention instead of guessing.
+5. Validate the result: Run appropriate available checks and verify the resulting changes. Clearly report any checks that could not be run.
+6. Push and create PR: Push the feature branch and automatically create a pull request targeting the intended release branch. Include the source commit, target branch, associated story, reason for cherry-picking, and validation results in the PR description.
+7. Human approval: Assign the appropriate reviewers and require normal repository approval policies. AI must never approve or merge its own PR.
+8. Track the outcome: Capture the PR URL, execution status, errors, and final outcome so the team can trace the automation from Release Tracker.
 
-Display this disclaimer prominently near the top of the wiki:
+Architecture and Tooling Assessment
 
-Jira/Snowflake data freshness: To avoid excessive Jira API usage and read-request limits, the tool retrieves Jira-related information from Snowflake rather than querying Jira directly for every request. Snowflake is updated periodically in the background. Data may be delayed by several minutes and, in some cases, up to six hours. Recent Jira story changes may therefore not appear immediately. Verify the latest Jira state when necessary.
+Before implementation:
 
-Also explain that GitHub and Snowflake are used to retrieve the information needed for analysis, and that results depend on the availability and freshness of those sources.
+* Inspect the existing Devin workflows, repository automation, GitHub integration, and available AI/DLC platform capabilities.
+* Determine whether this is best implemented as a Devin workflow, an AI/DLC application capability, or a combination of deterministic scripts and AI-assisted decision-making.
+* Reuse existing integrations, authentication, configuration, and established patterns wherever possible.
+* Prefer deterministic Git/GitHub operations for branch creation, cherry-picking, pushing, and PR creation. Use AI for context analysis, decision support, explanations, and handling workflow decisions—not as a substitute for reliable Git operations.
+* Confirm how repository permissions and credentials can be securely provided without exposing tokens or secrets.
 
-3. Roles and Permissions
+Safety Requirements
 
-Document the two roles clearly.
+* Human approval is mandatory before merging.
+* Never push directly to protected release branches or merge automatically.
+* Do not guess the target branch or cherry-pick an ambiguous commit.
+* Detect duplicate cherry-picks and prevent duplicate PRs on repeated execution.
+* Stop and report conflicts, failed checks, missing dependencies, or insufficient permissions.
+* Make retries safe and maintain an auditable execution history.
+* Start with one commit and one repository per execution. Support multiple commits later as a separate enhancement.
 
-Capability	Viewer	Admin
-View reports and release information	Yes	Yes
-Review commit violations	Yes	Yes
-Request a violation override with justification	Yes	Yes
-Approve or reject override requests	No	Yes
-Generate reports	No	Yes
-Manage team configuration	View only	Yes
+Requested Deliverable — Plan First
 
-Verify this table against actual authorization behavior before publishing.
+Do not start implementing yet. Analyze the existing project and workflows, then provide:
 
-Explain that viewers/developers can request overrides when a commit is incorrectly flagged, but an admin must review and approve or reject the request. Approved overrides should be considered in subsequent report generation.
+1. The recommended implementation approach and why it fits our existing setup.
+2. The end-to-end workflow and required inputs.
+3. Existing capabilities that can be reused versus anything new that must be developed.
+4. Required GitHub permissions, security controls, and human approval gates.
+5. Failure handling, duplicate prevention, and audit requirements.
+6. A phased implementation plan for a small proof of concept, followed by possible multi-commit support.
+7. Key assumptions or questions that need clarification before implementation.
 
-4. Generate Report – Step-by-Step
-
-Document the complete workflow in the actual UI order:
-
-1. Open Generate Report.
-2. Select the Team.
-3. Select the Fix Version for the release being analyzed.
-4. Click Fetch Stories to retrieve the relevant stories from Snowflake. Explain that this step primarily loads information for review.
-5. Click Load Components. The tool retrieves the relevant components and their previous/current release branch information from GitHub.
-6. Explain the available component filters and statuses, including Valid Only, Errors Only, and Warnings Only, wherever those controls exist in the current UI.
-7. Review the components carefully:
-    * Valid Only: Review components considered valid for analysis.
-    * Errors Only: Investigate invalid/non-Git components, such as DBT components where applicable. Exclude components that should not be analyzed as Git repositories.
-    * Warnings Only: Investigate missing branches or other branch-related issues. Exclude components only when they should not be included in commit analysis.
-8. Review and correct the previous and current release branch selections. Explain that defaults are populated automatically, but admins can adjust them when a specific branch-to-branch comparison is required.
-9. Before generating the report, resolve or appropriately exclude the errors and warnings that should not be included in the analysis. Explain the implications of exclusions.
-10. Click Generate Report.
-
-Explain that report generation runs asynchronously in the background. The resulting commit analysis and violations are persisted in the tool’s PostgreSQL database. Once processing completes, users can review the generated results in Review Commits.
-
-Clearly distinguish between correcting a genuine issue and excluding a component that is not applicable. Do not suggest excluding genuine violations merely to obtain a clean report.
-
-5. Review Commits – Violations and Overrides
-
-Explain how users review the generated report:
-
-* Open Review Commits.
-* Select the relevant Team and Fix Version.
-* Use the available filters to locate commits and violations belonging to their Scrum Team or individual responsibilities.
-* Explain the Violations Only filter and the relevant commit details displayed in the UI.
-* For every violation, investigate the underlying cause and coordinate with the responsible team to fix it.
-* If a violation is a false positive, use the available override/request override action and provide a clear justification.
-* Admins review override requests and approve or reject them.
-* Explain that approved overrides are considered in subsequent report generation, subject to the application’s actual implementation.
-
-Emphasize that an override is not a substitute for fixing a genuine compliance or release issue.
-
-6. Release Readiness
-
-Document the Release Readiness page and its available sections, based on the current UI:
-
-* Story Status: Review stories that are not Closed and coordinate with the owning Scrum Team to close them when work is complete.
-* Branch Cut Validation: Review branches that have not reached Branch Cut Completed and ensure the required branch cuts are completed.
-* Test Three Deployment: Review deployment status and deploy branches to Test Three when the code is ready and deployment is required.
-* Commit Analysis: Review the available commit-analysis and violation information.
-
-Explain how teams should use these readiness indicators to identify outstanding work before a release. Verify exact section names and statuses against the application.
-
-7. Team Administration – Onboarding and Configuration
-
-Explain that Team Administration allows authorized admins to onboard teams, update team configuration, and remove teams when required. Viewers can view configuration but cannot make changes.
-
-Document the onboarding process:
-
-1. Open Team Administration under Release Activities.
-2. Click Add Team.
-3. Enter the required team details.
-4. Configure project keys and relevant component/repository settings.
-5. Configure optional settings under Additional Configurations when required.
-6. Click Save Team and verify that the team configuration is available.
-
-Document these fields based on the current form:
-
-Field	Purpose
-Team Name	Team identifier used by the application
-Display Name	Friendly name displayed in the UI
-App ID	Application identifier, where applicable
-Project Keys	Jira/project keys associated with the team
-Repository / Repository Overrides	Repository mapping or exceptions, where supported
-Default Branch	Default branch for components
-Excluded Components Default	Components automatically excluded from analysis when configured
-Library Section	Identifies library-related components/configuration where supported
-
-Under Additional Configurations, explain:
-
-* Default Branch Overrides: Use when a component does not follow the team’s default branch convention.
-* Release Branch Suffix Overrides: Use when a component’s release branch naming does not follow the default convention.
-* Kubernetes Configuration: Optional settings for teams that require Kubernetes-related functionality.
-
-Explain that excluded components can be configured once rather than repeatedly marked as invalid during report generation. Team-specific configuration should only be changed when the relevant exception is understood.
-
-Do not document removed or obsolete fields. Confirm mandatory fields, field behavior, and validation rules against the current form.
-
-8. Release Governance Expectations
-
-Include a short section stating the expected release practice:
-
-* Generate the report for the correct team and Fix Version.
-* Review every applicable violation and readiness issue.
-* Fix genuine violations and resolve outstanding story, branch-cut, and deployment items.
-* Request overrides only for justified false positives.
-* Ensure overrides receive the required admin approval.
-* Re-run or refresh the report as appropriate and verify that outstanding violations have been resolved.
-
-The target is zero unresolved applicable violations before release, along with completion of the required readiness activities. Do not imply that exclusions or overrides automatically mean an underlying issue has been fixed.
-
-9. Troubleshooting and Known Limitations
-
-Add a concise troubleshooting section covering:
-
-* Recently updated Jira information not appearing immediately because of Snowflake refresh delays.
-* Missing or incorrectly tagged Scrum Team/component information.
-* Missing GitHub repositories or release branches.
-* Components that are not Git repositories.
-* Connection failures or report-generation delays.
-* Insufficient permissions for report generation, team administration, or override approval.
-
-For each issue, give the user a practical next step and identify when admin/team support is needed.
-
-10. Final Wiki Quality Requirements
-
-* Review existing demo wiki pages first and consolidate useful content instead of creating conflicting duplicate documentation.
-* Use a logical page hierarchy with an overview, quick-start/workflow, feature-specific instructions, roles, and troubleshooting.
-* Add screenshots of the actual UI where they improve understanding.
-* Use consistent terminology and exact UI labels.
-* Verify every instruction against the current implementation.
-* Do not expose credentials, tokens, private URLs, or other secrets.
-* Do not claim a capability exists unless verified in the application.
-* Link related wiki pages where appropriate and ensure the final documentation is suitable for sharing with a broad internal audience.
+Keep the solution small, practical, secure, and extensible. Avoid introducing a new agent framework or additional infrastructure unless the existing capabilities cannot meet the requirement.
