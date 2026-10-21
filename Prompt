@@ -1,50 +1,57 @@
-Objective
+Update the existing Release Tracker roadmap document with the following future enhancements. Keep it short, crisp, and leadership-friendly. Avoid lengthy explanations, detailed implementation plans, and unnecessary technical context. Clearly distinguish items already tested, work in progress, blockers, and future scope.
 
-Explore a small AI-powered enhancement to Release Tracker that automates the Cherry-Pick Required workflow, with mandatory human review and approval before merging.
+1. Cherry-Pick & Automated PR Creation
 
-Expected Workflow
+* Status: Tested locally; requires further validation and enhancement.
+* Automate cherry-pick PR creation for applicable violation categories, including missing release commits.
+* Notify relevant developers/reviewers for approval.
+* Re-evaluate violations during subsequent report runs and automatically reflect resolved issues.
 
-When a commit is identified as requiring a cherry-pick:
+2. Jira Auto-Updates
 
-1. Identify the commit: Retrieve the source repository, commit SHA, source branch, target release branch, and associated story/fix version from the existing Release Tracker data.
-2. Validate: Verify that the repository, commit, and target release branch exist. Check whether the commit is already present in the target branch and identify potential conflicts or missing dependencies.
-3. Prepare the change: Create a uniquely named automation feature branch from the correct target release branch.
-4. Cherry-pick: Apply the identified commit to the feature branch. If conflicts or other errors occur, stop safely and request human intervention instead of guessing.
-5. Validate the result: Run appropriate available checks and verify the resulting changes. Clearly report any checks that could not be run.
-6. Push and create PR: Push the feature branch and automatically create a pull request targeting the intended release branch. Include the source commit, target branch, associated story, reason for cherry-picking, and validation results in the PR description.
-7. Human approval: Assign the appropriate reviewers and require normal repository approval policies. AI must never approve or merge its own PR.
-8. Track the outcome: Capture the PR URL, execution status, errors, and final outcome so the team can trace the automation from Release Tracker.
+* Status: Tested; pending resolution of blockers.
+* Requires a Jira write token, currently unavailable.
+* Current flow updates Jira directly after the user clicks the action button, without a separate review/approval step.
+* Evaluate a safer workflow with human review and approval before applying updates.
 
-Architecture and Tooling Assessment
+3. Scheduled Reports & Release-Based Automation
 
-Before implementation:
+* Generate reports automatically at configurable intervals (default: every six hours).
+* Add release-date configuration at the team level.
+* Support both manual and scheduled execution.
+* Automate notifications and escalations based on release timelines, particularly from five to six days before release/branch cut.
 
-* Inspect the existing Devin workflows, repository automation, GitHub integration, and available AI/DLC platform capabilities.
-* Determine whether this is best implemented as a Devin workflow, an AI/DLC application capability, or a combination of deterministic scripts and AI-assisted decision-making.
-* Reuse existing integrations, authentication, configuration, and established patterns wherever possible.
-* Prefer deterministic Git/GitHub operations for branch creation, cherry-picking, pushing, and PR creation. Use AI for context analysis, decision support, explanations, and handling workflow decisions—not as a substitute for reliable Git operations.
-* Confirm how repository permissions and credentials can be securely provided without exposing tokens or secrets.
+4. Teams Notifications & Escalations
 
-Safety Requirements
+* Integrate Microsoft Graph API to tag individual developers and Scrum Teams.
+* Dependency: Graph API integration is pending Infra support.
+* Automatically notify responsible teams about violations, pending branch cuts, and release blockers.
+* Define escalation rules, recipients, and timelines based on release dates.
+* Keep email notifications as a possible future extension.
 
-* Human approval is mandatory before merging.
-* Never push directly to protected release branches or merge automatically.
-* Do not guess the target branch or cherry-pick an ambiguous commit.
-* Detect duplicate cherry-picks and prevent duplicate PRs on repeated execution.
-* Stop and report conflicts, failed checks, missing dependencies, or insufficient permissions.
-* Make retries safe and maintain an auditable execution history.
-* Start with one commit and one repository per execution. Support multiple commits later as a separate enhancement.
+5. Release Go/No-Go Dashboard
 
-Requested Deliverable — Plan First
+* Provide component-level release readiness, pending actions, security blockers, and unresolved violations.
+* Integrate automated notifications and escalation status to help teams make release decisions.
 
-Do not start implementing yet. Analyze the existing project and workflows, then provide:
+6. Jira Story–Component Mapping Validation
 
-1. The recommended implementation approach and why it fits our existing setup.
-2. The end-to-end workflow and required inputs.
-3. Existing capabilities that can be reused versus anything new that must be developed.
-4. Required GitHub permissions, security controls, and human approval gates.
-5. Failure handling, duplicate prevention, and audit requirements.
-6. A phased implementation plan for a small proof of concept, followed by possible multi-commit support.
-7. Key assumptions or questions that need clarification before implementation.
+* Analyze commits and pull requests associated with each Jira story.
+* Derive the related microservices and libraries and verify that the story’s component list is complete.
+* Flag missing or incorrect component mappings.
 
-Keep the solution small, practical, secure, and extensible. Avoid introducing a new agent framework or additional infrastructure unless the existing capabilities cannot meet the requirement.
+7. POM Version Analysis & Automated Updates
+
+* Compare POM versions across libraries and microservices.
+* Identify version inconsistencies and required upgrades.
+* Provide a dashboard and, where feasible, automatically create PRs for developer review and approval.
+
+8. Kubernetes Integration
+
+* Status: Implemented but currently disabled; connectivity enablement is in progress.
+* Finalize approved service-profile connectivity from AADLC to Kubernetes.
+* Re-enable Kubernetes-based deployment information and improve previous release branch detection.
+
+Output Requirements
+
+Present these as a compact roadmap table with Enhancement, Key Outcome, Status/Dependency columns. Use concise wording, preserve all important points, and avoid inventing timelines or commitments. Keep the final document suitable for a leadership review.
