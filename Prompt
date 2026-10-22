@@ -1,46 +1,94 @@
-Please refine the existing POM Analyzer UI only, addressing the following layout and result-classification issues. Reuse the current implementation and avoid unnecessary changes to other Release Readiness features.
+Implement Veracode SAST Report in Release Tracker
 
-1. Reorganize the Layout
+Implement a new Veracode SAST Report feature, following the existing POM Analyzer UI, backend API, asynchronous processing, and database persistence patterns. Inspect the current codebase and reuse existing Veracode integrations and tables wherever possible.
 
-* Move the search bar and component-analysis metadata section (component count, dependency checks, etc.) toward the top.
-* Display Library Baseline immediately below this section.
-* Show Library Baseline by default, regardless of whether a component is selected in the search/filter control.
-* Display the remaining component analysis/results below Library Baseline.
-* Selecting or searching for a component must not hide the Library Baseline section.
+1. Component Scope
 
-2. Consolidate the Summary Bar
+* For the selected team and fixed version/release, retrieve the complete component list from the existing Release Tracker configuration/database.
+* Include all relevant components, including library components, excluded components/projects, and other configured components.
+* Exclude Helm projects only if they do not represent actual code repositories with applicable SAST results.
+* Use each component’s name and release branch as the input for Veracode lookup.
+* Do not silently omit components because they are excluded from other release validations.
 
-To address the space crunch, redesign the POM Analyzer summary into a single compact, well-aligned bar containing:
+2. Veracode Application Mapping
 
-* Component Analysis and total component count.
-* Dependency check count and other existing summary metrics.
-* Last scan date and time, including the explicit time zone (e.g., IST, CST, or ET, based on the actual timestamp configuration).
-* A refresh action.
+Component names in our database may not exactly match Veracode application names.
 
-Keep the bar visually clean and responsive. Avoid separate rows or unnecessary spacing for these items. Preserve existing useful information without overcrowding the UI.
+* Retrieve the complete list of available Veracode applications first.
+* Identify the correct Veracode application for each Release Tracker component using normalized names and similarity matching, supported by other available identifiers where possible.
+* Maintain a mapping document initially that records the Release Tracker component name, matched Veracode application name/identifier, and mapping status.
+* Do not automatically accept ambiguous matches. Flag uncertain or unmatched mappings for review.
+* Reuse any existing application mappings or database tables if available; avoid duplicate mapping mechanisms.
 
-3. Improve the Refresh Action
+3. SAST Data Retrieval
 
-Replace the generic Scan button label with Refresh POM Analyzer or another clear, concise label if it fits the existing UI conventions better.
+Add a Get Veracode Report button near the top of the relevant Release Tracker UI, following the POM Analyzer layout and interaction patterns.
 
-The action must retain the current scanning behavior, provide appropriate progress/feedback, and update the displayed results and last-scan timestamp when the refresh completes. Do not indicate completion before the operation actually finishes.
+When clicked:
 
-4. Correct Library Dependency Classification
+* Identify the applicable components for the selected team and fixed version/release.
+* Resolve each component to its Veracode application.
+* Retrieve the latest applicable SAST-only results for the requested release branch, using the supported Veracode API and the available scan/build metadata.
+* Capture the main SAST information, including where available:
+    * Component name and branch name.
+    * Matched Veracode application.
+    * SAST scan/build status and scan date.
+    * SAST security rating/score, if provided by Veracode.
+    * Relevant flaw/severity counts, such as Critical, Very High, High, Medium, and Low.
+    * Any other useful, available SAST summary information.
+* Do not include SCA results or SCA-only findings.
+* Do not invent a score or assume Veracode’s security rating is a numeric score. Display the actual metric returned by the API and label it correctly.
+* Confirm how Veracode associates scans/builds with branches. If branch-level results cannot be verified reliably, show that limitation explicitly instead of presenting an unrelated application-wide scan as branch-specific.
 
-Some components, such as Common OrderMS and other components, do not have dependencies matching the configured libraries’ Maven groupId/artifact coordinates. These are legitimate cases, not scan failures.
+4. UI and Result Handling
 
-* When a component’s POM is successfully inspected and no configured library dependency is found, display 0 libraries found or an equivalent neutral result.
-* Do not show red SCAN ERROR messages or blank/error-looking dependency sections merely because no matching library dependency exists.
-* Do not force such components to display a misleading dependency mismatch.
-* Reserve SCAN ERROR for genuine failures, such as inaccessible repositories/branches, missing or unreadable POM files, malformed POMs, or other inspection failures.
-* Keep VERSION MISMATCH and UNRESOLVED for their actual respective conditions.
-* Ensure summary counts and component-level statuses reflect these distinctions consistently.
+* Display the results in a clean table consistent with existing Release Tracker and POM Analyzer styling.
+* Make component, branch, SAST status/rating, scan date, and severity information easy to review.
+* Clearly distinguish successful results, no available SAST data, unmatched applications, ambiguous mappings, and genuine API/scan errors.
+* Provide useful progress feedback while the report is being generated.
+* Support partial completion: one component’s failure must not prevent successful results for other components from being displayed.
+* Prevent duplicate report-generation requests while an equivalent job is already running.
 
-5. Validation
+5. Backend, Concurrency, and Performance
 
-* Test components with matching dependencies, version mismatches, zero matching libraries, unresolved versions, and genuine scan failures.
-* Verify Library Baseline remains visible when searching or selecting components.
-* Verify the consolidated summary bar, refresh behavior, and time-zone display.
-* Check responsiveness and ensure existing POM Analyzer functionality and other Release Readiness features are not regressed.
+* Use the existing backend API and asynchronous job patterns wherever possible.
+* Process multiple components concurrently using an executor service, with a maximum of five concurrent worker threads. Never exceed five.
+* Apply appropriate API timeouts, error handling, and rate-limit handling. Avoid unbounded retries or excessive API calls.
+* Return progress and per-component outcomes so the UI can show completed, failed, unmatched, and pending components.
+* Keep the application responsive while the report runs.
 
-Implement these refinements directly and provide a concise summary of the changes and validation results.
+6. Database Persistence
+
+* Inspect the existing schema and Veracode-related tables before introducing new tables.
+* Reuse suitable tables if they support the required data and history; otherwise, add a normalized table or tables for report runs and per-component SAST results.
+* Persist the selected team/fixed version, component, branch, Veracode application mapping, retrieved SAST metrics, scan/build metadata, result status, and timestamps as appropriate.
+* Store enough metadata to identify when results were fetched and which source scan/build they represent.
+* Prevent duplicate records for the same result while retaining useful report history.
+* Handle refreshes, partial failures, and repeated requests consistently.
+* Follow existing migration and transaction conventions; do not break existing reports or database consumers.
+
+7. Security and Reliability
+
+* Use the existing centrally configured Veracode credentials and integration where available.
+* Never expose credentials, tokens, or sensitive API responses in the UI or logs.
+* Validate API response fields and handle missing, malformed, or unexpected data safely.
+* Do not report stale results as freshly retrieved. Clearly identify the last successful retrieval and the source scan date.
+
+8. Testing and Completion Update
+
+Implement the feature end to end, including application discovery/mapping, SAST retrieval, bounded concurrency, UI display, and database persistence.
+
+Test:
+
+* Exact and approximate application-name matches.
+* Ambiguous and unmatched applications.
+* Components with and without available SAST results.
+* Correct branch/build association.
+* Partial API failures, timeouts, and rate limits.
+* Maximum five concurrent workers.
+* Database persistence, repeated refreshes, and UI progress.
+* Regression of existing Release Tracker and POM Analyzer functionality.
+
+At completion, provide a concise update covering the implementation, API/data fields used, application mapping approach, database changes, concurrency enforcement, tests executed, and any remaining limitations or decisions requiring my input.
+
+Important: Start implementation using the actual repository, existing component data, and supported Veracode APIs. Do not stop at a design proposal, and do not fabricate application mappings or branch-specific results.
