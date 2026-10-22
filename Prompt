@@ -1,102 +1,46 @@
-Implement POM Analyzer – Phase 1 (Read-Only)
+Please refine the existing POM Analyzer UI only, addressing the following layout and result-classification issues. Reuse the current implementation and avoid unnecessary changes to other Release Readiness features.
 
-Implement a new POM Analyzer option under the existing Release Readiness section, alongside Story Status, Branch Cut Validation, Commit Analysis, and Deployments.
+1. Reorganize the Layout
 
-1. Business Objective
+* Move the search bar and component-analysis metadata section (component count, dependency checks, etc.) toward the top.
+* Display Library Baseline immediately below this section.
+* Show Library Baseline by default, regardless of whether a component is selected in the search/filter control.
+* Display the remaining component analysis/results below Library Baseline.
+* Selecting or searching for a component must not hide the Library Baseline section.
 
-OC Platform owns 13 libraries configured in the team’s existing Library Section. These libraries are consumed by multiple microservices. When a library version changes, we need to identify whether each consuming microservice uses the correct library version in its release branch.
+2. Consolidate the Summary Bar
 
-Phase 1 is strictly read-only: discover, persist, compare, and display POM versions. Do not create or modify pull requests, update POM files, or push changes. Automated PR creation can be a future phase.
+To address the space crunch, redesign the POM Analyzer summary into a single compact, well-aligned bar containing:
 
-2. Library Baseline Discovery
+* Component Analysis and total component count.
+* Dependency check count and other existing summary metrics.
+* Last scan date and time, including the explicit time zone (e.g., IST, CST, or ET, based on the actual timestamp configuration).
+* A refresh action.
 
-* Use the existing team configuration and its Library Section as the source of truth for which libraries are owned by each team.
-* Use the library’s GitHub repository and pom.xml to identify its actual Maven artifact coordinates (groupId, artifactId) and version.
-* Determine the library’s expected version for the selected fixed version:
-    * First, find the appropriate release branch corresponding to the selected fixed version.
-    * If the library does not have a corresponding branch/release for that fixed version, identify its most recent applicable release branch and use that branch as the baseline.
-    * Do not blindly use main, master, the latest commit, or the newest version string.
-* Persist the discovered baseline and the source branch, version, and discovery metadata in the database so results can be reviewed and refreshed.
-* Make branch selection deterministic and auditable. Handle multiple release branches, missing branches, and ambiguous candidates explicitly.
+Keep the bar visually clean and responsive. Avoid separate rows or unnecessary spacing for these items. Preserve existing useful information without overcrowding the UI.
 
-3. Analyze Consuming Components
+3. Improve the Refresh Action
 
-For the selected team and fixed version:
+Replace the generic Scan button label with Refresh POM Analyzer or another clear, concise label if it fits the existing UI conventions better.
 
-* Analyze only actual application/microservice components configured for that team.
-* Exclude Helm repositories/projects and library repositories themselves from the consuming-component results.
-* For every eligible component, inspect the appropriate release branch’s pom.xml and identify dependencies matching the configured libraries.
-* Support Maven property-based versions, parent/inherited versions, dependency management, and relevant multi-module POM structures where feasible. Resolve versions accurately where the repository contains enough information; otherwise show the unresolved reason rather than guessing.
-* Compare each library’s expected baseline version with the version used by each consuming component.
-* Include the component’s repository, release branch, library artifact, expected library version, actual dependency version, and comparison status.
+The action must retain the current scanning behavior, provide appropriate progress/feedback, and update the displayed results and last-scan timestamp when the refresh completes. Do not indicate completion before the operation actually finishes.
 
-4. UI and Results
+4. Correct Library Dependency Classification
 
-Add POM Analyzer to the existing Release Readiness UI. Reuse the current team and fixed-version selection flow and established UI patterns.
+Some components, such as Common OrderMS and other components, do not have dependencies matching the configured libraries’ Maven groupId/artifact coordinates. These are legitimate cases, not scan failures.
 
-Show results for actual application components only, with the libraries they consume and their version comparisons. Do not display library repositories or Helm projects as consumer rows.
+* When a component’s POM is successfully inspected and no configured library dependency is found, display 0 libraries found or an equivalent neutral result.
+* Do not show red SCAN ERROR messages or blank/error-looking dependency sections merely because no matching library dependency exists.
+* Do not force such components to display a misleading dependency mismatch.
+* Reserve SCAN ERROR for genuine failures, such as inaccessible repositories/branches, missing or unreadable POM files, malformed POMs, or other inspection failures.
+* Keep VERSION MISMATCH and UNRESOLVED for their actual respective conditions.
+* Ensure summary counts and component-level statuses reflect these distinctions consistently.
 
-Use clear statuses such as:
+5. Validation
 
-* MATCH – actual and expected versions match.
-* VERSION MISMATCH – the component uses a different version.
-* LIBRARY NOT FOUND – no matching dependency exists in the inspected POM.
-* UNRESOLVED – version cannot be reliably determined.
-* SCAN ERROR – repository, branch, or POM could not be inspected.
-* NOT APPLICABLE – only when a clear, defensible rule establishes that the library does not apply to the component.
+* Test components with matching dependencies, version mismatches, zero matching libraries, unresolved versions, and genuine scan failures.
+* Verify Library Baseline remains visible when searching or selecting components.
+* Verify the consolidated summary bar, refresh behavior, and time-zone display.
+* Check responsiveness and ensure existing POM Analyzer functionality and other Release Readiness features are not regressed.
 
-Display useful source details and actionable explanations for non-matching results. Distinguish a confirmed mismatch from missing data or scan failures. Provide an explicit refresh/rescan mechanism consistent with existing application patterns.
-
-5. Database Design
-
-Act as a senior DBA and inspect the existing schema before changing it.
-
-* Decide whether the existing components table can appropriately represent library metadata and Maven coordinates without compromising its current meaning or existing consumers.
-* If the entities have different lifecycles or relationships, create normalized tables for library metadata/baselines and scan results instead of overloading the components table.
-* Avoid duplicate library records and duplicate scan results. Define appropriate primary keys, foreign keys, and uniqueness constraints.
-* Persist team/fixed-version context, repository, branch, artifact coordinates, expected and actual versions, scan status, and timestamps as appropriate.
-* Support repeatable scans and baseline refreshes without accumulating stale or conflicting records.
-* Follow existing database migration, transaction, and compatibility conventions. Do not break existing reports or workflows.
-
-6. Corner Cases and Reliability
-
-Explicitly handle and document:
-
-* Library has no release branch for the selected fixed version.
-* Multiple possible release branches or unclear release ordering.
-* No usable release branch exists.
-* Library POM is missing, malformed, or has no identifiable artifact version.
-* Consumer POM is missing, malformed, or contains no matching dependency.
-* Dependency version is defined using a property, parent POM, or dependency management.
-* Snapshot, prerelease, or otherwise nonstandard version strings.
-* Same artifact coordinates exist in multiple configured libraries.
-* Duplicate dependencies or multiple module POMs.
-* Repository access failures, missing branches, rate limits, timeouts, and partial scan failures.
-* No consuming components or no library dependencies found.
-* A library’s baseline changes after a previous scan.
-
-Never silently substitute a version, branch, or result. Preserve partial results when appropriate and clearly report failures.
-
-7. Implementation and Validation
-
-Start by inspecting the current code, team/library configuration, GitHub repository conventions, database schema, Release Readiness UI, and existing asynchronous job/report patterns. Reuse established integrations and components instead of introducing duplicate implementations.
-
-Then implement Phase 1 end to end: baseline discovery, consumer POM scanning, database persistence, comparison logic, and UI display.
-
-Add focused tests for branch selection, Maven version extraction/resolution, dependency matching, status classification, database persistence, and failure handling. Verify existing Release Readiness features and report generation continue working.
-
-Do not invent repository names, branch conventions, artifact coordinates, or version mappings. Use the actual configuration and GitHub data. If an essential convention is ambiguous, identify the specific ambiguity and provide the evidence before choosing a fallback.
-
-8. Completion Update
-
-After implementation, provide a concise update covering:
-
-1. What was implemented.
-2. Database design decision and rationale.
-3. How the library baseline release branch is selected.
-4. How consuming components and dependency versions are discovered.
-5. Edge cases handled and known limitations.
-6. Tests executed and results.
-7. Any decisions or access issues requiring my input.
-
-Keep this phase read-only. Leave automated PR creation and POM modification for a separately approved future phase.
+Implement these refinements directly and provide a concise summary of the changes and validation results.
