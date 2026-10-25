@@ -1,94 +1,207 @@
-Implement Veracode SAST Report in Release Tracker
+Implement Release Go/No-Go Dashboard in Release Tracker
 
-Implement a new Veracode SAST Report feature, following the existing POM Analyzer UI, backend API, asynchronous processing, and database persistence patterns. Inspect the current codebase and reuse existing Veracode integrations and tables wherever possible.
+Act as a senior full-stack architect and UI/UX designer. Implement a new Release Go/No-Go tab under the existing Release Readiness section. Follow existing application architecture, UI patterns, backend APIs, database conventions, and authorization rules. Inspect the current implementation before making changes.
 
-1. Component Scope
+1. Business Objective
 
-* For the selected team and fixed version/release, retrieve the complete component list from the existing Release Tracker configuration/database.
-* Include all relevant components, including library components, excluded components/projects, and other configured components.
-* Exclude Helm projects only if they do not represent actual code repositories with applicable SAST results.
-* Use each component’s name and release branch as the input for Veracode lookup.
-* Do not silently omit components because they are excluded from other release validations.
+Currently, release readiness information is spread across Story Status, Branch Cut Validation, Deployments, Review Commits, and Veracode SAST.
 
-2. Veracode Application Mapping
+Create a single dashboard that consolidates the existing database results and determines whether each component is eligible for release/deployment.
 
-Component names in our database may not exactly match Veracode application names.
+The primary users are the Infra team, who need to identify which components are ready for deployment and which have outstanding issues.
 
-* Retrieve the complete list of available Veracode applications first.
-* Identify the correct Veracode application for each Release Tracker component using normalized names and similarity matching, supported by other available identifiers where possible.
-* Maintain a mapping document initially that records the Release Tracker component name, matched Veracode application name/identifier, and mapping status.
-* Do not automatically accept ambiguous matches. Flag uncertain or unmatched mappings for review.
-* Reuse any existing application mappings or database tables if available; avoid duplicate mapping mechanisms.
+Reuse existing data and analysis wherever possible. This feature should primarily aggregate existing results and apply configurable Go/No-Go rules rather than duplicate existing validation logic or make unnecessary external API calls.
 
-3. SAST Data Retrieval
+2. Component Selection Rules
 
-Add a Get Veracode Report button near the top of the relevant Release Tracker UI, following the POM Analyzer layout and interaction patterns.
+Use the same component-selection logic as the existing Deployments section.
 
-When clicked:
+Include components that:
 
-* Identify the applicable components for the selected team and fixed version/release.
-* Resolve each component to its Veracode application.
-* Retrieve the latest applicable SAST-only results for the requested release branch, using the supported Veracode API and the available scan/build metadata.
-* Capture the main SAST information, including where available:
-    * Component name and branch name.
-    * Matched Veracode application.
-    * SAST scan/build status and scan date.
-    * SAST security rating/score, if provided by Veracode.
-    * Relevant flaw/severity counts, such as Critical, Very High, High, Medium, and Low.
-    * Any other useful, available SAST summary information.
-* Do not include SCA results or SCA-only findings.
-* Do not invent a score or assume Veracode’s security rating is a numeric score. Display the actual metric returned by the API and label it correctly.
-* Confirm how Veracode associates scans/builds with branches. If branch-level results cannot be verified reliably, show that limitation explicitly instead of presenting an unrelated application-wide scan as branch-specific.
+* Are valid application/microservice projects.
+* Are not Helm projects.
+* Are not library projects.
+* Are not marked as invalid projects in the existing configuration or validation results.
+* Belong to the selected team and fixed version/release context.
 
-4. UI and Result Handling
+Important:
 
-* Display the results in a clean table consistent with existing Release Tracker and POM Analyzer styling.
-* Make component, branch, SAST status/rating, scan date, and severity information easy to review.
-* Clearly distinguish successful results, no available SAST data, unmatched applications, ambiguous mappings, and genuine API/scan errors.
-* Provide useful progress feedback while the report is being generated.
-* Support partial completion: one component’s failure must not prevent successful results for other components from being displayed.
-* Prevent duplicate report-generation requests while an equivalent job is already running.
+* Include components even when their branch cut is pending.
+* Do not exclude a component merely because it has violations, incomplete validation, or deployment issues.
+* Use the existing source of truth for component eligibility instead of introducing a separate, inconsistent filter.
+* Do not include libraries or Helm projects as standalone release Go/No-Go rows.
 
-5. Backend, Concurrency, and Performance
+Each eligible component must appear in the dashboard even if some underlying data is missing, incomplete, or unavailable.
 
-* Use the existing backend API and asynchronous job patterns wherever possible.
-* Process multiple components concurrently using an executor service, with a maximum of five concurrent worker threads. Never exceed five.
-* Apply appropriate API timeouts, error handling, and rate-limit handling. Avoid unbounded retries or excessive API calls.
-* Return progress and per-component outcomes so the UI can show completed, failed, unmatched, and pending components.
-* Keep the application responsive while the report runs.
+3. Dashboard UI/UX
 
-6. Database Persistence
+Add Release Go/No-Go after the existing Veracode SAST option in Release Readiness.
 
-* Inspect the existing schema and Veracode-related tables before introducing new tables.
-* Reuse suitable tables if they support the required data and history; otherwise, add a normalized table or tables for report runs and per-component SAST results.
-* Persist the selected team/fixed version, component, branch, Veracode application mapping, retrieved SAST metrics, scan/build metadata, result status, and timestamps as appropriate.
-* Store enough metadata to identify when results were fetched and which source scan/build they represent.
-* Prevent duplicate records for the same result while retaining useful report history.
-* Handle refreshes, partial failures, and repeated requests consistently.
-* Follow existing migration and transaction conventions; do not break existing reports or database consumers.
+Design a compact, professional, Infra-friendly dashboard that prioritizes a quick decision rather than displaying every underlying record.
 
-7. Security and Reliability
+Provide the following controls at the top:
 
-* Use the existing centrally configured Veracode credentials and integration where available.
-* Never expose credentials, tokens, or sensitive API responses in the UI or logs.
-* Validate API response fields and handle missing, malformed, or unexpected data safely.
-* Do not report stale results as freshly retrieved. Clearly identify the last successful retrieval and the source scan date.
+* Team selection and fixed version/release selection, following existing application patterns.
+* Deployment environment/namespace selection.
+* Configurable validation-category checkboxes that determine which checks are used to calculate Go/No-Go.
+* A refresh/recalculate action consistent with existing UI conventions.
 
-8. Testing and Completion Update
+Display a summary section showing:
 
-Implement the feature end to end, including application discovery/mapping, SAST retrieval, bounded concurrency, UI display, and database persistence.
+* Total eligible components.
+* Components marked GO.
+* Components marked NO-GO.
+* Components with incomplete or unavailable validation data.
 
-Test:
+Below the summary, display a component-level table with:
 
-* Exact and approximate application-name matches.
-* Ambiguous and unmatched applications.
-* Components with and without available SAST results.
-* Correct branch/build association.
-* Partial API failures, timeouts, and rate limits.
-* Maximum five concurrent workers.
-* Database persistence, repeated refreshes, and UI progress.
-* Regression of existing Release Tracker and POM Analyzer functionality.
+* Component name.
+* Release decision: GO or NO-GO.
+* Commit violations.
+* Story status.
+* Branch cut status.
+* Test 3 deployment status.
+* Stage deployment status.
+* Veracode SAST status.
+* A concise explanation of outstanding blockers.
 
-At completion, provide a concise update covering the implementation, API/data fields used, application mapping approach, database changes, concurrency enforcement, tests executed, and any remaining limitations or decisions requiring my input.
+Use clear status indicators, restrained colors, readable labels, and compact spacing. Avoid overwhelming the Infra team with full commit lists, story records, or detailed scan output in the main table.
 
-Important: Start implementation using the actual repository, existing component data, and supported Veracode APIs. Do not stop at a design proposal, and do not fabricate application mappings or branch-specific results.
+Provide expandable component details or a drill-down view to show the specific violations and evidence behind each decision. Reuse existing detailed results rather than creating duplicate screens unnecessarily.
+
+4. Configurable Go/No-Go Rules
+
+Each validation category must have its own checkbox. The user must be able to enable or disable individual categories, and the release decision must be recalculated using only the enabled categories.
+
+Support these checks:
+
+A. Commit Violations
+
+* Retrieve the existing Review Commits/commit-analysis results for the component, team, and selected fixed version.
+* If at least one applicable, unresolved commit violation exists, mark the component NO-GO when this category is enabled.
+* Respect existing resolution states, including Fixed, Ignore, approved overrides, or other established rules.
+* Do not count resolved or legitimately exempted violations as outstanding blockers.
+* Display the count and allow the user to drill down into the underlying violations.
+
+B. Story Status
+
+* Reuse the existing Story Status results.
+* If any applicable story belonging to the component/release is in a status that violates the existing release policy, mark the component NO-GO when enabled.
+* Use the actual existing story-status rules and source data; do not invent new status mappings.
+* Show the number of affected stories and allow drill-down.
+
+C. Branch Cut Validation
+
+* Reuse the existing Branch Cut Validation results.
+* If the required release branch cut is not completed or fails existing validation rules, mark the component NO-GO when enabled.
+* Pending branch cuts must remain visible in the dashboard and must be treated as NO-GO when this check is enabled.
+* Display the actual branch-cut status.
+
+D. Deployment Readiness
+
+* Support deployment checks for the relevant environments, including Test 3 and Stage.
+* Provide environment/namespace selection based on the existing team and Kubernetes configuration.
+* Support different team requirements: most validation categories are common, but deployment environments may differ by team. For OC Platform and other applicable teams, allow selection of the relevant Test 3, Test 4, Stage, or other already-supported configured namespace/environment.
+* Reuse existing Deployments data and readiness rules.
+* If a required deployment is missing, invalid, or not ready, mark the component NO-GO when the relevant environment check is enabled.
+* If multiple environments are selected, evaluate each selected environment independently. A failure in any selected, required environment must make the component NO-GO.
+* Do not assume that every team uses the same namespaces or environment combinations.
+
+E. Veracode SAST
+
+* Reuse the existing Veracode SAST report data and established SAST status interpretation.
+* If SAST has not completed, the required results are missing, or the scan fails, mark the component NO-GO when this category is enabled.
+* Correctly interpret the actual Veracode mitigation/resolution fields and percentages. Investigate what the reported mitigation value (including any 100% value) means in the existing API/data model before defining the rule.
+* If applicable SAST flaws remain unresolved or unmitigated according to the established policy, mark the component NO-GO.
+* Do not use SCA results; this check is for SAST only.
+* Do not assume that a displayed score or percentage by itself proves the component is safe. Use the underlying Veracode fields and established policy.
+
+F. Optional Categories and Future Extensibility
+
+Keep the validation-category design extensible so additional existing release checks can be included later without redesigning the dashboard.
+
+5. Decision Calculation
+
+Implement a clear, deterministic decision engine.
+
+* If all enabled validation categories pass, mark the component GO.
+* If any enabled category has an applicable violation or fails a required check, mark it NO-GO.
+* If a category is disabled, it must not affect the decision, although its status may still be displayed for information.
+* When a check is enabled but its required data is missing, stale, or unavailable, do not silently treat it as passed. Show an explicit UNKNOWN / DATA UNAVAILABLE status and conservatively prevent a GO decision until the result is verified.
+* Distinguish actual policy violations from integration failures, missing data, and checks that are not applicable.
+* If all checks are disabled, do not automatically mark every component GO. Show that no validation criteria are selected and require the user to select at least one check before calculating a meaningful decision.
+* Show the reason(s) for every NO-GO decision, including the category, status, and outstanding issue count where available.
+
+Make the rules easy to understand and test. Keep the decision calculation separate from UI rendering so it can be unit-tested.
+
+6. Missing, Stale, and Inconsistent Data
+
+Because the dashboard aggregates multiple existing datasets:
+
+* Match data using the correct team, fixed version/release, component, and branch/environment context.
+* Do not match components by display name alone if stable repository identifiers or existing mappings are available.
+* Check the freshness and completion status of source results where timestamps are available.
+* Never interpret a missing database record as a successful validation.
+* Handle partial results without hiding components.
+* Display a clear status when a source report has not been generated, is outdated, or is unavailable.
+* Preserve the distinction between a genuine validation failure and a connectivity/API failure.
+
+7. Persistence and Refresh Behavior
+
+* Inspect the existing schema and reuse existing tables and APIs.
+* Avoid duplicating source validation results or unnecessarily creating new tables.
+* Persist Go/No-Go calculation history only if useful and consistent with existing report-history conventions.
+* If calculation history is stored, record the team, fixed version, selected environments, enabled validation categories, component-level decisions, source-result timestamps, and calculation timestamp.
+* Ensure the displayed result reflects the currently selected criteria and latest usable source data.
+* Provide an explicit refresh/recalculate mechanism that retrieves or reuses source data according to existing refresh patterns.
+* Do not claim that a source report was refreshed if the underlying data was only read from the database.
+
+8. Authorization and Safety
+
+Follow existing Release Tracker role-based permissions and backend authorization. The dashboard must not bypass existing permissions or allow viewers to perform unauthorized state-changing actions.
+
+This is a release-readiness decision aid, not an automatic deployment trigger. Do not initiate deployments, modify source branches, change Jira stories, alter Veracode findings, or update existing violations as part of this feature.
+
+9. Testing and Acceptance Criteria
+
+Implement and validate the complete feature.
+
+Test at minimum:
+
+1. Correct component inclusion/exclusion using the Deployments selection rules.
+2. Components with completed and pending branch cuts.
+3. One or multiple outstanding commit violations.
+4. Open/non-compliant stories and compliant stories.
+5. Successful, failed, and missing deployment results for selected environments.
+6. Veracode SAST pass, outstanding findings, incomplete scans, and unavailable data.
+7. Each category independently enabled and disabled.
+8. Multiple enabled checks with mixed pass/fail outcomes.
+9. Missing, stale, or mismatched source data.
+10. Components with partial source results.
+11. Different deployment environment/namespace combinations for different teams.
+12. No validation categories selected.
+13. Accurate GO/NO-GO totals and explanations.
+14. Existing Release Readiness tabs, POM Analyzer, Veracode reports, and Review Commits remain unaffected.
+
+Add unit tests for the decision engine and focused integration/UI tests following the project’s existing testing conventions.
+
+10. Implementation Instructions
+
+Inspect the current codebase, database schema, existing release-readiness screens, Deployments component-selection logic, Story Status, Branch Cut Validation, Review Commits, and Veracode SAST implementation before coding.
+
+Reuse existing APIs, database data, validation rules, and UI components wherever possible. Do not create a second implementation of an existing check unless necessary.
+
+Implement the feature end to end, make reasonable UI/UX decisions without waiting for clarification on minor presentation details, and report any genuinely ambiguous business rules with the relevant evidence.
+
+Completion Update
+
+Provide a concise summary of:
+
+* Dashboard layout and functionality implemented.
+* Component-selection rules reused.
+* Decision rules and how configurable checkboxes affect results.
+* Environment/namespace selection behavior.
+* Handling of missing or stale data.
+* Database changes, if any.
+* Tests executed and results.
+* Any unresolved policy questions requiring my decision.
