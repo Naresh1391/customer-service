@@ -1,207 +1,222 @@
-Implement Release Go/No-Go Dashboard in Release Tracker
+Release Tracker – Feature Flags, Filters, UI Fixes, and POM Analyzer Enhancements
 
-Act as a senior full-stack architect and UI/UX designer. Implement a new Release Go/No-Go tab under the existing Release Readiness section. Follow existing application architecture, UI patterns, backend APIs, database conventions, and authorization rules. Inspect the current implementation before making changes.
+Act as a senior full-stack architect and UI/UX designer. Inspect the existing implementation and make the following targeted enhancements. Reuse current architecture, configuration patterns, APIs, database structures, and UI components wherever possible.
 
-1. Business Objective
+Important: Do not remove existing functionality or delete the Git/Jira auto-fix implementations. Use feature flags to control availability. Do not implement the Deployments redesign yet; provide recommendations only for that item.
 
-Currently, release readiness information is spread across Story Status, Branch Cut Validation, Deployments, Review Commits, and Veracode SAST.
+1. Review Commits – Git Auto-Fix and Jira Fix Feature Flags
 
-Create a single dashboard that consolidates the existing database results and determines whether each component is eligible for release/deployment.
+The existing Review Commits page contains Git auto-fix (Fix It) and Jira fix actions. Our current GitHub token is read-only, so these write operations must not be available.
 
-The primary users are the Infra team, who need to identify which components are ready for deployment and which have outstanding issues.
+* Introduce two independent feature flags with clear names, for example:
+    * GIT_AUTO_FIX_ENABLED: false
+    * JIRA_AUTO_FIX_ENABLED: false
+* Add them to the existing config.yaml using the project’s established configuration conventions.
+* Default both flags to disabled.
+* When Git auto-fix is disabled:
+    * Hide or disable the Fix It action in the UI so users cannot trigger it.
+    * Ensure the backend also rejects or skips the operation when called directly.
+    * Do not attempt any GitHub write operation.
+* When Jira auto-fix is disabled:
+    * Hide or disable the Jira fix action in the UI.
+    * Ensure the backend also rejects or skips the operation when called directly.
+    * Do not attempt any Jira write operation.
+* Preserve the existing implementation so these features can be enabled later when the required permissions and approvals are available.
+* Read configuration consistently across the frontend and backend. Do not rely on frontend visibility alone as a security or execution control.
+* Add tests proving that disabled features cannot execute through either the UI or backend APIs.
 
-Reuse existing data and analysis wherever possible. This feature should primarily aggregate existing results and apply configurable Go/No-Go rules rather than duplicate existing validation logic or make unnecessary external API calls.
+2. Review Commits – Story Number Filter
 
-2. Component Selection Rules
+Add a Story Number filter to the existing Review Commits page.
 
-Use the same component-selection logic as the existing Deployments section.
+* Follow the styling and behavior of the existing filters.
+* Filter commits by their associated Jira/story number using the actual available data and relationships.
+* Support the existing filter combinations, including team, fixed version, and Violations Only where applicable.
+* Handle commits with missing story associations correctly.
+* Ensure filtering does not introduce duplicate rows or incorrect counts.
+* Keep the filter responsive and avoid unnecessary database/API calls.
 
-Include components that:
+3. Disable Teams Notification Actions Everywhere
 
-* Are valid application/microservice projects.
-* Are not Helm projects.
-* Are not library projects.
-* Are not marked as invalid projects in the existing configuration or validation results.
-* Belong to the selected team and fixed version/release context.
+Teams notification actions are not required at present.
 
-Important:
+* Keep the existing Teams notification buttons visible, but make them visibly disabled and non-interactive.
+* Apply this consistently across Review Commits, Story Validations, and every other screen where Teams notification actions appear.
+* This restriction applies to all roles, including Admin.
+* Clicking or keyboard-activating a disabled button must not trigger any action, background job, API request, or notification.
+* Ensure the backend also prevents notification execution through direct API calls while this functionality is disabled.
+* Preserve existing code and configuration for possible future reactivation.
+* Do not remove unrelated Teams configuration or read-only notification status information.
 
-* Include components even when their branch cut is pending.
-* Do not exclude a component merely because it has violations, incomplete validation, or deployment issues.
-* Use the existing source of truth for component eligibility instead of introducing a separate, inconsistent filter.
-* Do not include libraries or Helm projects as standalone release Go/No-Go rows.
+4. Deployments Page – Guidance Only, No Implementation
 
-Each eligible component must appear in the dashboard even if some underlying data is missing, incomplete, or unavailable.
+Do not modify the Deployments page in this task. Analyze its current layout and provide a recommendation for handling variable numbers of deployment environments/namespaces.
 
-3. Dashboard UI/UX
+Consider these scenarios:
 
-Add Release Go/No-Go after the existing Veracode SAST option in Release Readiness.
+* A team has only one namespace.
+* A team has two namespaces.
+* A team has five namespaces.
+* A team has six to eight namespaces or more.
 
-Design a compact, professional, Infra-friendly dashboard that prioritizes a quick decision rather than displaying every underlying record.
+The current page displays environment sections such as Test 3, Test 4, Stage, and version history. Evaluate whether this layout remains usable as the number of environments increases or decreases.
 
-Provide the following controls at the top:
+Recommend a responsive UI/UX approach that:
 
-* Team selection and fixed version/release selection, following existing application patterns.
-* Deployment environment/namespace selection.
-* Configurable validation-category checkboxes that determine which checks are used to calculate Go/No-Go.
-* A refresh/recalculate action consistent with existing UI conventions.
+* Avoids excessive horizontal scrolling and page height.
+* Does not leave large empty spaces when a team has only one or two environments.
+* Keeps deployment status and version history easy to compare.
+* Works with different team-specific environment names and namespace configurations.
+* Supports future teams with more than eight namespaces without requiring code changes for each new environment.
 
-Display a summary section showing:
+Consider alternatives such as dynamic environment tabs, compact cards, an environment selector, or a responsive grid. Recommend the best option based on the existing implementation and explain the trade-offs.
 
-* Total eligible components.
-* Components marked GO.
-* Components marked NO-GO.
-* Components with incomplete or unavailable validation data.
+Deliver a concise design recommendation with example layouts/behavior for one, two, five, and eight-plus environments. Do not implement the proposed redesign now.
 
-Below the summary, display a component-level table with:
+5. Disable Config Changes
 
-* Component name.
-* Release decision: GO or NO-GO.
-* Commit violations.
-* Story status.
-* Branch cut status.
-* Test 3 deployment status.
-* Stage deployment status.
-* Veracode SAST status.
-* A concise explanation of outstanding blockers.
+The Config Changes section is not required currently.
 
-Use clear status indicators, restrained colors, readable labels, and compact spacing. Avoid overwhelming the Infra team with full commit lists, story records, or detailed scan output in the main table.
+* Disable the Config Changes navigation/tab/action so users cannot access or trigger the feature.
+* Ensure its backend APIs or background operations are not triggered through the UI while disabled.
+* Follow the project’s existing feature-flag and navigation conventions where practical.
+* Preserve the underlying code and data for potential future use.
+* Do not affect other deployment or release-readiness functionality.
 
-Provide expandable component details or a drill-down view to show the specific violations and evidence behind each decision. Reuse existing detailed results rather than creating duplicate screens unnecessarily.
+6. POM Analyzer – Release Baseline Selection and Release Scope
 
-4. Configurable Go/No-Go Rules
+The current POM Analyzer is mostly working. Preserve its existing behavior and make only the required enhancements.
 
-Each validation category must have its own checkbox. The user must be able to enable or disable individual categories, and the release decision must be recalculated using only the enabled categories.
+6.1 Correct release-branch and baseline selection
 
-Support these checks:
+Investigate and document exactly which GitHub branch is used to determine each library’s baseline version.
 
-A. Commit Violations
+The baseline must be determined using the appropriate release branch for the selected fixed version/release. However, not every library is necessarily released with every application release.
 
-* Retrieve the existing Review Commits/commit-analysis results for the component, team, and selected fixed version.
-* If at least one applicable, unresolved commit violation exists, mark the component NO-GO when this category is enabled.
-* Respect existing resolution states, including Fixed, Ignore, approved overrides, or other established rules.
-* Do not count resolved or legitimately exempted violations as outstanding blockers.
-* Display the count and allow the user to drill down into the underlying violations.
+For example, if the selected application release is 26.10.27 but a library such as Camunda Commons Resources is not released with that version:
 
-B. Story Status
+* Find the most recent applicable library release branch preceding or otherwise valid for the selected release.
+* Use the version from that branch as the baseline.
+* Do not blindly use main, master, the latest commit, or the latest version string.
+* Do not assume release branch names always follow the same format without inspecting the actual repository conventions.
+* If no reliable applicable branch or baseline can be identified, report that clearly instead of guessing.
 
-* Reuse the existing Story Status results.
-* If any applicable story belonging to the component/release is in a status that violates the existing release policy, mark the component NO-GO when enabled.
-* Use the actual existing story-status rules and source data; do not invent new status mappings.
-* Show the number of affected stories and allow drill-down.
+Use the actual GitHub branch and POM data. Handle missing branches, multiple candidate branches, version ordering, and ambiguous mappings deterministically.
 
-C. Branch Cut Validation
+6.2 Identify whether the library is in release scope
 
-* Reuse the existing Branch Cut Validation results.
-* If the required release branch cut is not completed or fails existing validation rules, mark the component NO-GO when enabled.
-* Pending branch cuts must remain visible in the dashboard and must be treated as NO-GO when this check is enabled.
-* Display the actual branch-cut status.
+For each library baseline, determine whether the library is part of the selected fixed version/release scope.
 
-D. Deployment Readiness
+Use the existing configured components/libraries, release information, and actual branch/version evidence to establish this. Do not infer release scope solely because a library is listed in the team’s Library Section.
 
-* Support deployment checks for the relevant environments, including Test 3 and Stage.
-* Provide environment/namespace selection based on the existing team and Kubernetes configuration.
-* Support different team requirements: most validation categories are common, but deployment environments may differ by team. For OC Platform and other applicable teams, allow selection of the relevant Test 3, Test 4, Stage, or other already-supported configured namespace/environment.
-* Reuse existing Deployments data and readiness rules.
-* If a required deployment is missing, invalid, or not ready, mark the component NO-GO when the relevant environment check is enabled.
-* If multiple environments are selected, evaluate each selected environment independently. A failure in any selected, required environment must make the component NO-GO.
-* Do not assume that every team uses the same namespaces or environment combinations.
+Display a clear label beside the baseline version, such as:
 
-E. Veracode SAST
+* In Release Scope
+* Outside Release Scope
 
-* Reuse the existing Veracode SAST report data and established SAST status interpretation.
-* If SAST has not completed, the required results are missing, or the scan fails, mark the component NO-GO when this category is enabled.
-* Correctly interpret the actual Veracode mitigation/resolution fields and percentages. Investigate what the reported mitigation value (including any 100% value) means in the existing API/data model before defining the rule.
-* If applicable SAST flaws remain unresolved or unmitigated according to the established policy, mark the component NO-GO.
-* Do not use SCA results; this check is for SAST only.
-* Do not assume that a displayed score or percentage by itself proves the component is safe. Use the underlying Veracode fields and established policy.
+Use wording consistent with the actual business rule if a more accurate label is appropriate.
 
-F. Optional Categories and Future Extensibility
+The purpose is to distinguish libraries that are expected to participate in the selected release from libraries that are independently released and are not part of that release.
 
-Keep the validation-category design extensible so additional existing release checks can be included later without redesigning the dashboard.
+For example, when Enrichment MS consumes OC Platform Support Library:
 
-5. Decision Calculation
+* Continue showing the expected library baseline version.
+* Continue showing the actual version used by Enrichment MS.
+* Continue displaying the existing version-match/mismatch result.
+* Also display whether the library baseline belongs to the selected release scope.
 
-Implement a clear, deterministic decision engine.
+If the available data is insufficient to determine scope, show an explicit unknown/unverified state rather than incorrectly marking it in or out of scope.
 
-* If all enabled validation categories pass, mark the component GO.
-* If any enabled category has an applicable violation or fails a required check, mark it NO-GO.
-* If a category is disabled, it must not affect the decision, although its status may still be displayed for information.
-* When a check is enabled but its required data is missing, stale, or unavailable, do not silently treat it as passed. Show an explicit UNKNOWN / DATA UNAVAILABLE status and conservatively prevent a GO decision until the result is verified.
-* Distinguish actual policy violations from integration failures, missing data, and checks that are not applicable.
-* If all checks are disabled, do not automatically mark every component GO. Show that no validation criteria are selected and require the user to select at least one check before calculating a meaningful decision.
-* Show the reason(s) for every NO-GO decision, including the category, status, and outstanding issue count where available.
+Keep this classification separate from the dependency version-match result. A library can be outside the application’s release scope while its consumed version still needs to be compared with the applicable baseline.
 
-Make the rules easy to understand and test. Keep the decision calculation separate from UI rendering so it can be unit-tested.
+6.3 Multi-module library expansion
 
-6. Missing, Stale, and Inconsistent Data
+In Library Baseline, multi-module libraries such as NextGen, HDK Lib, and OC Platform Support Lib are currently expanded automatically.
 
-Because the dashboard aggregates multiple existing datasets:
+* Change these sections to be collapsed by default.
+* Expand only when the user explicitly clicks the section.
+* Clicking again must collapse it.
+* Preserve the existing module information and baseline details.
+* Verify that the default state is consistent after page refreshes and when changing the team/fixed version.
 
-* Match data using the correct team, fixed version/release, component, and branch/environment context.
-* Do not match components by display name alone if stable repository identifiers or existing mappings are available.
-* Check the freshness and completion status of source results where timestamps are available.
-* Never interpret a missing database record as a successful validation.
-* Handle partial results without hiding components.
-* Display a clear status when a source report has not been generated, is outdated, or is unavailable.
-* Preserve the distinction between a genuine validation failure and a connectivity/API failure.
+6.4 Source field tooltips
 
-7. Persistence and Refresh Behavior
+The POM Analyzer displays source types such as Direct and Property.
 
-* Inspect the existing schema and reuse existing tables and APIs.
-* Avoid duplicating source validation results or unnecessarily creating new tables.
-* Persist Go/No-Go calculation history only if useful and consistent with existing report-history conventions.
-* If calculation history is stored, record the team, fixed version, selected environments, enabled validation categories, component-level decisions, source-result timestamps, and calculation timestamp.
-* Ensure the displayed result reflects the currently selected criteria and latest usable source data.
-* Provide an explicit refresh/recalculate mechanism that retrieves or reuses source data according to existing refresh patterns.
-* Do not claim that a source report was refreshed if the underlying data was only read from the database.
+* Add a clear information tooltip explaining what each source type means in the current implementation.
+* For example, explain whether the version is declared directly in a dependency or resolved through a Maven property.
+* Ensure the explanation matches the actual extraction/resolution logic; do not display a misleading definition.
+* Use a visible information icon or another established accessible UI pattern.
+* Ensure the tooltip is readable in both light and dark themes, with sufficient contrast, correct layering, and no clipping.
+* Verify hover, keyboard focus, and click behavior as appropriate for the existing UI framework.
 
-8. Authorization and Safety
+7. Veracode – Feature Flag and Readable Tooltips
 
-Follow existing Release Tracker role-based permissions and backend authorization. The dashboard must not bypass existing permissions or allow viewers to perform unauthorized state-changing actions.
+7.1 Veracode feature flag
 
-This is a release-readiness decision aid, not an automatic deployment trigger. Do not initiate deployments, modify source branches, change Jira stories, alter Veracode findings, or update existing violations as part of this feature.
+Veracode access depends on the availability and permissions of the required token. We want to be able to disable the feature cleanly if access is unavailable in a target environment.
 
-9. Testing and Acceptance Criteria
+* Introduce a clear feature flag, for example VERACODE_REPORT_ENABLED: true, using the existing configuration conventions.
+* Enable it by default for now.
+* When enabled, preserve the current Veracode report functionality.
+* When disabled:
+    * Hide or disable the Veracode tab/navigation entry and all related report actions.
+    * Prevent frontend actions from triggering Veracode requests.
+    * Ensure backend APIs also reject or skip Veracode report operations.
+    * Do not make Veracode API calls or start related background jobs.
+    * Do not display stale data as if it were a newly generated report.
+* Preserve the existing implementation and stored results so the feature can be re-enabled without redevelopment.
+* Read the flag consistently across the frontend and backend, using the project’s approved configuration mechanism.
+* Test both enabled and disabled states, including direct backend API invocation.
 
-Implement and validate the complete feature.
+7.2 Improve Veracode information tooltips
 
-Test at minimum:
+Existing tooltips for SAST rating, mitigated flaws, severity, scan status, and related Veracode fields are currently unreadable because the popup appears white or its text lacks sufficient contrast.
 
-1. Correct component inclusion/exclusion using the Deployments selection rules.
-2. Components with completed and pending branch cuts.
-3. One or multiple outstanding commit violations.
-4. Open/non-compliant stories and compliant stories.
-5. Successful, failed, and missing deployment results for selected environments.
-6. Veracode SAST pass, outstanding findings, incomplete scans, and unavailable data.
-7. Each category independently enabled and disabled.
-8. Multiple enabled checks with mixed pass/fail outcomes.
-9. Missing, stale, or mismatched source data.
-10. Components with partial source results.
-11. Different deployment environment/namespace combinations for different teams.
-12. No validation categories selected.
-13. Accurate GO/NO-GO totals and explanations.
-14. Existing Release Readiness tabs, POM Analyzer, Veracode reports, and Review Commits remain unaffected.
+Fix all affected tooltips.
 
-Add unit tests for the decision engine and focused integration/UI tests following the project’s existing testing conventions.
+* Replace the current unclear question-mark affordance with a visible information (i) icon or another clear, consistent information control.
+* Use appropriate foreground/background colors and sufficient contrast in light and dark themes.
+* Ensure tooltips appear above other UI elements and are not clipped by containers.
+* Make them readable on hover and keyboard focus; support click-to-open where appropriate for the existing UI framework.
+* Position them sensibly so the content remains visible on smaller screens.
+* Provide concise, meaningful explanations for SAST rating, mitigated flaws, severity categories, scan status, and other currently documented fields.
+* Ensure definitions reflect actual Veracode semantics and the fields returned by the current API.
+* Do not change the underlying SAST calculations or status rules unless a separate, verified defect is found.
 
-10. Implementation Instructions
+Test the tooltips in the actual rendered UI, not just by inspecting their source code.
 
-Inspect the current codebase, database schema, existing release-readiness screens, Deployments component-selection logic, Story Status, Branch Cut Validation, Review Commits, and Veracode SAST implementation before coding.
+8. Implementation and Regression Requirements
 
-Reuse existing APIs, database data, validation rules, and UI components wherever possible. Do not create a second implementation of an existing check unless necessary.
+* Inspect the existing configuration loader, feature-flag conventions, frontend/backend boundaries, role enforcement, APIs, database schema, and UI components before coding.
+* Reuse established patterns and avoid introducing redundant configuration systems.
+* Preserve existing business logic and data unless a change is explicitly required above.
+* Feature flags must be enforced on the backend as well as the frontend.
+* Do not remove Git/Jira fix implementations, Teams notification code, Config Changes code, or Veracode code simply because their UI/actions are disabled.
+* Do not implement the Deployments redesign in this task.
+* Do not break POM Analyzer comparisons, release readiness, report generation, Review Commits filtering, or existing authorization behavior.
 
-Implement the feature end to end, make reasonable UI/UX decisions without waiting for clarification on minor presentation details, and report any genuinely ambiguous business rules with the relevant evidence.
+9. Testing and Final Update
 
-Completion Update
+Add or update focused tests for:
 
-Provide a concise summary of:
+1. Git auto-fix and Jira fix disabled by default and blocked in the backend.
+2. Story Number filtering and filter combinations.
+3. Teams notification actions disabled for every role and every relevant screen.
+4. Config Changes disabled without affecting other features.
+5. POM Analyzer baseline branch fallback and missing/ambiguous release branches.
+6. POM Analyzer release-scope classification.
+7. Multi-module baseline sections collapsed by default and expandable/collapsible.
+8. Source tooltips readable and accessible.
+9. Veracode enabled/disabled behavior, including prevention of backend API calls when disabled.
+10. Veracode tooltip contrast, positioning, and readability.
+11. Regression of existing functionality.
 
-* Dashboard layout and functionality implemented.
-* Component-selection rules reused.
-* Decision rules and how configurable checkboxes affect results.
-* Environment/namespace selection behavior.
-* Handling of missing or stale data.
-* Database changes, if any.
+After implementation, provide a concise summary of:
+
+* Changes implemented.
+* Feature-flag names, locations, and default values.
 * Tests executed and results.
-* Any unresolved policy questions requiring my decision.
+* POM Analyzer baseline-selection and release-scope rules implemented.
+* Deployments UI/UX recommendation only, including behavior for one, two, five, and eight-plus namespaces.
+* Any unresolved business rules or configuration issues requiring my input.
