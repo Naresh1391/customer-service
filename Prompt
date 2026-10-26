@@ -1,222 +1,134 @@
-Release Tracker – Feature Flags, Filters, UI Fixes, and POM Analyzer Enhancements
+Fix Release Go/No-Go Dashboard – Defaults, Filters, Deployments, and SAST Logic
 
-Act as a senior full-stack architect and UI/UX designer. Inspect the existing implementation and make the following targeted enhancements. Reuse current architecture, configuration patterns, APIs, database structures, and UI components wherever possible.
+Make the following changes only in the Release Go/No-Go tab. Inspect the current implementation and correct the identified issues without affecting other Release Tracker pages.
 
-Important: Do not remove existing functionality or delete the Git/Jira auto-fix implementations. Use feature flags to control availability. Do not implement the Deployments redesign yet; provide recommendations only for that item.
+1. Default Checkboxes and Deployment Selection
 
-1. Review Commits – Git Auto-Fix and Jira Fix Feature Flags
+* By default, automatically select all existing release validation checkboxes, including commit violations, story status, branch cut, deployments, and Veracode SAST.
+* By default, select no deployment environments. The user must explicitly choose the relevant test/stage environments.
+* Remove the separate Include in Decision wording/control. Selecting a validation category must automatically include it in the Go/No-Go calculation.
+* Preserve the existing behavior where enabling/disabling validation categories recalculates component decisions.
+* Do not introduce backup controls, duplicate switches, or redundant decision-inclusion settings.
 
-The existing Review Commits page contains Git auto-fix (Fix It) and Jira fix actions. Our current GitHub token is read-only, so these write operations must not be available.
+2. Remove Redundant GO/NO-GO Switches and Fix Filters
 
-* Introduce two independent feature flags with clear names, for example:
-    * GIT_AUTO_FIX_ENABLED: false
-    * JIRA_AUTO_FIX_ENABLED: false
-* Add them to the existing config.yaml using the project’s established configuration conventions.
-* Default both flags to disabled.
-* When Git auto-fix is disabled:
-    * Hide or disable the Fix It action in the UI so users cannot trigger it.
-    * Ensure the backend also rejects or skips the operation when called directly.
-    * Do not attempt any GitHub write operation.
-* When Jira auto-fix is disabled:
-    * Hide or disable the Jira fix action in the UI.
-    * Ensure the backend also rejects or skips the operation when called directly.
-    * Do not attempt any Jira write operation.
-* Preserve the existing implementation so these features can be enabled later when the required permissions and approvals are available.
-* Read configuration consistently across the frontend and backend. Do not rely on frontend visibility alone as a security or execution control.
-* Add tests proving that disabled features cannot execute through either the UI or backend APIs.
+* Remove the redundant GO Only and NO-GO Only switches.
+* Retain the existing status summary/cards, including GO, NO-GO, UNKNOWN, and Total Components.
+* Make every summary card functional:
+    * GO: show only GO components.
+    * NO-GO: show only NO-GO components.
+    * UNKNOWN: show only UNKNOWN components.
+    * Total Components: show all eligible components.
+* Ensure clicking UNKNOWN works exactly like clicking GO or NO-GO.
+* Clicking the selected card again, or selecting Total Components, should restore the appropriate unfiltered/all-components view.
+* Ensure cards and filters remain synchronized when validation settings change.
 
-2. Review Commits – Story Number Filter
+3. Improve the Release Readiness Summary
 
-Add a Story Number filter to the existing Review Commits page.
+Replace the standalone ready-component count with a clear summary showing the number eligible out of the total number of eligible components.
 
-* Follow the styling and behavior of the existing filters.
-* Filter commits by their associated Jira/story number using the actual available data and relationships.
-* Support the existing filter combinations, including team, fixed version, and Violations Only where applicable.
-* Handle commits with missing story associations correctly.
-* Ensure filtering does not introduce duplicate rows or incorrect counts.
-* Keep the filter responsive and avoid unnecessary database/API calls.
+For example: 24 of 81 components eligible for release.
 
-3. Disable Teams Notification Actions Everywhere
+* Calculate the numerator from the current GO/NO-GO rules and selected validation categories.
+* Calculate the denominator from all eligible components in the current team/fixed-version context, including components currently marked NO-GO or UNKNOWN.
+* Update the counts immediately when checks, deployment environments, or filters change.
+* Do not count filtered-out components as removed from the underlying total.
 
-Teams notification actions are not required at present.
+4. Commit Violations – Include Helm and Non-Helm Components
 
-* Keep the existing Teams notification buttons visible, but make them visibly disabled and non-interactive.
-* Apply this consistently across Review Commits, Story Validations, and every other screen where Teams notification actions appear.
-* This restriction applies to all roles, including Admin.
-* Clicking or keyboard-activating a disabled button must not trigger any action, background job, API request, or notification.
-* Ensure the backend also prevents notification execution through direct API calls while this functionality is disabled.
-* Preserve existing code and configuration for possible future reactivation.
-* Do not remove unrelated Teams configuration or read-only notification status information.
+The current implementation undercounts violations for some components because Helm-related commit violations are being excluded.
 
-4. Deployments Page – Guidance Only, No Implementation
+Example: Device Management MS has violations associated with:
 
-Do not modify the Deployments page in this task. Analyze its current layout and provide a recommendation for handling variable numbers of deployment environments/namespaces.
+* Device Management MS.
+* Device Management MS Helm / Device Management Helm.
 
-Consider these scenarios:
+The Review Commits page shows three violations across these related entries, but the Go/No-Go dashboard currently shows only two.
 
-* A team has only one namespace.
-* A team has two namespaces.
-* A team has five namespaces.
-* A team has six to eight namespaces or more.
+Correct the aggregation logic:
 
-The current page displays environment sections such as Test 3, Test 4, Stage, and version history. Evaluate whether this layout remains usable as the number of environments increases or decreases.
+* For each application component, aggregate all applicable commit violations associated with that component and its related Helm component/repository entries, using the existing component/repository relationships and actual commit data.
+* Include both Helm and non-Helm entries in the commit-violation calculation, even though Helm projects are excluded from the main release component list.
+* Avoid double-counting the same underlying violation if it appears through multiple mappings or joins.
+* Apply existing resolution rules: resolved, legitimately ignored, or approved-exempt violations must not be counted as outstanding blockers.
+* Keep the main Go/No-Go component list unchanged; this change concerns violation aggregation, not component eligibility.
+* Verify that Device Management MS and other similar components show counts consistent with Review Commits for the same release context.
 
-Recommend a responsive UI/UX approach that:
+5. Deployment Status – Correct Data Retrieval and Interpretation
 
-* Avoids excessive horizontal scrolling and page height.
-* Does not leave large empty spaces when a team has only one or two environments.
-* Keeps deployment status and version history easy to compare.
-* Works with different team-specific environment names and namespace configurations.
-* Supports future teams with more than eight namespaces without requiring code changes for each new environment.
+Deployment data already exists, but the Go/No-Go page incorrectly displays question marks or “no data available” for some environments.
 
-Consider alternatives such as dynamic environment tabs, compact cards, an environment selector, or a responsive grid. Recommend the best option based on the existing implementation and explain the trade-offs.
+Inspect the existing Deployments implementation, database records, and final derived deployment status. Identify and fix the underlying retrieval or mapping issue rather than adding another independent deployment calculation.
 
-Deliver a concise design recommendation with example layouts/behavior for one, two, five, and eight-plus environments. Do not implement the proposed redesign now.
+* Reuse the authoritative deployment status/derived validity field already produced by the existing deployment logic.
+* If the derived status is Valid, display VALID and treat that deployment check as passed.
+* If the status indicates Needs Deploy, Needs Redeployment, or another existing non-valid state, display the correct status and apply the established release-readiness rule.
+* Show UNKNOWN/data unavailable only when the underlying data is genuinely missing, stale, or cannot be reliably resolved.
+* Apply this correction consistently across all supported teams and configured test/stage environments.
+* Match deployment records using the correct component, team, environment/namespace, and release context. Do not assume display names alone are reliable identifiers.
 
-5. Disable Config Changes
+Environment restrictions
 
-The Config Changes section is not required currently.
+The Go/No-Go deployment selector must show only the test and stage environments configured for the selected team.
 
-* Disable the Config Changes navigation/tab/action so users cannot access or trigger the feature.
-* Ensure its backend APIs or background operations are not triggered through the UI while disabled.
-* Follow the project’s existing feature-flag and navigation conventions where practical.
-* Preserve the underlying code and data for potential future use.
-* Do not affect other deployment or release-readiness functionality.
+* Include configured Test 3, Test 4, Stage, Stage 8, or other applicable test/stage environments as defined by the team’s configuration.
+* Exclude all Dev and Production environments.
+* Do not hardcode environment names for individual teams.
+* Do not show unconfigured environments or deployment data belonging to another team.
+* Keep all deployment environments unselected by default.
+* If the user selects multiple environments, evaluate all selected environments independently and reflect their results in the component decision.
 
-6. POM Analyzer – Release Baseline Selection and Release Scope
+6. Veracode SAST – Use Only Exact-Match Branch Mitigation Scores
 
-The current POM Analyzer is mostly working. Preserve its existing behavior and make only the required enhancements.
+The current SAST score shown in Go/No-Go is incorrect. Change the calculation to use only the mitigated score for an exactly matched, valid branch/application mapping.
 
-6.1 Correct release-branch and baseline selection
+Inspect the existing Veracode mapping and result fields. Apply the following rules:
 
-Investigate and document exactly which GitHub branch is used to determine each library’s baseline version.
+* Accept the result only when the existing mapping-confidence field indicates an exact match, or the mapping status explicitly equals MATCH, according to the actual schema.
+* Use the mitigated score from the correct SAST result associated with that exact branch/application mapping.
+* Display the mitigated score itself, such as 100, 99, or 98.
+* Do not display blocker counts, flaw counts, unrelated scores, or SCA metrics in place of the mitigated score.
+* Do not use a result from a different branch, an approximate application match, or an unrelated scan.
+* If the mapping is not exact, display an explicit status such as INVALID MAPPING or UNVERIFIED, rather than presenting a misleading score.
+* If no applicable SAST score exists, display UNKNOWN or DATA UNAVAILABLE, as appropriate.
 
-The baseline must be determined using the appropriate release branch for the selected fixed version/release. However, not every library is necessarily released with every application release.
+SAST Go/No-Go rule
 
-For example, if the selected application release is 26.10.27 but a library such as Camunda Commons Resources is not released with that version:
-
-* Find the most recent applicable library release branch preceding or otherwise valid for the selected release.
-* Use the version from that branch as the baseline.
-* Do not blindly use main, master, the latest commit, or the latest version string.
-* Do not assume release branch names always follow the same format without inspecting the actual repository conventions.
-* If no reliable applicable branch or baseline can be identified, report that clearly instead of guessing.
-
-Use the actual GitHub branch and POM data. Handle missing branches, multiple candidate branches, version ordering, and ambiguous mappings deterministically.
-
-6.2 Identify whether the library is in release scope
-
-For each library baseline, determine whether the library is part of the selected fixed version/release scope.
-
-Use the existing configured components/libraries, release information, and actual branch/version evidence to establish this. Do not infer release scope solely because a library is listed in the team’s Library Section.
-
-Display a clear label beside the baseline version, such as:
-
-* In Release Scope
-* Outside Release Scope
-
-Use wording consistent with the actual business rule if a more accurate label is appropriate.
-
-The purpose is to distinguish libraries that are expected to participate in the selected release from libraries that are independently released and are not part of that release.
-
-For example, when Enrichment MS consumes OC Platform Support Library:
-
-* Continue showing the expected library baseline version.
-* Continue showing the actual version used by Enrichment MS.
-* Continue displaying the existing version-match/mismatch result.
-* Also display whether the library baseline belongs to the selected release scope.
-
-If the available data is insufficient to determine scope, show an explicit unknown/unverified state rather than incorrectly marking it in or out of scope.
-
-Keep this classification separate from the dependency version-match result. A library can be outside the application’s release scope while its consumed version still needs to be compared with the applicable baseline.
-
-6.3 Multi-module library expansion
-
-In Library Baseline, multi-module libraries such as NextGen, HDK Lib, and OC Platform Support Lib are currently expanded automatically.
-
-* Change these sections to be collapsed by default.
-* Expand only when the user explicitly clicks the section.
-* Clicking again must collapse it.
-* Preserve the existing module information and baseline details.
-* Verify that the default state is consistent after page refreshes and when changing the team/fixed version.
-
-6.4 Source field tooltips
-
-The POM Analyzer displays source types such as Direct and Property.
-
-* Add a clear information tooltip explaining what each source type means in the current implementation.
-* For example, explain whether the version is declared directly in a dependency or resolved through a Maven property.
-* Ensure the explanation matches the actual extraction/resolution logic; do not display a misleading definition.
-* Use a visible information icon or another established accessible UI pattern.
-* Ensure the tooltip is readable in both light and dark themes, with sufficient contrast, correct layering, and no clipping.
-* Verify hover, keyboard focus, and click behavior as appropriate for the existing UI framework.
-
-7. Veracode – Feature Flag and Readable Tooltips
-
-7.1 Veracode feature flag
-
-Veracode access depends on the availability and permissions of the required token. We want to be able to disable the feature cleanly if access is unavailable in a target environment.
-
-* Introduce a clear feature flag, for example VERACODE_REPORT_ENABLED: true, using the existing configuration conventions.
-* Enable it by default for now.
-* When enabled, preserve the current Veracode report functionality.
-* When disabled:
-    * Hide or disable the Veracode tab/navigation entry and all related report actions.
-    * Prevent frontend actions from triggering Veracode requests.
-    * Ensure backend APIs also reject or skip Veracode report operations.
-    * Do not make Veracode API calls or start related background jobs.
-    * Do not display stale data as if it were a newly generated report.
-* Preserve the existing implementation and stored results so the feature can be re-enabled without redevelopment.
-* Read the flag consistently across the frontend and backend, using the project’s approved configuration mechanism.
-* Test both enabled and disabled states, including direct backend API invocation.
-
-7.2 Improve Veracode information tooltips
-
-Existing tooltips for SAST rating, mitigated flaws, severity, scan status, and related Veracode fields are currently unreadable because the popup appears white or its text lacks sufficient contrast.
-
-Fix all affected tooltips.
-
-* Replace the current unclear question-mark affordance with a visible information (i) icon or another clear, consistent information control.
-* Use appropriate foreground/background colors and sufficient contrast in light and dark themes.
-* Ensure tooltips appear above other UI elements and are not clipped by containers.
-* Make them readable on hover and keyboard focus; support click-to-open where appropriate for the existing UI framework.
-* Position them sensibly so the content remains visible on smaller screens.
-* Provide concise, meaningful explanations for SAST rating, mitigated flaws, severity categories, scan status, and other currently documented fields.
-* Ensure definitions reflect actual Veracode semantics and the fields returned by the current API.
-* Do not change the underlying SAST calculations or status rules unless a separate, verified defect is found.
-
-Test the tooltips in the actual rendered UI, not just by inspecting their source code.
-
-8. Implementation and Regression Requirements
-
-* Inspect the existing configuration loader, feature-flag conventions, frontend/backend boundaries, role enforcement, APIs, database schema, and UI components before coding.
-* Reuse established patterns and avoid introducing redundant configuration systems.
-* Preserve existing business logic and data unless a change is explicitly required above.
-* Feature flags must be enforced on the backend as well as the frontend.
-* Do not remove Git/Jira fix implementations, Teams notification code, Config Changes code, or Veracode code simply because their UI/actions are disabled.
-* Do not implement the Deployments redesign in this task.
-* Do not break POM Analyzer comparisons, release readiness, report generation, Review Commits filtering, or existing authorization behavior.
-
-9. Testing and Final Update
-
-Add or update focused tests for:
-
-1. Git auto-fix and Jira fix disabled by default and blocked in the backend.
-2. Story Number filtering and filter combinations.
-3. Teams notification actions disabled for every role and every relevant screen.
-4. Config Changes disabled without affecting other features.
-5. POM Analyzer baseline branch fallback and missing/ambiguous release branches.
-6. POM Analyzer release-scope classification.
-7. Multi-module baseline sections collapsed by default and expandable/collapsible.
-8. Source tooltips readable and accessible.
-9. Veracode enabled/disabled behavior, including prevention of backend API calls when disabled.
-10. Veracode tooltip contrast, positioning, and readability.
-11. Regression of existing functionality.
-
-After implementation, provide a concise summary of:
-
-* Changes implemented.
-* Feature-flag names, locations, and default values.
-* Tests executed and results.
-* POM Analyzer baseline-selection and release-scope rules implemented.
-* Deployments UI/UX recommendation only, including behavior for one, two, five, and eight-plus namespaces.
-* Any unresolved business rules or configuration issues requiring my input.
+* A valid, exact-match mitigated score of 100 passes the SAST check.
+* A valid, exact-match mitigated score below 100 is a release blocker and makes the component NO-GO when SAST is enabled.
+* Missing scores, invalid mappings, and unavailable results must not be treated as passing.
+* Do not infer a score of 100 from missing findings, scan status alone, or any other field.
+* Verify the meaning, data type, and range of the existing mitigated-score field before implementing the comparison.
+
+7. Decision Engine and UI Consistency
+
+Keep the existing configurable validation switches and decision engine, which are currently working correctly.
+
+* All validation checks must be selected by default.
+* No deployment environment must be selected by default.
+* A validation category is included in the decision automatically when its checkbox is selected.
+* Only selected categories and selected deployment environments may influence the calculated result.
+* Any applicable outstanding violation or failed selected check must result in NO-GO.
+* Missing or unreliable results for an enabled check must not silently produce GO.
+* Ensure the summary cards, component rows, blocker explanations, and eligible-component count all use the same underlying decision logic.
+* Do not introduce a second or conflicting implementation of GO/NO-GO calculations.
+
+8. Testing and Acceptance Criteria
+
+Validate the following before completion:
+
+1. All validation checkboxes are selected by default.
+2. No deployment environment is selected by default.
+3. The Include in Decision control and redundant GO Only/NO-GO Only switches are removed.
+4. GO, NO-GO, UNKNOWN, and Total Components cards all work correctly.
+5. The summary correctly displays eligible components out of total eligible components.
+6. Device Management MS includes both Helm and non-Helm commit violations without double-counting.
+7. Deployment statuses correctly display VALID, Needs Deploy, Needs Redeployment, or the appropriate existing status.
+8. Only configured test/stage environments are available; Dev and Production are excluded.
+9. Exact-match Veracode results display the correct mitigated score.
+10. Score 100 passes SAST; a score below 100 blocks release when SAST is enabled.
+11. Approximate mappings, missing scores, and unavailable data never incorrectly pass SAST.
+12. Changing validation checkboxes or selected environments updates the decisions and summary correctly.
+13. Existing behavior on other Release Tracker pages remains unchanged.
+
+Implement the fixes directly. At completion, provide a concise summary of the root causes, changes made, and tests executed. Do not add unrelated features or make changes outside the Release Go/No-Go tab unless a shared backend correction is strictly necessary.
